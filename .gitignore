@@ -1,0 +1,6 @@
+target/
+shots/
+3dmodels/
+dist/
+.DS_Store
+*.zip
