@@ -24,7 +24,7 @@ pub const GH: usize = 304;
 #[derive(Resource)]
 pub struct Tac {
     pub vis: Vis, pub wedge: Wedge, pub hfov: f32, pub c: f32,
-    pub seen: Vec<u8>, pub cur: Vec<u8>, pub expo: Vec<u8>, pub zone_idx: Vec<i8>, pub tot: [u32; 7], pub pct: [f32; 7],
+    pub seen: Vec<u8>, pub cur: Vec<u8>, pub expo: Vec<u8>, pub zone_idx: Vec<i8>, pub tot: [u32; MAX_ZONES], pub pct: [f32; MAX_ZONES],
     pub expo_deg: f32, pub stat_t: f32, pub overlay: Handle<Image>, pub fog: Handle<Image>, pub wedge_mesh: Handle<Mesh>,
     pub overlay_mat: Handle<StandardMaterial>, pub fog_mat: Handle<StandardMaterial>,
     pub primary: Option<Edge>, pub body_cm: f32, pub corner_zone: Option<&'static str>,
@@ -35,11 +35,29 @@ pub struct Tac {
 }
 impl Tac {
     pub fn pie_deg(&self, i: usize) -> f32 { self.pie[i].iter().filter(|b| **b > 0).count() as f32 }
+    /// Refaz o que depende do mapa: a que cômodo pertence cada célula da grade e quantas aberturas existem.
+    pub fn rebuild(&mut self, level: &Level) {
+        self.tot = [0; MAX_ZONES];
+        for k in 0..GW * GH {
+            let c = cell_center(k);
+            let mut zi = -1i8;
+            for (n, q) in zones().iter().enumerate() {
+                if c.x > q.x1 + 0.2 && c.x < q.x2 - 0.2 && c.y > q.z1 + 0.2 && c.y < q.z2 - 0.2 { zi = n as i8; break; }
+            }
+            if zi >= 0 && level.props.iter().any(|p| p.h > 1.5 && c.x > p.x1 - 0.12 && c.x < p.x2 + 0.12 && c.y > p.z1 - 0.12 && c.y < p.z2 + 0.12) { zi = -1; }
+            self.zone_idx[k] = zi;
+            if zi >= 0 { self.tot[zi as usize] += 1; }
+        }
+        self.pie = vec![[0u8; 180]; openings().len()];
+        self.pie_now = vec![None; openings().len()];
+        self.corner_zone = None;
+        self.reset();
+    }
     pub fn reset(&mut self) {
         for p in self.pie.iter_mut() { *p = [0u8; 180]; }
         for p in self.pie_now.iter_mut() { *p = None; }
         self.pie_active = None; self.lean_hint = None;
-        self.seen.fill(0); self.cur.fill(0); self.expo.fill(0); self.pct = [0.0; 7]; self.expo_deg = 0.0; self.stat_t = 0.0; self.primary = None;
+        self.seen.fill(0); self.cur.fill(0); self.expo.fill(0); self.pct = [0.0; MAX_ZONES]; self.expo_deg = 0.0; self.stat_t = 0.0; self.primary = None;
     }
     #[inline] pub fn cell(x: f32, z: f32) -> Option<usize> {
         let (i, j) = (((x - MAP_X1) * PPM).floor() as i32, ((z - MAP_Z1) * PPM).floor() as i32);
@@ -49,18 +67,6 @@ impl Tac {
 fn cell_center(k: usize) -> Vec2 { Vec2::new(MAP_X1 + ((k % GW) as f32 + 0.5) / PPM, MAP_Z1 + ((k / GW) as f32 + 0.5) / PPM) }
 
 pub fn setup_tactical(mut commands: Commands, mut images: ResMut<Assets<Image>>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, level: Res<Level>) {
-    let mut zone_idx = vec![-1i8; GW * GH];
-    let mut tot = [0u32; 7];
-    for k in 0..GW * GH {
-        let c = cell_center(k);
-        let mut zi = -1i8;
-        for (n, q) in ZONES.iter().enumerate() {
-            if c.x > q.x1 + 0.2 && c.x < q.x2 - 0.2 && c.y > q.z1 + 0.2 && c.y < q.z2 - 0.2 { zi = n as i8; break; }
-        }
-        if zi >= 0 && level.props.iter().any(|p| p.h > 1.5 && c.x > p.x1 - 0.12 && c.x < p.x2 + 0.12 && c.y > p.z1 - 0.12 && c.y < p.z2 + 0.12) { zi = -1; }
-        zone_idx[k] = zi;
-        if zi >= 0 { tot[zi as usize] += 1; }
-    }
     let mk = |images: &mut Assets<Image>, a: u8| {
         let mut data = vec![0u8; GW * GH * 4];
         for p in data.chunks_exact_mut(4) { p[3] = a; }
@@ -91,10 +97,12 @@ pub fn setup_tactical(mut commands: Commands, mut images: ResMut<Assets<Image>>,
     let wedge_mesh = meshes.add(wm);
     let wmat = mats.add(StandardMaterial { base_color: Color::srgba(0.38, 0.84, 0.91, 0.24), unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
     commands.spawn((Mesh3d(wedge_mesh.clone()), MeshMaterial3d(wmat), Transform::from_xyz(0.0, 3.7, 0.0), RenderLayers::layer(L_TOP), NotShadowCaster, NotShadowReceiver, NoFrustumCulling));
-    commands.insert_resource(Tac {
-        vis: Vis::default(), wedge: Wedge::default(), hfov: 1.7, c: 0.0, seen: vec![0; GW * GH], cur: vec![0; GW * GH], expo: vec![0; GW * GH], zone_idx, tot, pct: [0.0; 7],
-        expo_deg: 0.0, stat_t: 0.0, overlay, fog, wedge_mesh, overlay_mat: om, fog_mat: fmat, primary: None, body_cm: 25.0, corner_zone: None, pie: vec![[0u8; 180]; OPENINGS.len()], pie_now: vec![None; OPENINGS.len()], pie_active: None, lean_hint: None,
-    });
+    let mut tac = Tac {
+        vis: Vis::default(), wedge: Wedge::default(), hfov: 1.7, c: 0.0, seen: vec![0; GW * GH], cur: vec![0; GW * GH], expo: vec![0; GW * GH], zone_idx: vec![-1i8; GW * GH], tot: [0; MAX_ZONES], pct: [0.0; MAX_ZONES],
+        expo_deg: 0.0, stat_t: 0.0, overlay, fog, wedge_mesh, overlay_mat: om, fog_mat: fmat, primary: None, body_cm: 25.0, corner_zone: None, pie: vec![[0u8; 180]; openings().len()], pie_now: vec![None; openings().len()], pie_active: None, lean_hint: None,
+    };
+    tac.rebuild(&level);
+    commands.insert_resource(tac);
 }
 
 pub fn tac_update(
@@ -160,7 +168,7 @@ pub fn tac_update(
     // fatias de cada abertura: o que passa pelo vão E está dentro do setor coberto
     let psi = |o: &Opening| f.dot(o.n).atan2(f.dot(o.w())).to_degrees();
     let mut best: Option<(usize, f32)> = None;
-    for (i, o) in OPENINGS.iter().enumerate() {
+    for (i, o) in openings().iter().enumerate() {
         tac.pie_now[i] = None;
         let mid = o.mid();
         let dist = eye.distance(mid);
@@ -184,7 +192,7 @@ pub fn tac_update(
     // dica: quantos graus a mais da abertura em foco entram no setor inclinando para cada lado
     tac.lean_hint = None;
     if let Some(i) = tac.pie_active {
-        let o = &OPENINGS[i];
+        let o = &openings()[i];
         let open = o.door.map_or(true, |d| level.doors[d].open >= 0.5);
         if open && p.lean.abs() < 0.3 {
             let half = (hfov / 2.0).to_degrees();
@@ -207,14 +215,14 @@ pub fn tac_update(
     tac.stat_t -= dt;
     if tac.stat_t <= 0.0 {
         tac.stat_t = 0.1;
-        let mut cnt = [0u32; 7];
+        let mut cnt = [0u32; MAX_ZONES];
         for k in 0..GW * GH {
             let z = tac.zone_idx[k];
             if z < 0 { tac.expo[k] = 0; continue; }
             if tac.seen[k] > 0 { cnt[z as usize] += 1; tac.expo[k] = 0; }
             else { tac.expo[k] = if vis_sees(&vis, cell_center(k), 0.0) { 1 } else { 0 }; }
         }
-        for z in 0..7 { tac.pct[z] = if tac.tot[z] > 0 { cnt[z] as f32 / tac.tot[z] as f32 } else { 1.0 }; }
+        for z in 0..MAX_ZONES { tac.pct[z] = if tac.tot[z] > 0 { cnt[z] as f32 / tac.tot[z] as f32 } else { 1.0 }; }
         // exposição: direções fora do campo de visão que dão para área não limpa
         let mut expo = 0.0;
         for n in 0..120 {
@@ -356,7 +364,7 @@ pub fn tac_gizmos(mut gz: Gizmos, mut game: ResMut<Game>, time: Res<Time>, p: Re
     for e in &w.edges { gz.line(v3(e.a), v3(e.b), amber); }
     // leque de 180° de cada abertura: verde = já fatiado, azul = vendo agora, vermelho = falta
     let green = Color::srgb(0.44, 0.84, 0.56);
-    for (i, o) in OPENINGS.iter().enumerate() {
+    for (i, o) in openings().iter().enumerate() {
         let zi = zone_index(o.zone);
         let any = tac.pie[i].iter().any(|b| *b > 0);
         let near = eye.distance(o.mid()) < 8.0 && (eye - o.mid()).dot(o.n) < 0.0;

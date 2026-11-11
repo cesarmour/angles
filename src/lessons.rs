@@ -400,8 +400,8 @@ pub const WARN_NAMES: [&str; 6] = ["too close to the corner", "sliced too fast",
 
 #[derive(Default)]
 pub struct CoachState {
-    last_time: f32, near_t: f32, gun_t: f32, expo_t: f32, off_t: f32, door_t: [f32; 4], door_warned: [bool; 4], kind_cd: [f32; 6],
-    fan: VecDeque<(f32, f32)>, fan_i: Option<usize>, entered: [bool; 4], entry_t: [f32; 4], funnel_done: [bool; 4],
+    last_time: f32, near_t: f32, gun_t: f32, expo_t: f32, off_t: f32, door_t: [f32; MAX_DOORWAYS], door_warned: [bool; MAX_DOORWAYS], kind_cd: [f32; 6],
+    fan: VecDeque<(f32, f32)>, fan_i: Option<usize>, entered: [bool; MAX_DOORWAYS], entry_t: [f32; MAX_DOORWAYS], funnel_done: [bool; MAX_DOORWAYS],
 }
 
 /// Observa como o jogador fatia e se movimenta, e avisa na hora o que corrigir (com intervalo mínimo entre avisos).
@@ -418,7 +418,8 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
     let route = match (route_now, game.route_score()) { (Some(a), Some(b)) => 0.5 * a + 0.5 * b, (Some(a), None) => a, (None, Some(b)) => b, _ => 100.0 };
     let mut angle = game.kill_score().unwrap_or(100.0);
     // agora: área não limpa fora do setor e corpo à mostra na quina em foco derrubam as chances
-    angle -= (tac.expo_deg / 180.0).min(1.0) * 35.0;
+    // (nos primeiros segundos de um percurso o operador ainda nem olhou em volta: a penalidade entra aos poucos)
+    angle -= (tac.expo_deg / 180.0).min(1.0) * 35.0 * ((game.time - 3.0) / 5.0).clamp(0.0, 1.0);
     // tempo exposto: quanto mais tempo sob a linha de tiro de uma ameaça viva, menores as chances (ela reage em 1,9 s)
     angle -= (game.expo_now / 1.9).min(1.0) * 45.0;
     if tac.pie_active.is_some() && tac.primary.is_some() { angle -= ((tac.body_cm - 15.0) / 35.0).clamp(0.0, 1.0) * 15.0; }
@@ -429,7 +430,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
     /* badges */
     let mut earn: Vec<usize> = Vec::new();
     if game.entry_pie.iter().any(|e| e.map_or(false, |v| v >= 110.0)) { earn.push(0); }
-    for (k, w) in DOORWAYS.iter().enumerate() {
+    for (k, w) in doorways().iter().enumerate() {
         if game.entry[k].is_some() && !st.funnel_done[k] && zone_index(w.zone) == p.zone && p.pos.distance(Vec2::new(w.cx, w.cz)) > 1.0 {
             st.funnel_done[k] = true;
             if game.dwell[k] <= 1.0 { earn.push(1); }
@@ -438,7 +439,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
             if z == w.zone && game.entry[k].is_some() && st.entered[k] && game.time - st.entry_t[k] <= 3.0 && level.corners.iter().filter(|c| c.zone == z).all(|c| c.seen) { earn.push(2); }
         }
     }
-    for z in ["B", "C"] {
+    for z in zones().iter().map(|q| q.id) {
         let here = |k: TKind| targets.list.iter().filter(move |t| t.def.zone == z && t.def.kind == k && !t.off);
         if here(TKind::Civil).count() > 0 && here(TKind::Civil).all(|t| t.alive) && here(TKind::Threat).count() > 0 && here(TKind::Threat).all(|t| !t.alive) { earn.push(3); }
     }
@@ -446,7 +447,8 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
     if game.kills.iter().any(|k| k.angle <= 8.0) { earn.push(5); }
     if game.kills.iter().any(|k| k.dt <= 1.0) { earn.push(6); }
     if game.door_side.iter().any(|d| *d == Some(true)) { earn.push(7); }
-    if tac.pct[6] >= 0.95 { earn.push(8); }
+    // espaço morto: a Sala C da casa do tutorial; nos outros mapas, a casa inteira vista (há estantes e armários altos em todos)
+    if (map_index() == 0 && tac.pct[6] >= 0.95) || (map_index() != 0 && (0..zones().len()).all(|z| tac.pct[z] >= 0.95)) { earn.push(8); }
     if !game.free && game.lesson >= 1 && game.lesson_end > 0.0 && game.lroute_t > 3.0 && game.lroute_sum / game.lroute_t <= 0.25 { earn.push(9); }
     for i in earn {
         if game.badges & (1 << i) == 0 {
@@ -468,7 +470,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
     // abertura em foco: a mais próxima que dá para uma área ainda não limpa
     let mut focus = false;
     if let Some(i) = tac.pie_active {
-        let o = &OPENINGS[i];
+        let o = &openings()[i];
         let closed = o.door.map_or(false, |d| level.doors[d].open < 0.5);
         let deg = tac.pie_deg(i);
         let dist = eye.distance(o.mid());
@@ -506,7 +508,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
     if !focus { st.near_t = 0.0; st.gun_t = 0.0; st.fan.clear(); st.fan_i = None; }
 
     // 3 · parado no vão da porta (funil fatal)
-    for (k, w) in DOORWAYS.iter().enumerate() {
+    for (k, w) in doorways().iter().enumerate() {
         let zi = zone_index(w.zone);
         let inside = p.pos.x >= w.x1 && p.pos.x <= w.x2 && p.pos.y >= w.z1 && p.pos.y <= w.z2;
         let hot = tac.pct[zi] < 0.95 || targets.list.iter().any(|t| t.alive && t.def.kind == TKind::Threat && t.def.zone == w.zone);
@@ -516,7 +518,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
         if !st.entered[k] {
             if let Some(v) = game.entry_pie[k] {
                 st.entered[k] = true; st.entry_t[k] = game.time;
-                if v >= [110.0, 100.0, 70.0, 90.0][k] && game.coach.is_none() {
+                if v >= (if map_index() == 0 { [110.0, 100.0, 70.0, 90.0][k.min(3)] } else { 100.0 }) && game.coach.is_none() {
                     game.coach = Some((format!("Good entry: {}° of the 180° fan already open before crossing the door. Only the near corners were left.", v.round() as i32), 1, 4.5));
                     game.ui_dirty = true;
                 }
@@ -524,7 +526,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
         }
     }
     // 4 · muita área não limpa fora do setor
-    if tac.expo_deg >= 90.0 { st.expo_t += dt; } else { st.expo_t = 0.0; }
+    if tac.expo_deg >= 90.0 && game.time > 8.0 { st.expo_t += dt; } else { st.expo_t = 0.0; }
     if st.expo_t > 2.5 { st.expo_t = 0.0; warn = warn.or(Some((4, format!("{}° of uncleared area outside your sector. Don't turn your back on what you haven't seen.", tac.expo_deg.round() as i32)))); }
     // 5 · longe do traçado ideal (só no tutorial, com a linha ligada)
     if !game.free && game.guide == 1 {
@@ -543,7 +545,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
 /* ------------------------------------------------------------------ demonstração ------------------------------------------------------------------ */
 
 struct TSnap { alive: bool, fall: f32, fall_v: f32, hits: u8, seen: bool, vis: bool, react: f32, contact: bool, contact_t: f32, first_facing: Option<bool>, sw: f32, swv: f32, landed: bool, marks: usize }
-pub struct Snap { game: Game, p: Player, seen: Vec<u8>, pie: Vec<[u8; 180]>, pct: [f32; 7], doors: Vec<Door>, solids: Vec<Solid>, corners: Vec<Corner>, targets: Vec<TSnap> }
+pub struct Snap { game: Game, p: Player, seen: Vec<u8>, pie: Vec<[u8; 180]>, pct: [f32; MAX_ZONES], doors: Vec<Door>, solids: Vec<Solid>, corners: Vec<Corner>, targets: Vec<TSnap> }
 /// Estado guardado antes da demonstração, devolvido quando ela termina: a demonstração não conta para a lição.
 #[derive(Resource, Default)]
 pub struct DemoSnap(pub Option<Box<Snap>>);

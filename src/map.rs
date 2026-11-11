@@ -43,8 +43,9 @@ pub struct Door { pub id: &'static str, pub hx: f32, pub hz: f32, pub len: f32, 
 #[derive(Clone, Copy, Debug)]
 pub struct Zone { pub id: &'static str, pub name: &'static str, pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32 }
 
+/// Vão de entrada de um cômodo: caixa do vão, lado de entrada (`v`, `s`) e o índice da abertura (leque) correspondente.
 #[derive(Clone, Copy, Debug)]
-pub struct Doorway { pub zone: &'static str, pub x1: f32, pub x2: f32, pub z1: f32, pub z2: f32, pub cx: f32, pub cz: f32, pub axis_z: bool, pub v: f32, pub s: f32 }
+pub struct Doorway { pub zone: &'static str, pub x1: f32, pub x2: f32, pub z1: f32, pub z2: f32, pub cx: f32, pub cz: f32, pub axis_z: bool, pub v: f32, pub s: f32, pub opening: usize }
 
 #[derive(Clone, Copy, Debug)]
 pub struct LightDef { pub x: f32, pub z: f32, pub color: [f32; 3], pub i: f32, pub rot: bool, pub flicker: bool }
@@ -58,53 +59,15 @@ pub struct TargetDef { pub id: &'static str, pub kind: TKind, pub v: u8, pub x: 
 #[derive(Clone, Copy, Debug)]
 pub struct Corner { pub zone: &'static str, pub x: f32, pub z: f32, pub seen: bool }
 
-pub const ZONES: [Zone; 7] = [
-    Zone { id: "S", name: "Staging area", x1: 0.0, z1: 12.0, x2: 6.0, z2: 18.0 },
-    Zone { id: "C1", name: "Corridor 1", x1: 4.0, z1: 6.0, x2: 6.0, z2: 12.0 },
-    Zone { id: "C2", name: "Corridor 2", x1: 4.0, z1: 4.0, x2: 14.0, z2: 6.0 },
-    Zone { id: "A", name: "Room A", x1: 6.0, z1: 6.0, x2: 14.0, z2: 12.0 },
-    Zone { id: "B", name: "Room B", x1: 14.0, z1: 6.0, x2: 21.0, z2: 12.0 },
-    Zone { id: "C3", name: "Corridor 3", x1: 14.0, z1: 4.0, x2: 21.0, z2: 6.0 },
-    Zone { id: "C", name: "Room C", x1: 15.0, z1: 0.0, x2: 21.0, z2: 4.0 },
-];
-pub fn zone_index(id: &str) -> usize { ZONES.iter().position(|z| z.id == id).unwrap_or(0) }
-pub fn zone_at(x: f32, z: f32) -> Option<usize> { ZONES.iter().position(|q| x >= q.x1 && x < q.x2 && z >= q.z1 && z < q.z2) }
-
-pub const DOORWAYS: [Doorway; 4] = [
-    Doorway { zone: "A", x1: 9.4, x2: 10.6, z1: 5.55, z2: 6.45, cx: 10.0, cz: 6.0, axis_z: true, v: 6.12, s: 1.0 },
-    Doorway { zone: "B", x1: 13.55, x2: 14.45, z1: 10.4, z2: 11.5, cx: 14.0, cz: 10.95, axis_z: false, v: 14.12, s: 1.0 },
-    Doorway { zone: "C3", x1: 17.0, x2: 18.1, z1: 5.55, z2: 6.45, cx: 17.55, cz: 6.0, axis_z: true, v: 5.88, s: -1.0 },
-    Doorway { zone: "C", x1: 19.0, x2: 20.1, z1: 3.55, z2: 4.45, cx: 19.55, cz: 4.0, axis_z: true, v: 3.88, s: -1.0 },
-];
-
-const WARM: [f32; 3] = [1.0, 0.89, 0.75];
-const COOL: [f32; 3] = [0.9, 0.93, 1.0];
-const NEUTRAL: [f32; 3] = [1.0, 0.94, 0.86];
-pub const LIGHTS: [LightDef; 8] = [
-    LightDef { x: 3.0, z: 15.0, color: WARM, i: 1.0, rot: false, flicker: false },
-    LightDef { x: 5.0, z: 9.0, color: COOL, i: 0.8, rot: true, flicker: false },
-    LightDef { x: 6.6, z: 5.0, color: COOL, i: 0.75, rot: false, flicker: false },
-    LightDef { x: 11.4, z: 5.0, color: COOL, i: 0.75, rot: false, flicker: false },
-    LightDef { x: 10.0, z: 9.0, color: NEUTRAL, i: 1.05, rot: false, flicker: false },
-    LightDef { x: 17.5, z: 9.0, color: NEUTRAL, i: 1.05, rot: false, flicker: false },
-    LightDef { x: 17.5, z: 5.0, color: COOL, i: 0.8, rot: false, flicker: false },
-    LightDef { x: 19.0, z: 2.0, color: WARM, i: 0.9, rot: false, flicker: false },
-];
-
-const fn tg(id: &'static str, kind: TKind, v: u8, x: f32, z: f32, fx: f32, fz: f32, zone: &'static str, passive: bool) -> TargetDef {
-    TargetDef { id, kind, v, x, z, fx, fz, zone, passive }
+impl Zone {
+    /// Cômodo estreito e comprido (corredor): muda a reverberação do som.
+    pub fn is_corridor(&self) -> bool { (self.x2 - self.x1).min(self.z2 - self.z1) <= 2.5 }
 }
+
 /// Abertura a ser fatiada (porta ou boca de corredor). `a` e `b` são as pontas do vão na linha da parede e
 /// `n` aponta para o espaço que fica além dela. O espaço além de uma abertura ocupa um leque de 180°.
 #[derive(Clone, Copy, Debug)]
 pub struct Opening { pub name: &'static str, pub zone: &'static str, pub a: Vec2, pub b: Vec2, pub n: Vec2, pub door: Option<usize> }
-pub const OPENINGS: [Opening; 5] = [
-    Opening { name: "Corridor corner", zone: "C2", a: Vec2::new(6.0, 4.1), b: Vec2::new(6.0, 5.9), n: Vec2::new(1.0, 0.0), door: None },
-    Opening { name: "Room A door", zone: "A", a: Vec2::new(9.4, 6.0), b: Vec2::new(10.6, 6.0), n: Vec2::new(0.0, 1.0), door: None },
-    Opening { name: "Room B door", zone: "B", a: Vec2::new(14.0, 10.4), b: Vec2::new(14.0, 11.5), n: Vec2::new(1.0, 0.0), door: None },
-    Opening { name: "Corridor 3 door", zone: "C3", a: Vec2::new(17.0, 6.0), b: Vec2::new(18.1, 6.0), n: Vec2::new(0.0, -1.0), door: Some(0) },
-    Opening { name: "Room C door", zone: "C", a: Vec2::new(19.0, 4.0), b: Vec2::new(20.1, 4.0), n: Vec2::new(0.0, -1.0), door: Some(1) },
-];
 impl Opening {
     pub fn mid(&self) -> Vec2 { (self.a + self.b) / 2.0 }
     pub fn w(&self) -> Vec2 { (self.b - self.a).normalize() }
@@ -122,28 +85,241 @@ impl Opening {
     }
 }
 
-/// Posições alternativas por zona (x, z, olha-para-x, olha-para-z), sorteadas no percurso livre e na missão 2.
-pub const SLOTS: [(&str, f32, f32, f32, f32); 23] = [
-    ("C2", 12.9, 5.0, 6.0, 5.0), ("C2", 11.0, 4.5, 6.0, 5.3), ("C2", 13.3, 5.5, 7.0, 4.8),
-    ("A", 13.2, 11.2, 10.0, 7.0), ("A", 13.45, 6.5, 10.6, 9.2), ("A", 6.6, 6.5, 9.5, 9.0), ("A", 6.7, 11.3 - 0.9, 10.0, 7.5), ("A", 11.6, 9.6, 10.0, 6.5),
-    ("B", 20.2, 6.85, 16.0, 10.0), ("B", 14.75, 6.85, 15.4, 11.0), ("B", 17.6, 7.7, 15.5, 10.6), ("B", 20.3, 11.2, 16.0, 9.6), ("B", 19.6, 9.9, 15.0, 11.0), ("B", 15.6, 8.3, 14.6, 11.0),
-    ("C3", 14.6, 4.7, 17.5, 5.6), ("C3", 20.5, 4.6, 17.6, 5.6), ("C3", 15.6, 5.4, 17.5, 5.5), ("C3", 19.2, 5.5, 17.6, 5.6),
-    ("C", 15.8, 3.2, 19.0, 3.5), ("C", 16.2, 0.9, 17.6, 3.4), ("C", 20.4, 0.7, 19.5, 3.8), ("C", 18.6, 0.6, 19.5, 3.6), ("C", 15.6, 1.9, 17.0, 3.3),
-];
-pub const TARGETS: [TargetDef; 13] = [
-    tg("P0", TKind::Threat, 0, 3.0, 12.8, 3.0, 16.0, "S", true),
-    tg("T1", TKind::Threat, 1, 12.9, 5.0, 6.0, 5.0, "C2", false),
-    tg("T2", TKind::Threat, 0, 13.2, 11.2, 10.0, 7.0, "A", false),
-    tg("T3", TKind::Threat, 1, 13.45, 6.5, 10.6, 9.2, "A", false),
-    tg("T4", TKind::Threat, 0, 20.2, 6.85, 16.0, 10.0, "B", false),
-    tg("T5", TKind::Threat, 1, 14.75, 6.85, 15.4, 11.0, "B", false),
-    tg("N1", TKind::Civil, 0, 17.6, 7.7, 15.5, 10.6, "B", false),
-    tg("N2", TKind::Civil, 1, 20.3, 11.2, 16.0, 9.6, "B", false),
-    tg("T6", TKind::Threat, 0, 14.6, 4.7, 17.5, 5.6, "C3", false),
-    tg("T7", TKind::Threat, 1, 20.5, 4.6, 17.6, 5.6, "C3", false),
-    tg("N3", TKind::Civil, 0, 15.8, 3.2, 19.0, 3.5, "C", false),
-    tg("T8", TKind::Threat, 1, 16.2, 0.9, 17.6, 3.4, "C", false),
-    tg("T9", TKind::Threat, 0, 20.4, 0.7, 19.5, 3.8, "C", false),
+/* ------------------------------------------------------------------ mapas ------------------------------------------------------------------
+   Cada mapa é uma tabela de dados. Todos cabem na mesma área (0..21 m em x, 0..18 m em z) e têm no máximo 8 cômodos, 8 vãos de entrada
+   e 4 portas com folha (sempre em parede horizontal, vão de 1,1 m). O mapa 0 é a casa do tutorial. */
+/// Parede: coordenada fixa, início, fim e vãos (portas) ao longo dela.
+pub type WallSpec = (f32, f32, f32, &'static [(f32, f32)]);
+/// Posição possível de um alvo: cômodo, x, z e para onde ele olha.
+pub type Slot = (&'static str, f32, f32, f32, f32);
+pub struct MapDef {
+    pub name: &'static str, pub blurb: &'static str,
+    pub zones: &'static [Zone], pub doorways: &'static [Doorway], pub openings: &'static [Opening], pub lights: &'static [LightDef],
+    pub targets: &'static [TargetDef], pub slots: &'static [Slot],
+    pub walls_h: &'static [WallSpec], pub walls_v: &'static [WallSpec], pub props: &'static [Prop],
+    pub doors: &'static [(&'static str, f32, f32)], pub corners: &'static [(&'static str, f32, f32)],
+    /// Onde o operador começa (x, z) e para onde olha (ângulo).
+    pub start: (f32, f32, f32),
+}
+pub const MAX_ZONES: usize = 8;
+pub const MAX_DOORWAYS: usize = 8;
+pub const MAX_DOORS: usize = 4;
+
+static CUR_MAP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub fn map_index() -> usize { CUR_MAP.load(std::sync::atomic::Ordering::Relaxed) }
+pub fn set_map(i: usize) { CUR_MAP.store(i.min(MAPS.len() - 1), std::sync::atomic::Ordering::Relaxed); }
+pub fn map() -> &'static MapDef { &MAPS[map_index()] }
+pub fn zones() -> &'static [Zone] { map().zones }
+pub fn doorways() -> &'static [Doorway] { map().doorways }
+pub fn openings() -> &'static [Opening] { map().openings }
+pub fn lights() -> &'static [LightDef] { map().lights }
+pub fn target_defs() -> &'static [TargetDef] { map().targets }
+pub fn slots() -> &'static [Slot] { map().slots }
+pub fn zone_index(id: &str) -> usize { zones().iter().position(|z| z.id == id).unwrap_or(0) }
+pub fn zone_at(x: f32, z: f32) -> Option<usize> { zones().iter().position(|q| x >= q.x1 && x < q.x2 && z >= q.z1 && z < q.z2) }
+
+const WARM: [f32; 3] = [1.0, 0.89, 0.75];
+const COOL: [f32; 3] = [0.9, 0.93, 1.0];
+const NEUTRAL: [f32; 3] = [1.0, 0.94, 0.86];
+const fn zn(id: &'static str, name: &'static str, x1: f32, z1: f32, x2: f32, z2: f32) -> Zone { Zone { id, name, x1, z1, x2, z2 } }
+/// Vão em parede horizontal (em z = `z`, de `a` a `b` em x); `s` = +1 se o cômodo fica do lado de z maior.
+const fn dh(zone: &'static str, a: f32, b: f32, z: f32, s: f32, opening: usize) -> Doorway {
+    Doorway { zone, x1: a, x2: b, z1: z - 0.45, z2: z + 0.45, cx: (a + b) / 2.0, cz: z, axis_z: true, v: z + s * 0.12, s, opening }
+}
+/// Vão em parede vertical (em x = `x`, de `a` a `b` em z); `s` = +1 se o cômodo fica do lado de x maior.
+const fn dv(zone: &'static str, x: f32, a: f32, b: f32, s: f32, opening: usize) -> Doorway {
+    Doorway { zone, x1: x - 0.45, x2: x + 0.45, z1: a, z2: b, cx: x, cz: (a + b) / 2.0, axis_z: false, v: x + s * 0.12, s, opening }
+}
+#[allow(clippy::too_many_arguments)]
+const fn op(name: &'static str, zone: &'static str, ax: f32, az: f32, bx: f32, bz: f32, nx: f32, nz: f32, door: Option<usize>) -> Opening {
+    Opening { name, zone, a: Vec2::new(ax, az), b: Vec2::new(bx, bz), n: Vec2::new(nx, nz), door }
+}
+const fn lt(x: f32, z: f32, color: [f32; 3], i: f32, rot: bool) -> LightDef { LightDef { x, z, color, i, rot, flicker: false } }
+const fn pr(kind: PropKind, x1: f32, z1: f32, x2: f32, z2: f32, h: f32) -> Prop { Prop { kind, x1, z1, x2, z2, h } }
+#[allow(clippy::too_many_arguments)]
+const fn tg(id: &'static str, kind: TKind, v: u8, x: f32, z: f32, fx: f32, fz: f32, zone: &'static str, passive: bool) -> TargetDef {
+    TargetDef { id, kind, v, x, z, fx, fz, zone, passive }
+}
+use PropKind::*;
+use TKind::{Civil, Threat};
+
+pub static MAPS: [MapDef; 4] = [
+    /* ---------- 0 · casa do tutorial: Preparação → Corredor 1 → quina → Corredor 2 → Sala A → Sala B → Corredor 3 (T) → Sala C ---------- */
+    MapDef {
+        name: "Training house", blurb: "the tutorial shoot house",
+        zones: &[
+            zn("S", "Staging area", 0.0, 12.0, 6.0, 18.0), zn("C1", "Corridor 1", 4.0, 6.0, 6.0, 12.0), zn("C2", "Corridor 2", 4.0, 4.0, 14.0, 6.0),
+            zn("A", "Room A", 6.0, 6.0, 14.0, 12.0), zn("B", "Room B", 14.0, 6.0, 21.0, 12.0), zn("C3", "Corridor 3", 14.0, 4.0, 21.0, 6.0), zn("C", "Room C", 15.0, 0.0, 21.0, 4.0),
+        ],
+        doorways: &[dh("A", 9.4, 10.6, 6.0, 1.0, 1), dv("B", 14.0, 10.4, 11.5, 1.0, 2), dh("C3", 17.0, 18.1, 6.0, -1.0, 3), dh("C", 19.0, 20.1, 4.0, -1.0, 4)],
+        openings: &[
+            op("Corridor corner", "C2", 6.0, 4.1, 6.0, 5.9, 1.0, 0.0, None), op("Room A door", "A", 9.4, 6.0, 10.6, 6.0, 0.0, 1.0, None),
+            op("Room B door", "B", 14.0, 10.4, 14.0, 11.5, 1.0, 0.0, None), op("Corridor 3 door", "C3", 17.0, 6.0, 18.1, 6.0, 0.0, -1.0, Some(0)),
+            op("Room C door", "C", 19.0, 4.0, 20.1, 4.0, 0.0, -1.0, Some(1)),
+        ],
+        lights: &[lt(3.0, 15.0, WARM, 1.0, false), lt(5.0, 9.0, COOL, 0.8, true), lt(6.6, 5.0, COOL, 0.75, false), lt(11.4, 5.0, COOL, 0.75, false),
+            lt(10.0, 9.0, NEUTRAL, 1.05, false), lt(17.5, 9.0, NEUTRAL, 1.05, false), lt(17.5, 5.0, COOL, 0.8, false), lt(19.0, 2.0, WARM, 0.9, false)],
+        targets: &[
+            tg("P0", Threat, 0, 3.0, 12.8, 3.0, 16.0, "S", true), tg("T1", Threat, 1, 12.9, 5.0, 6.0, 5.0, "C2", false),
+            tg("T2", Threat, 0, 13.2, 11.2, 10.0, 7.0, "A", false), tg("T3", Threat, 1, 13.45, 6.5, 10.6, 9.2, "A", false),
+            tg("T4", Threat, 0, 20.2, 6.85, 16.0, 10.0, "B", false), tg("T5", Threat, 1, 14.75, 6.85, 15.4, 11.0, "B", false),
+            tg("N1", Civil, 0, 17.6, 7.7, 15.5, 10.6, "B", false), tg("N2", Civil, 1, 20.3, 11.2, 16.0, 9.6, "B", false),
+            tg("T6", Threat, 0, 14.6, 4.7, 17.5, 5.6, "C3", false), tg("T7", Threat, 1, 20.5, 4.6, 17.6, 5.6, "C3", false),
+            tg("N3", Civil, 0, 15.8, 3.2, 19.0, 3.5, "C", false), tg("T8", Threat, 1, 16.2, 0.9, 17.6, 3.4, "C", false), tg("T9", Threat, 0, 20.4, 0.7, 19.5, 3.8, "C", false),
+        ],
+        slots: &[
+            ("C2", 12.9, 5.0, 6.0, 5.0), ("C2", 11.0, 4.5, 6.0, 5.3), ("C2", 13.3, 5.5, 7.0, 4.8),
+            ("A", 13.2, 11.2, 10.0, 7.0), ("A", 13.45, 6.5, 10.6, 9.2), ("A", 6.6, 6.5, 9.5, 9.0), ("A", 6.7, 10.4, 10.0, 7.5), ("A", 11.6, 9.6, 10.0, 6.5),
+            ("B", 20.2, 6.85, 16.0, 10.0), ("B", 14.75, 6.85, 15.4, 11.0), ("B", 17.6, 7.7, 15.5, 10.6), ("B", 20.3, 11.2, 16.0, 9.6), ("B", 19.6, 9.9, 15.0, 11.0), ("B", 15.6, 8.3, 14.6, 11.0),
+            ("C3", 14.6, 4.7, 17.5, 5.6), ("C3", 20.5, 4.6, 17.6, 5.6), ("C3", 15.6, 5.4, 17.5, 5.5), ("C3", 19.2, 5.5, 17.6, 5.6),
+            ("C", 15.8, 3.2, 19.0, 3.5), ("C", 16.2, 0.9, 17.6, 3.4), ("C", 20.4, 0.7, 19.5, 3.8), ("C", 18.6, 0.6, 19.5, 3.6), ("C", 15.6, 1.9, 17.0, 3.3),
+        ],
+        walls_h: &[(18.0, 0.0, 6.0, &[]), (12.0, 0.0, 4.0, &[]), (4.0, 4.0, 21.0, &[(19.0, 20.1)]), (6.0, 6.0, 21.0, &[(9.4, 10.6), (17.0, 18.1)]), (12.0, 6.0, 21.0, &[]), (0.0, 15.0, 21.0, &[])],
+        walls_v: &[(0.0, 12.0, 18.0, &[]), (6.0, 6.0, 18.0, &[]), (4.0, 4.0, 12.0, &[]), (14.0, 4.0, 12.0, &[(10.4, 11.5)]), (21.0, 0.0, 12.0, &[]), (15.0, 0.0, 4.0, &[])],
+        // as medidas seguem os modelos 3D usados em cada móvel; a cobertura de 1,25 m deixa ver por cima em pé e esconde quem agacha
+        props: &[
+            pr(Bench, 0.2, 13.1, 1.12, 15.62, 0.77), pr(Crate, 4.4, 17.1, 5.64, 17.62, 0.46), pr(Crate, 0.3, 16.3, 0.82, 17.54, 0.46), pr(Barrel, 13.2, 4.22, 13.72, 4.74, 0.88),
+            pr(Cover, 9.4, 9.2, 10.6, 9.75, 1.25), pr(Sofa, 6.9, 11.1, 8.7, 11.86, 0.9), pr(Barrel, 6.25, 9.6, 6.77, 10.12, 0.88), pr(Table, 16.6, 8.45, 18.6, 9.4, 0.79),
+            pr(Shelf, 16.2, 11.42, 18.18, 11.87, 1.93), pr(Locker, 17.2, 0.1, 17.87, 2.12, 2.24), pr(Crate, 20.3, 2.3, 20.82, 3.54, 0.46), pr(Barrel, 14.25, 9.0, 14.77, 9.52, 0.88),
+            pr(Cover, 1.9, 16.2, 3.1, 16.75, 1.25),
+        ],
+        doors: &[("D1", 17.0, 6.0), ("D2", 19.0, 4.0)],
+        corners: &[("A", 6.5, 6.5), ("A", 13.5, 6.5), ("B", 14.5, 6.5), ("B", 14.5, 11.6), ("C", 20.6, 3.6), ("C", 15.4, 3.6)],
+        start: (3.0, 15.4, 0.0),
+    },
+    /* ---------- 1 · apartamento: hall → corredor central com três cômodos de um lado e dois do outro ---------- */
+    MapDef {
+        name: "Apartment", blurb: "tight rooms off a central corridor, two closed doors",
+        zones: &[
+            zn("H", "Entry hall", 0.0, 8.0, 4.0, 14.0), zn("K", "Corridor", 0.0, 6.0, 16.0, 8.0), zn("L", "Living room", 0.0, 0.0, 7.0, 6.0), zn("Kt", "Kitchen", 7.0, 0.0, 11.0, 6.0),
+            zn("B1", "Bedroom 1", 11.0, 0.0, 16.0, 6.0), zn("B2", "Bedroom 2", 4.0, 8.0, 10.0, 14.0), zn("St", "Storage", 10.0, 8.0, 16.0, 14.0),
+        ],
+        doorways: &[dh("L", 3.0, 4.2, 6.0, -1.0, 1), dh("Kt", 8.4, 9.5, 6.0, -1.0, 2), dh("B1", 13.0, 14.1, 6.0, -1.0, 3), dh("B2", 6.0, 7.1, 8.0, 1.0, 4), dh("St", 12.4, 13.5, 8.0, 1.0, 5)],
+        openings: &[
+            op("Corridor mouth", "K", 0.1, 8.0, 3.9, 8.0, 0.0, -1.0, None), op("Living room door", "L", 3.0, 6.0, 4.2, 6.0, 0.0, -1.0, None),
+            op("Kitchen door", "Kt", 8.4, 6.0, 9.5, 6.0, 0.0, -1.0, Some(0)), op("Bedroom 1 door", "B1", 13.0, 6.0, 14.1, 6.0, 0.0, -1.0, None),
+            op("Bedroom 2 door", "B2", 6.0, 8.0, 7.1, 8.0, 0.0, 1.0, None), op("Storage door", "St", 12.4, 8.0, 13.5, 8.0, 0.0, 1.0, Some(1)),
+        ],
+        lights: &[lt(2.0, 11.0, WARM, 0.9, true), lt(4.0, 7.0, COOL, 0.75, false), lt(11.0, 7.0, COOL, 0.75, false), lt(3.5, 3.0, NEUTRAL, 1.0, false),
+            lt(9.0, 3.0, COOL, 0.9, true), lt(13.5, 3.0, WARM, 0.95, false), lt(7.0, 11.0, NEUTRAL, 1.0, false), lt(13.0, 11.0, COOL, 0.9, false)],
+        targets: &[
+            tg("T1", Threat, 1, 15.3, 6.6, 5.0, 7.0, "K", false),
+            tg("T2", Threat, 0, 0.7, 0.7, 3.6, 5.0, "L", false), tg("T3", Threat, 1, 6.3, 0.7, 3.6, 5.0, "L", false), tg("N1", Civil, 0, 5.5, 3.0, 3.6, 5.6, "L", false),
+            tg("T4", Threat, 0, 10.4, 0.7, 9.0, 5.0, "Kt", false),
+            tg("T5", Threat, 1, 15.4, 0.7, 13.5, 5.0, "B1", false), tg("N2", Civil, 1, 13.5, 1.5, 13.5, 5.5, "B1", false),
+            tg("T6", Threat, 0, 9.3, 13.3, 6.5, 9.0, "B2", false), tg("T7", Threat, 1, 4.7, 13.3, 6.5, 9.0, "B2", false),
+            tg("T8", Threat, 0, 15.3, 13.3, 13.0, 9.0, "St", false), tg("N3", Civil, 0, 13.0, 12.5, 13.0, 8.5, "St", false),
+        ],
+        slots: &[
+            ("K", 15.3, 6.6, 5.0, 7.0), ("K", 12.0, 6.6, 4.0, 7.2), ("K", 9.0, 7.4, 3.0, 7.0),
+            ("L", 0.7, 0.7, 3.6, 5.0), ("L", 6.3, 0.7, 3.6, 5.0), ("L", 1.2, 3.0, 3.6, 5.0), ("L", 6.3, 5.2, 4.0, 4.0), ("L", 3.5, 1.0, 3.6, 5.5), ("L", 5.5, 3.0, 3.6, 5.6),
+            ("Kt", 7.6, 0.7, 9.0, 5.0), ("Kt", 10.4, 0.7, 9.0, 5.0), ("Kt", 10.4, 5.2, 9.0, 4.0), ("Kt", 7.6, 4.6, 9.0, 5.0),
+            ("B1", 11.6, 0.7, 13.5, 5.0), ("B1", 15.4, 0.7, 13.5, 5.0), ("B1", 15.4, 5.3, 13.0, 3.0), ("B1", 12.4, 5.3, 14.0, 3.0), ("B1", 13.5, 1.5, 13.5, 5.5),
+            ("B2", 4.7, 13.3, 6.5, 9.0), ("B2", 9.3, 13.3, 6.5, 9.0), ("B2", 9.3, 8.7, 6.0, 11.0), ("B2", 4.6, 8.7, 7.0, 11.0), ("B2", 7.0, 12.2, 6.5, 8.5),
+            ("St", 10.7, 13.0, 13.0, 9.0), ("St", 15.3, 13.3, 13.0, 9.0), ("St", 15.3, 8.7, 12.5, 11.0), ("St", 10.7, 8.7, 13.5, 11.0), ("St", 13.0, 12.5, 13.0, 8.5),
+        ],
+        walls_h: &[(0.0, 0.0, 16.0, &[]), (14.0, 0.0, 16.0, &[]), (6.0, 0.0, 16.0, &[(3.0, 4.2), (8.4, 9.5), (13.0, 14.1)]), (8.0, 4.0, 16.0, &[(6.0, 7.1), (12.4, 13.5)])],
+        walls_v: &[(0.0, 0.0, 14.0, &[]), (16.0, 0.0, 14.0, &[]), (4.0, 8.0, 14.0, &[]), (7.0, 0.0, 6.0, &[]), (11.0, 0.0, 6.0, &[]), (10.0, 8.0, 14.0, &[])],
+        props: &[
+            pr(Sofa, 0.6, 5.1, 2.4, 5.86, 0.9), pr(Table, 8.2, 2.4, 10.2, 3.35, 0.79), pr(Locker, 11.2, 2.0, 11.87, 4.02, 2.24), pr(Cover, 6.4, 10.6, 7.6, 11.15, 1.25),
+            pr(Shelf, 12.0, 13.42, 13.98, 13.87, 1.93), pr(Crate, 10.3, 10.0, 10.82, 11.24, 0.46), pr(Barrel, 15.2, 7.3, 15.72, 7.82, 0.88), pr(Crate, 0.3, 12.4, 0.82, 13.64, 0.46),
+        ],
+        doors: &[("D1", 8.4, 6.0), ("D2", 12.4, 8.0)],
+        corners: &[],
+        start: (2.0, 12.8, 0.0),
+    },
+    /* ---------- 2 · escritório: recepção, salão aberto com divisórias baixas, corredor e salas fechadas ---------- */
+    MapDef {
+        name: "Office", blurb: "open-plan floor with low partitions, corridor and three closed doors",
+        zones: &[
+            zn("Lb", "Lobby", 0.0, 8.0, 5.0, 16.0), zn("Of", "Open office", 5.0, 8.0, 14.0, 16.0), zn("Co", "Corridor", 0.0, 6.0, 20.0, 8.0), zn("M", "Meeting room", 0.0, 0.0, 8.0, 6.0),
+            zn("S", "Server room", 8.0, 0.0, 13.0, 6.0), zn("G", "Manager's office", 13.0, 0.0, 20.0, 6.0), zn("E", "Storage", 14.0, 8.0, 20.0, 16.0),
+        ],
+        doorways: &[dh("Co", 1.9, 3.1, 8.0, -1.0, 0), dv("Of", 5.0, 12.4, 13.6, 1.0, 1), dh("Of", 9.0, 10.2, 8.0, 1.0, 2), dh("M", 3.4, 4.5, 6.0, -1.0, 3),
+            dh("S", 10.0, 11.1, 6.0, -1.0, 4), dh("G", 16.0, 17.2, 6.0, -1.0, 5), dh("E", 16.4, 17.5, 8.0, 1.0, 6)],
+        openings: &[
+            op("Lobby door", "Co", 1.9, 8.0, 3.1, 8.0, 0.0, -1.0, None), op("Office door (lobby)", "Of", 5.0, 12.4, 5.0, 13.6, 1.0, 0.0, None),
+            op("Office door (corridor)", "Of", 9.0, 8.0, 10.2, 8.0, 0.0, 1.0, None), op("Meeting room door", "M", 3.4, 6.0, 4.5, 6.0, 0.0, -1.0, Some(0)),
+            op("Server room door", "S", 10.0, 6.0, 11.1, 6.0, 0.0, -1.0, Some(1)), op("Manager's office door", "G", 16.0, 6.0, 17.2, 6.0, 0.0, -1.0, None),
+            op("Storage door", "E", 16.4, 8.0, 17.5, 8.0, 0.0, 1.0, Some(2)),
+        ],
+        lights: &[lt(2.5, 12.0, WARM, 0.95, true), lt(8.0, 12.0, NEUTRAL, 1.0, false), lt(11.5, 12.0, NEUTRAL, 1.0, false), lt(4.0, 7.0, COOL, 0.75, false), lt(10.0, 7.0, COOL, 0.75, false),
+            lt(16.0, 7.0, COOL, 0.75, false), lt(4.0, 3.0, NEUTRAL, 1.0, false), lt(10.5, 3.0, COOL, 0.85, true), lt(16.5, 3.0, WARM, 0.95, false), lt(17.0, 12.0, COOL, 0.9, true)],
+        targets: &[
+            tg("T1", Threat, 1, 19.3, 7.0, 10.0, 7.0, "Co", false),
+            tg("T2", Threat, 0, 13.3, 15.3, 8.0, 10.0, "Of", false), tg("T3", Threat, 1, 5.7, 8.8, 10.0, 12.0, "Of", false), tg("T4", Threat, 0, 9.5, 15.3, 9.5, 9.0, "Of", false), tg("N1", Civil, 0, 11.5, 11.2, 6.0, 13.0, "Of", false),
+            tg("T5", Threat, 1, 0.7, 0.7, 4.0, 5.0, "M", false), tg("N2", Civil, 1, 4.0, 1.0, 4.0, 5.5, "M", false),
+            tg("T6", Threat, 0, 12.3, 0.7, 10.5, 5.0, "S", false),
+            tg("T7", Threat, 1, 19.3, 0.7, 16.5, 5.0, "G", false), tg("N3", Civil, 0, 16.5, 1.2, 16.6, 5.5, "G", false),
+            tg("T8", Threat, 0, 19.3, 15.3, 17.0, 9.0, "E", false), tg("T9", Threat, 1, 14.7, 8.7, 18.0, 12.0, "E", false),
+        ],
+        slots: &[
+            ("Co", 19.3, 7.0, 10.0, 7.0), ("Co", 0.7, 7.0, 8.0, 7.0), ("Co", 12.5, 6.6, 5.0, 7.2), ("Co", 6.5, 7.4, 12.0, 7.0),
+            ("Of", 13.3, 15.3, 8.0, 10.0), ("Of", 13.3, 8.7, 8.0, 13.0), ("Of", 5.7, 15.3, 9.0, 11.0), ("Of", 5.7, 8.8, 10.0, 12.0), ("Of", 9.5, 15.3, 9.5, 9.0), ("Of", 11.5, 11.2, 6.0, 13.0), ("Of", 7.5, 9.8, 6.0, 13.2),
+            ("M", 0.7, 0.7, 4.0, 5.0), ("M", 7.3, 0.7, 4.0, 5.0), ("M", 7.3, 5.3, 3.0, 3.0), ("M", 0.7, 5.3, 5.0, 3.0), ("M", 4.0, 1.0, 4.0, 5.5),
+            ("S", 8.7, 0.7, 10.5, 5.0), ("S", 12.3, 0.7, 10.5, 5.0), ("S", 12.3, 5.3, 10.0, 3.0), ("S", 8.7, 5.3, 11.0, 3.0),
+            ("G", 13.7, 0.7, 16.5, 5.0), ("G", 19.3, 0.7, 16.5, 5.0), ("G", 19.3, 5.3, 15.0, 3.0), ("G", 14.6, 5.3, 18.0, 3.0), ("G", 16.5, 1.2, 16.6, 5.5),
+            ("E", 14.7, 15.0, 17.0, 9.0), ("E", 19.3, 15.3, 17.0, 9.0), ("E", 19.3, 8.7, 16.0, 12.0), ("E", 14.7, 8.7, 18.0, 12.0), ("E", 17.0, 14.0, 17.0, 8.5),
+        ],
+        walls_h: &[(0.0, 0.0, 20.0, &[]), (16.0, 0.0, 20.0, &[]), (6.0, 0.0, 20.0, &[(3.4, 4.5), (10.0, 11.1), (16.0, 17.2)]), (8.0, 0.0, 20.0, &[(1.9, 3.1), (9.0, 10.2), (16.4, 17.5)])],
+        walls_v: &[(0.0, 0.0, 16.0, &[]), (20.0, 0.0, 16.0, &[]), (5.0, 8.0, 16.0, &[(12.4, 13.6)]), (14.0, 8.0, 16.0, &[]), (8.0, 0.0, 6.0, &[]), (13.0, 0.0, 6.0, &[])],
+        props: &[
+            pr(Cover, 7.0, 10.6, 8.2, 11.15, 1.25), pr(Cover, 10.0, 12.6, 11.2, 13.15, 1.25), pr(Cover, 7.0, 14.0, 8.2, 14.55, 1.25), pr(Table, 10.5, 9.3, 12.5, 10.25, 0.79),
+            pr(Table, 3.0, 2.4, 5.0, 3.35, 0.79), pr(Shelf, 8.3, 2.5, 10.28, 2.95, 1.93), pr(Table, 15.5, 2.0, 17.5, 2.95, 0.79), pr(Locker, 13.2, 2.0, 13.87, 4.02, 2.24),
+            pr(Crate, 14.3, 11.0, 14.82, 12.24, 0.46), pr(Shelf, 16.0, 15.42, 17.98, 15.87, 1.93), pr(Barrel, 19.2, 11.5, 19.72, 12.02, 0.88), pr(Sofa, 0.4, 15.1, 2.2, 15.86, 0.9),
+        ],
+        doors: &[("D1", 3.4, 6.0), ("D2", 10.0, 6.0), ("D3", 16.4, 8.0)],
+        corners: &[],
+        start: (2.5, 14.2, 0.0),
+    },
+    /* ---------- 3 · galpão: doca, salão grande com fileiras de estantes altas (espaço morto), escritório, corredor de fundo e três salas ---------- */
+    MapDef {
+        name: "Warehouse", blurb: "big floor with tall shelving rows and dead space, office, back corridor and three rooms",
+        zones: &[
+            zn("D", "Loading dock", 0.0, 12.0, 6.0, 18.0), zn("W", "Warehouse floor", 6.0, 6.0, 21.0, 18.0), zn("O", "Office", 0.0, 6.0, 6.0, 12.0), zn("Bk", "Back corridor", 0.0, 4.0, 21.0, 6.0),
+            zn("C", "Cold room", 0.0, 0.0, 9.0, 4.0), zn("P", "Parts room", 9.0, 0.0, 15.0, 4.0), zn("R", "Boiler room", 15.0, 0.0, 21.0, 4.0),
+        ],
+        doorways: &[dv("W", 6.0, 14.4, 15.8, 1.0, 0), dh("O", 2.4, 3.5, 12.0, -1.0, 1), dv("O", 6.0, 8.4, 9.6, -1.0, 2), dh("Bk", 12.0, 13.4, 6.0, -1.0, 3),
+            dh("Bk", 1.0, 2.2, 6.0, -1.0, 4), dh("C", 4.0, 5.1, 4.0, -1.0, 5), dh("P", 11.4, 12.6, 4.0, -1.0, 6), dh("R", 17.4, 18.5, 4.0, -1.0, 7)],
+        openings: &[
+            op("Warehouse floor door", "W", 6.0, 14.4, 6.0, 15.8, 1.0, 0.0, None), op("Office door", "O", 2.4, 12.0, 3.5, 12.0, 0.0, -1.0, Some(0)),
+            op("Office side door", "O", 6.0, 8.4, 6.0, 9.6, -1.0, 0.0, None), op("Back corridor door", "Bk", 12.0, 6.0, 13.4, 6.0, 0.0, -1.0, None),
+            op("Back corridor door (office)", "Bk", 1.0, 6.0, 2.2, 6.0, 0.0, -1.0, None), op("Cold room door", "C", 4.0, 4.0, 5.1, 4.0, 0.0, -1.0, Some(1)),
+            op("Parts room door", "P", 11.4, 4.0, 12.6, 4.0, 0.0, -1.0, None), op("Boiler room door", "R", 17.4, 4.0, 18.5, 4.0, 0.0, -1.0, Some(2)),
+        ],
+        lights: &[lt(3.0, 15.0, WARM, 0.95, false), lt(9.5, 9.0, NEUTRAL, 1.05, false), lt(9.5, 15.0, NEUTRAL, 1.05, false), lt(14.0, 12.0, NEUTRAL, 1.05, true), lt(18.0, 9.0, NEUTRAL, 1.05, false),
+            lt(18.0, 15.0, NEUTRAL, 1.05, false), lt(3.0, 9.0, COOL, 0.9, false), lt(5.0, 5.0, COOL, 0.75, false), lt(13.0, 5.0, COOL, 0.75, false), lt(4.5, 2.0, COOL, 0.9, false),
+            lt(12.0, 2.0, WARM, 0.9, false), lt(18.0, 2.0, WARM, 0.9, false)],
+        targets: &[
+            tg("T1", Threat, 1, 20.3, 17.3, 14.0, 12.0, "W", false), tg("T2", Threat, 0, 9.5, 10.2, 9.5, 14.0, "W", false), tg("T3", Threat, 1, 15.5, 13.3, 15.0, 17.0, "W", false),
+            tg("T4", Threat, 0, 17.0, 10.2, 17.0, 14.0, "W", false), tg("N1", Civil, 0, 13.0, 10.3, 13.0, 14.0, "W", false),
+            tg("T5", Threat, 1, 0.7, 11.3, 3.0, 9.0, "O", false), tg("N2", Civil, 1, 5.3, 6.7, 3.0, 10.0, "O", false),
+            tg("T6", Threat, 0, 20.3, 5.0, 10.0, 5.0, "Bk", false), tg("T7", Threat, 1, 0.7, 3.3, 4.5, 3.0, "C", false),
+            tg("T8", Threat, 0, 14.4, 3.3, 12.0, 3.5, "P", false), tg("N3", Civil, 0, 11.0, 0.8, 12.0, 3.6, "P", false), tg("T9", Threat, 1, 20.4, 3.3, 18.0, 3.5, "R", false),
+        ],
+        slots: &[
+            ("W", 20.3, 17.3, 14.0, 12.0), ("W", 20.3, 6.8, 14.0, 12.0), ("W", 7.0, 7.0, 12.0, 12.0), ("W", 13.0, 10.3, 13.0, 14.0), ("W", 9.5, 10.2, 9.5, 14.0), ("W", 17.0, 10.2, 17.0, 14.0),
+            ("W", 9.5, 13.3, 9.5, 17.0), ("W", 15.5, 13.3, 15.0, 17.0), ("W", 11.0, 16.4, 8.0, 16.0), ("W", 16.5, 16.5, 12.0, 16.6), ("W", 19.0, 13.5, 12.0, 13.0),
+            ("O", 0.7, 11.3, 3.0, 9.0), ("O", 5.3, 6.7, 3.0, 10.0), ("O", 5.3, 11.3, 2.5, 9.0), ("O", 2.5, 7.0, 3.0, 11.0),
+            ("Bk", 20.3, 5.0, 10.0, 5.0), ("Bk", 0.7, 5.0, 10.0, 5.0), ("Bk", 8.0, 4.6, 12.7, 5.6),
+            ("C", 0.7, 3.3, 4.5, 3.0), ("C", 8.3, 3.3, 4.5, 3.5), ("C", 8.3, 2.0, 5.0, 3.0), ("C", 4.5, 0.8, 4.5, 3.6),
+            ("P", 9.6, 3.3, 12.0, 3.6), ("P", 14.4, 3.3, 12.0, 3.5), ("P", 14.4, 0.6, 12.0, 3.5), ("P", 11.0, 0.8, 12.0, 3.6),
+            ("R", 15.6, 3.3, 18.0, 3.6), ("R", 20.4, 3.3, 18.0, 3.5), ("R", 17.5, 0.8, 18.0, 3.6), ("R", 15.7, 1.8, 18.0, 3.5),
+        ],
+        walls_h: &[(0.0, 0.0, 21.0, &[]), (18.0, 0.0, 21.0, &[]), (12.0, 0.0, 6.0, &[(2.4, 3.5)]), (6.0, 0.0, 21.0, &[(1.0, 2.2), (12.0, 13.4)]), (4.0, 0.0, 21.0, &[(4.0, 5.1), (11.4, 12.6), (17.4, 18.5)])],
+        walls_v: &[(0.0, 0.0, 18.0, &[]), (21.0, 0.0, 18.0, &[]), (6.0, 6.0, 18.0, &[(8.4, 9.6), (14.4, 15.8)]), (9.0, 0.0, 4.0, &[]), (15.0, 0.0, 4.0, &[])],
+        props: &[
+            pr(Shelf, 8.5, 9.0, 10.48, 9.45, 1.93), pr(Shelf, 12.0, 9.0, 13.98, 9.45, 1.93), pr(Shelf, 16.0, 9.0, 17.98, 9.45, 1.93), pr(Shelf, 8.5, 12.0, 10.48, 12.45, 1.93),
+            pr(Shelf, 14.5, 12.0, 16.48, 12.45, 1.93), pr(Shelf, 10.0, 15.0, 11.98, 15.45, 1.93), pr(Shelf, 15.5, 15.0, 17.48, 15.45, 1.93),
+            pr(Cover, 12.2, 13.4, 13.4, 13.95, 1.25), pr(Crate, 19.6, 11.0, 20.12, 12.24, 0.46), pr(Barrel, 7.0, 16.8, 7.52, 17.32, 0.88), pr(Barrel, 19.0, 6.4, 19.52, 6.92, 0.88), pr(Crate, 18.5, 16.8, 19.74, 17.32, 0.46),
+            pr(Table, 1.5, 8.5, 3.5, 9.45, 0.79), pr(Locker, 0.2, 6.4, 0.87, 8.42, 2.24), pr(Shelf, 1.0, 0.3, 2.98, 0.75, 1.93), pr(Barrel, 7.8, 0.5, 8.32, 1.02, 0.88),
+            pr(Crate, 9.4, 0.4, 9.92, 1.64, 0.46), pr(Table, 12.5, 1.0, 14.5, 1.95, 0.79), pr(Locker, 20.1, 0.4, 20.77, 2.42, 2.24), pr(Barrel, 15.5, 0.5, 16.02, 1.02, 0.88),
+            pr(Cover, 2.4, 14.0, 3.6, 14.55, 1.25), pr(Bench, 0.2, 15.0, 1.12, 17.52, 0.77),
+        ],
+        doors: &[("D1", 2.4, 12.0), ("D2", 4.0, 4.0), ("D3", 17.4, 4.0)],
+        corners: &[],
+        start: (3.0, 16.8, 0.0),
+    },
 ];
 
 #[derive(Resource)]
@@ -158,13 +334,15 @@ pub struct Level {
 }
 
 impl Level {
+    /// Monta paredes, móveis, portas e cantos do mapa atual.
     pub fn new() -> Self {
+        let m = map();
         let mut walls = Vec::new();
         let mut lintels = Vec::new();
         let mut gaps = Vec::new();
         let t = WALL_T / 2.0;
         let mk = |x1: f32, z1: f32, x2: f32, z2: f32| Solid { x1, z1, x2, z2, h: WALL_H, on: true, kind: SolidKind::Wall };
-        let mut wall_h = |z: f32, xa: f32, xb: f32, gs: &[(f32, f32)]| {
+        for &(z, xa, xb, gs) in m.walls_h {
             let mut cur = xa - t;
             let end = xb + t;
             for g in gs {
@@ -174,15 +352,8 @@ impl Level {
                 cur = g.1;
             }
             if end > cur { walls.push(mk(cur, z - t, end, z + t)); }
-        };
-        // Percurso: Preparação → Corredor 1 → quina → Corredor 2 → Sala A → Sala B → Corredor 3 (T) → Sala C.
-        wall_h(18.0, 0.0, 6.0, &[]);
-        wall_h(12.0, 0.0, 4.0, &[]);
-        wall_h(4.0, 4.0, 21.0, &[(19.0, 20.1)]);
-        wall_h(6.0, 6.0, 21.0, &[(9.4, 10.6), (17.0, 18.1)]);
-        wall_h(12.0, 6.0, 21.0, &[]);
-        wall_h(0.0, 15.0, 21.0, &[]);
-        let mut wall_v = |x: f32, za: f32, zb: f32, gs: &[(f32, f32)]| {
+        }
+        for &(x, za, zb, gs) in m.walls_v {
             let mut cur = za - t;
             let end = zb + t;
             for g in gs {
@@ -192,43 +363,67 @@ impl Level {
                 cur = g.1;
             }
             if end > cur { walls.push(mk(x - t, cur, x + t, end)); }
-        };
-        wall_v(0.0, 12.0, 18.0, &[]);
-        wall_v(6.0, 6.0, 18.0, &[]);
-        wall_v(4.0, 4.0, 12.0, &[]);
-        wall_v(14.0, 4.0, 12.0, &[(10.4, 11.5)]);
-        wall_v(21.0, 0.0, 12.0, &[]);
-        wall_v(15.0, 0.0, 4.0, &[]);
-
-        let p = |kind: PropKind, x1: f32, z1: f32, x2: f32, z2: f32, h: f32| Prop { kind, x1, z1, x2, z2, h };
-        // as medidas seguem os modelos 3D usados em cada móvel
-        let props = vec![
-            p(PropKind::Bench, 0.2, 13.1, 1.12, 15.62, 0.77),
-            p(PropKind::Crate, 4.4, 17.1, 5.64, 17.62, 0.46),
-            p(PropKind::Crate, 0.3, 16.3, 0.82, 17.54, 0.46),
-            p(PropKind::Barrel, 13.2, 4.22, 13.72, 4.74, 0.88),
-            // cobertura de 1,25 m: em pé você vê por cima; agachado, ela esconde você e tapa a sua visão
-            p(PropKind::Cover, 9.4, 9.2, 10.6, 9.75, 1.25),
-            p(PropKind::Sofa, 6.9, 11.1, 8.7, 11.86, 0.9),
-            p(PropKind::Barrel, 6.25, 9.6, 6.77, 10.12, 0.88),
-            p(PropKind::Table, 16.6, 8.45, 18.6, 9.4, 0.79),
-            p(PropKind::Shelf, 16.2, 11.42, 18.18, 11.87, 1.93),
-            p(PropKind::Locker, 17.2, 0.1, 17.87, 2.12, 2.24),
-            p(PropKind::Crate, 20.3, 2.3, 20.82, 3.54, 0.46),
-            p(PropKind::Barrel, 14.25, 9.0, 14.77, 9.52, 0.88),
-            p(PropKind::Cover, 1.9, 16.2, 3.1, 16.75, 1.25),
-        ];
+        }
+        let props = m.props.to_vec();
         let mut solids: Vec<Solid> = walls.clone();
         for q in &props { solids.push(Solid { x1: q.x1, z1: q.z1, x2: q.x2, z2: q.z2, h: q.h, on: true, kind: SolidKind::Prop }); }
         let mut doors = Vec::new();
-        for (id, hx, hz) in [("D1", 17.0f32, 6.0f32), ("D2", 19.0, 4.0)] {
+        for &(id, hx, hz) in m.doors {
             let len = 1.1;
             solids.push(Solid { x1: hx, z1: hz - 0.05, x2: hx + len, z2: hz + 0.05, h: DOOR_H, on: true, kind: SolidKind::Door });
             doors.push(Door { id, hx, hz, len, cx: hx + len / 2.0, cz: hz, t: 0.0, open: 0.0, opening: false, solid: solids.len() - 1 });
         }
-        let c = |zone: &'static str, x: f32, z: f32| Corner { zone, x, z, seen: false };
-        let corners = vec![c("A", 6.5, 6.5), c("A", 13.5, 6.5), c("B", 14.5, 6.5), c("B", 14.5, 11.6), c("C", 20.6, 3.6), c("C", 15.4, 3.6)];
+        let corners = m.corners.iter().map(|&(zone, x, z)| Corner { zone, x, z, seen: false }).collect();
         Level { walls, lintels, gaps, props, solids, doors, corners }
+    }
+
+    /// Confere os dados do mapa atual: alvos dentro do cômodo certo e fora de paredes e móveis, vagas suficientes por cômodo,
+    /// portas sobre vãos e tudo alcançável a pé a partir do ponto de partida. Devolve a lista de problemas.
+    pub fn validate(&self) -> Vec<String> {
+        let m = map();
+        let mut errs = Vec::new();
+        let blocked = |x: f32, z: f32, r: f32, doors: bool| self.solids.iter().any(|s| s.on && (doors || s.kind != SolidKind::Door) && x > s.x1 - r && x < s.x2 + r && z > s.z1 - r && z < s.z2 + r);
+        for (zone, x, z, _, _) in m.slots {
+            if zone_at(*x, *z) != Some(zone_index(zone)) { errs.push(format!("vaga ({x},{z}) fora do cômodo {zone}")); }
+            if blocked(*x, *z, 0.28, true) { errs.push(format!("vaga ({x},{z}) do cômodo {zone} colada em parede ou móvel")); }
+        }
+        for z in m.zones {
+            let need = m.targets.iter().filter(|t| t.zone == z.id && !t.passive).count();
+            let have = m.slots.iter().filter(|s| s.0 == z.id).count();
+            if have < need { errs.push(format!("cômodo {} tem {need} alvos e só {have} vagas", z.id)); }
+        }
+        for t in m.targets { if zone_at(t.x, t.z) != Some(zone_index(t.zone)) { errs.push(format!("alvo {} fora do cômodo {}", t.id, t.zone)); } }
+        for &(id, hx, hz) in m.doors {
+            if !self.gaps.iter().any(|g| g.horizontal && (g.c - hz).abs() < 0.01 && (g.a - hx).abs() < 0.01 && (g.b - hx - 1.1).abs() < 0.02) { errs.push(format!("porta {id} sem vão de 1,1 m em ({hx},{hz})")); }
+        }
+        // alcance a pé (portas contam como abertas)
+        let (cell, w, h) = (0.2f32, ((MAP_X2 - MAP_X1) / 0.2) as usize, ((MAP_Z2 - MAP_Z1) / 0.2) as usize);
+        let free = |i: usize, j: usize| !blocked(MAP_X1 + (i as f32 + 0.5) * cell, MAP_Z1 + (j as f32 + 0.5) * cell, PLAYER_R, false) && zone_at(MAP_X1 + (i as f32 + 0.5) * cell, MAP_Z1 + (j as f32 + 0.5) * cell).is_some();
+        let idx = |x: f32, z: f32| (((x - MAP_X1) / cell) as usize, ((z - MAP_Z1) / cell) as usize);
+        let mut seen = vec![false; w * h];
+        let (si, sj) = idx(m.start.0, m.start.1);
+        if !free(si, sj) { errs.push("ponto de partida bloqueado".into()); }
+        let mut stack = vec![(si, sj)];
+        seen[sj * w + si] = true;
+        while let Some((i, j)) = stack.pop() {
+            for (di, dj) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                let (ni, nj) = (i as i32 + di, j as i32 + dj);
+                if ni < 0 || nj < 0 || ni >= w as i32 || nj >= h as i32 { continue; }
+                let (ni, nj) = (ni as usize, nj as usize);
+                if !seen[nj * w + ni] && free(ni, nj) { seen[nj * w + ni] = true; stack.push((ni, nj)); }
+            }
+        }
+        for z in m.zones {
+            let (i, j) = idx((z.x1 + z.x2) / 2.0, (z.z1 + z.z2) / 2.0);
+            let near = (-4i32..=4).any(|a| (-4i32..=4).any(|b| { let (x, y) = ((i as i32 + a).clamp(0, w as i32 - 1) as usize, (j as i32 + b).clamp(0, h as i32 - 1) as usize); seen[y * w + x] }));
+            if !near { errs.push(format!("cômodo {} inalcançável", z.id)); }
+        }
+        for (zone, x, z, _, _) in m.slots {
+            let (i, j) = idx(*x, *z);
+            let near = (-2i32..=2).any(|a| (-2i32..=2).any(|b| { let (xx, yy) = ((i as i32 + a).clamp(0, w as i32 - 1) as usize, (j as i32 + b).clamp(0, h as i32 - 1) as usize); seen[yy * w + xx] }));
+            if !near { errs.push(format!("vaga ({x},{z}) do cômodo {zone} inalcançável")); }
+        }
+        errs
     }
 
     pub fn reset(&mut self) {

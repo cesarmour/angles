@@ -238,10 +238,10 @@ pub fn update_player(time: Res<Time>, c: Res<Controls>, mut p: ResMut<Player>, m
     p.eye = Vec3::new(p.pos.x + r.x * p.lean * LEAN_M, eye_h, p.pos.y + r.y * p.lean * LEAN_M);
     // zona, entradas e tempo no funil fatal
     if let Some(z) = zone_at(p.pos.x, p.pos.y) { p.zone = z; }
-    for (k, w) in DOORWAYS.iter().enumerate() {
+    for (k, w) in doorways().iter().enumerate() {
         let zi = zone_index(w.zone);
         let coord = if w.axis_z { p.pos.y } else { p.pos.x };
-        if game.entry[k].is_none() && p.zone == zi && (coord - w.v) * w.s > 0.0 { game.entry[k] = Some(tac.pct[zi]); game.entry_pie[k] = Some(tac.pie_deg(k + 1)); }
+        if game.entry[k].is_none() && p.zone == zi && (coord - w.v) * w.s > 0.0 { game.entry[k] = Some(tac.pct[zi]); game.entry_pie[k] = Some(tac.pie_deg(w.opening)); }
         let inside = p.pos.x >= w.x1 && p.pos.x <= w.x2 && p.pos.y >= w.z1 && p.pos.y <= w.z2;
         if inside && (tac.pct[zi] < 0.95 || targets.list.iter().any(|t| t.alive && t.def.kind == TKind::Threat && t.def.zone == w.zone)) { game.dwell[k] += dt; }
     }

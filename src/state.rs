@@ -2,6 +2,10 @@
 use crate::map::*;
 use bevy::prelude::*;
 
+/// Pedido de troca de mapa (índice em `map::MAPS`), atendido por `world::map_switch`.
+#[derive(Resource, Default)]
+pub struct MapReq(pub Option<usize>);
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode { Menu, Card, Play, Pause, Debrief, Replay, Credits }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -15,7 +19,7 @@ pub struct Game {
     pub mode: Mode, pub time: f32, pub view: View, pub tac: bool, pub flash: bool, pub free: bool, pub mission2: bool, pub seed: u32,
     pub lesson: usize, pub obj: Vec<u8>, pub lesson_end: f32, pub debriefed: bool,
     pub flag_tac: bool, pub flag_bird: bool, pub flag_bird_back: bool,
-    pub entry: [Option<f32>; 4], pub entry_pie: [Option<f32>; 4], pub dwell: [f32; 4], pub door_side: [Option<bool>; 2],
+    pub entry: [Option<f32>; MAX_DOORWAYS], pub entry_pie: [Option<f32>; MAX_DOORWAYS], pub dwell: [f32; MAX_DOORWAYS], pub door_side: [Option<bool>; MAX_DOORS],
     pub stats: Stats, pub bird_zoom: f32, pub sens: f32,
     pub toast: Option<(String, u8, f32)>, pub hit_t: f32, pub dmg_t: f32,
     pub ui_dirty: bool, pub tracers: Vec<(Vec3, Vec3, f32)>, pub shake: f32, pub near_door: Option<usize>,
@@ -37,7 +41,7 @@ pub struct Game {
 impl Default for Game {
     fn default() -> Self {
         Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: false, flash: true, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
-            flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; 4], entry_pie: [None; 4], dwell: [0.0; 4], door_side: [None; 2], stats: Stats::default(),
+            flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
             bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false }

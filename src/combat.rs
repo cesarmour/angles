@@ -27,9 +27,33 @@ pub struct Fx {
     pub flash: Entity, pub flash_t: f32, pub decals: VecDeque<Entity>, pub muzzle_i: f32,
 }
 
+/// Malhas e materiais dos alvos, guardados para remontar os alvos quando o mapa muda.
+#[derive(Resource, Clone)]
+pub struct TargetArt { pub frame: Handle<Mesh>, pub board: Handle<Mesh>, pub shoot: Handle<StandardMaterial>, pub no_shoot: Handle<StandardMaterial>, pub wood: Handle<StandardMaterial> }
+
+/// Cria os alvos do mapa atual (papelão tipo IPSC grampeado em dois sarrafos).
+pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) -> Vec<TargetState> {
+    let mut list = Vec::new();
+    for (i, def) in target_defs().iter().enumerate() {
+        let ry = (def.fx - def.x).atan2(def.fz - def.z);
+        let fwd = Vec2::new(ry.sin(), ry.cos());
+        let root = commands.spawn((Transform::from_xyz(def.x, 0.0, def.z).with_rotation(Quat::from_rotation_y(ry)), Visibility::default())).id();
+        let pivot = commands.spawn((Transform::IDENTITY, Visibility::default(), TargetPivot(i))).id();
+        let fr = commands.spawn((Mesh3d(art.frame.clone()), MeshMaterial3d(art.wood.clone()), Transform::IDENTITY)).id();
+        let bd = commands.spawn((Mesh3d(art.board.clone()), MeshMaterial3d(if def.kind == TKind::Civil { art.no_shoot.clone() } else { art.shoot.clone() }), Transform::from_xyz(0.0, BOARD_Y0 + BOARD_H / 2.0, 0.0))).id();
+        commands.entity(pivot).add_children(&[fr, bd]);
+        commands.entity(root).add_child(pivot);
+        let mut t = TargetState {
+            def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
+            fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
+        };
+        place_target(level, &mut t);
+        list.push(t);
+    }
+    list
+}
+
 pub fn setup_targets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut smats: ResMut<Assets<StandardMaterial>>, mut images: ResMut<Assets<Image>>, mats: Res<Mats>, level: Res<Level>) {
-    let mut targets = Targets::default();
-    // alvo de papelão tipo IPSC grampeado em dois sarrafos
     let frame = meshes.add(boxes_mesh(&[b3(-0.17, 0.0, -0.028, -0.13, 1.5, -0.006), b3(0.13, 0.0, -0.028, 0.17, 1.5, -0.006), b3(-0.17, 0.0, -0.24, -0.13, 0.04, 0.24), b3(0.13, 0.0, -0.24, 0.17, 0.04, 0.24), b3(-0.17, 0.04, -0.03, 0.17, 0.08, -0.004)], 1.0));
     let board = meshes.add(Rectangle::new(BOARD_W, BOARD_H));
     let mk = |images: &mut Assets<Image>, smats: &mut Assets<StandardMaterial>, ns: bool| {
@@ -37,23 +61,10 @@ pub fn setup_targets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, m
         smats.add(StandardMaterial { base_color_texture: Some(tex), alpha_mode: AlphaMode::Mask(0.5), cull_mode: None, double_sided: true, perceptual_roughness: 0.92, reflectance: 0.2, ..default() })
     };
     let (shoot, no_shoot) = (mk(&mut images, &mut smats, false), mk(&mut images, &mut smats, true));
-    for (i, def) in TARGETS.iter().enumerate() {
-        let ry = (def.fx - def.x).atan2(def.fz - def.z);
-        let fwd = Vec2::new(ry.sin(), ry.cos());
-        let root = commands.spawn((Transform::from_xyz(def.x, 0.0, def.z).with_rotation(Quat::from_rotation_y(ry)), Visibility::default())).id();
-        let pivot = commands.spawn((Transform::IDENTITY, Visibility::default(), TargetPivot(i))).id();
-        let fr = commands.spawn((Mesh3d(frame.clone()), MeshMaterial3d(mats.wood.clone()), Transform::IDENTITY)).id();
-        let bd = commands.spawn((Mesh3d(board.clone()), MeshMaterial3d(if def.kind == TKind::Civil { no_shoot.clone() } else { shoot.clone() }), Transform::from_xyz(0.0, BOARD_Y0 + BOARD_H / 2.0, 0.0))).id();
-        commands.entity(pivot).add_children(&[fr, bd]);
-        commands.entity(root).add_child(pivot);
-        let mut t = TargetState {
-            def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
-            fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
-        };
-        place_target(&level, &mut t);
-        targets.list.push(t);
-    }
-    commands.insert_resource(targets);
+    let art = TargetArt { frame, board, shoot, no_shoot, wood: mats.wood.clone() };
+    let list = spawn_targets(&mut commands, &art, &level);
+    commands.insert_resource(Targets { list, masks: Vec::new() });
+    commands.insert_resource(art);
 
     // efeitos
     let soft = images.add(art::svg_image(&art::radial_svg(&[(0.0, "#fff", 1.0), (0.5, "#fff", 0.35), (1.0, "#fff", 0.0)]), 64, 64, false));

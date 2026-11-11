@@ -143,7 +143,7 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
 }
 
 pub fn play_sfx(mut ev: EventReader<Sfx>, mut s: ResMut<Sounds>, mut commands: Commands, p: Res<Player>, level: Res<Level>) {
-    let corridor = matches!(ZONES[p.zone].id, "C1" | "C2" | "C3");
+    let corridor = zones()[p.zone.min(zones().len() - 1)].is_corridor();
     for e in ev.read() {
         s.n = s.n.wrapping_add(1);
         let k = s.n as usize;

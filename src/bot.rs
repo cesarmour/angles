@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo,
+    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize),
 }
 
 #[derive(Resource, Default)]
@@ -83,6 +83,13 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         "ang" => vec![Wait(60), Start(false), Wait(20), Confirm, Wait(30), Tac(true), Tp(5.0, 7.2, 0.0, -0.05), Face(8.0, 5.0), Wait(40), Snap("pronto"), Ads(50), Snap("mirando"), Ads(0), Wait(30), Lean(1.0, 50), Snap("inclina dir"), Lean(-1.0, 60), Snap("inclina esq"), Lean(0.0, 0), Wait(20),
             Tp(5.62, 6.6, 0.0, -0.05), Face(8.0, 5.0), Wait(40), Snap("colado pronto"), Lean(1.0, 50), Snap("colado dir"), Lean(-1.0, 60), Snap("colado esq"), Lean(0.0, 0), Quit],
         "flick4" => vec![Wait(60), Start(false), Wait(20), Confirm, Wait(30), Tp(3.0, 17.2, 0.0, 0.55), Wait(120), Shot("g00"), Shot("g01"), Shot("g02"), Shot("g03"), Shot("g04"), Shot("g05"), Shot("g06"), Shot("g07"), Shot("g08"), Shot("g09"), Shot("g10"), Shot("g11"), Tp(5.0, 11.5, 0.0, 0.18), Wait(120), Shot("g12"), Shot("g13"), Shot("g14"), Shot("g15"), Shot("g16"), Shot("g17"), Shot("g18"), Shot("g19"), Shot("g20"), Shot("g21"), Shot("g22"), Shot("g23"), Quit],
+        // um mapa novo por vez: vista de cima sem névoa (CQB_NOFOW=1), primeira pessoa no início e um giro para medir desempenho
+        "maps" => { let mut v = vec![Wait(60)]; for (i, (a, b, c)) in [("m1-top", "m1-fp", "m1-tac"), ("m2-top", "m2-fp", "m2-tac"), ("m3-top", "m3-fp", "m3-tac")].into_iter().enumerate() {
+            v.extend([Map(i + 1), Wait(20), Start(true), Wait(240), Shot(b), Tac(true), ViewTo(View::Bird), Wait(60), Shot(a), ViewTo(View::Fp), Spin, Shot(c), Snap("mapa"), Tac(false), Pause, Wait(10)]);
+            v.extend([Wait(5)]);
+        }
+            // porta fechada num mapa novo (cozinha do apartamento): abre de lado e atravessa
+            v.extend([Map(1), Wait(20), Start(true), Wait(60), Tp(8.1, 6.9, 0.0, 0.0), Face(8.95, 6.0), Wait(10), Interact, Wait(90), Go(8.95, 6.9, None), Go(8.95, 4.8, None), Snap("porta"), Shot("m1-cozinha"), Quit]); v },
         "demo" => vec![Wait(60), Start(false), Wait(20), DemoOf(1), WaitDemo, DemoOf(2), WaitDemo, DemoOf(3), WaitDemo, DemoOf(4), WaitDemo, DemoOf(5), WaitDemo, Wait(20), Quit],
         _ => {
             // percurso completo: a lição 1 testa os controles; as demais seguem o mesmo traçado ideal que o jogador vê no chão
@@ -108,7 +115,7 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
 }
 
 pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Player>, mut game: ResMut<Game>, targets: Res<Targets>, tac: Res<Tac>, level: Res<Level>,
-    mut commands: Commands, mut exit: EventWriter<AppExit>, mut reset: EventWriter<ResetGame>, real: Res<Time<Real>>) {
+    mut commands: Commands, mut exit: EventWriter<AppExit>, mut reset: EventWriter<ResetGame>, real: Res<Time<Real>>, mut mapreq: ResMut<MapReq>) {
     let demo = game.demo;
     if !bot.active && !demo { return; }
     let rd = real.delta_secs();
@@ -161,7 +168,7 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
             bot.engage_n += 1;
             if aligned && bot.engage_n % 12 == 3 { c.fire = true; }
             // no vão de uma porta não se para: continua andando para o próximo ponto enquanto atira
-            let in_door = crate::map::DOORWAYS.iter().any(|w| p.pos.x >= w.x1 && p.pos.x <= w.x2 && p.pos.y >= w.z1 && p.pos.y <= w.z2);
+            let in_door = crate::map::doorways().iter().any(|w| p.pos.x >= w.x1 && p.pos.x <= w.x2 && p.pos.y >= w.z1 && p.pos.y <= w.z2);
             if in_door {
                 let q = if demo { bot.demo_q.front() } else { bot.queue.front() };
                 if let Some(Cmd::Go(x, z, _)) = q { let d = Vec2::new(*x, *z) - p.pos; if d.length() > 0.15 { c.world_move = Some(d.normalize()); } }
@@ -217,8 +224,9 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
             done = bot.n >= 8;
         }
         Cmd::Snap(name) => {
-            let pct: Vec<String> = crate::map::ZONES.iter().enumerate().map(|(i, z)| format!("{}={}", z.id, (tac.pct[i] * 100.0).round() as i32)).collect();
+            let pct: Vec<String> = crate::map::zones().iter().enumerate().map(|(i, z)| format!("{}={}", z.id, (tac.pct[i] * 100.0).round() as i32)).collect();
             let prim = format!("{:?} entr={:?}", (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>(), game.entry_pie.map(|e| e.map(|v| v as i32)));
+            println!("BOT POS {name}: ({:.2},{:.2}) portas={:?}", p.pos.x, p.pos.y, level.doors.iter().map(|d| (d.open * 100.0).round() as i32).collect::<Vec<_>>());
             println!("BOT PTS {name}: rota={:?} derrubadas={:?} base={:.0} chances={:.0} badges={:#012b} abates={:?}", game.route_score().map(|v| v.round()), game.kill_score().map(|v| v.round()), game.base_score(), game.odds, game.badges, game.kills.iter().map(|k| (k.angle.round() as i32, k.expo_cm.round() as i32, k.pts.round() as i32)).collect::<Vec<_>>());
             println!("BOT ANG {name}: setor={:.0} agora={:?} abertas={:?} foco={:?} lean={:.2} olho=({:.2},{:.2}) ads={:.2} dica={:?} bloq={}", tac.hfov.to_degrees(), tac.pie_now.iter().map(|v| v.map(|(a, b)| (b - a).round() as i32)).collect::<Vec<_>>(), (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>(), tac.pie_active, p.lean, p.eye.x, p.eye.z, p.g_ads, tac.lean_hint.map(|h| (h.0, h.1.round())), p.lean_blocked);
             println!("BOT {name}: qps={:.0} modo={:?} lição={} obj={:?} {} entrada={:?} funil={:?} atingido={} quina={} corpo={:.0}cm expo={:.0}° avisos={:?}",
@@ -232,6 +240,7 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         Cmd::Say(m) => { game.coach = Some((m.to_string(), 3, 11.0)); game.ui_dirty = true; done = true; }
         Cmd::OpenDoor(i) => { if level.doors[i].open < 0.5 && !level.doors[i].opening { c.interact = true; } done = true; }
         Cmd::DemoOf(l) => { game.lesson = l; game.obj = vec![0; crate::lessons::LESSONS[l].objs.len()]; game.mode = Mode::Card; game.demo_req = true; game.ui_dirty = true; done = true; }
+        Cmd::Map(i) => { mapreq.0 = Some(i); done = true; }
         Cmd::WaitDemo => { done = bot.n > 3 && !game.demo && !game.demo_req; }
     }
     if done { if demo { bot.demo_q.pop_front(); } else { bot.queue.pop_front(); } bot.n = 0; }

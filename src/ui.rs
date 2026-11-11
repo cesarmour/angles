@@ -27,16 +27,16 @@ pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8),
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
-    Menu, Card, Pause, Debrief, Credits, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows,
+    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows,
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back }
+pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8) }
 #[derive(Event)]
 pub struct ResetGame { pub free: bool, pub mission2: bool }
 
 /// A fonte da interface (Rajdhani) tem letras mais baixas que a anterior: compensa no tamanho.
 const FS: f32 = 1.1;
-const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, CosmoX45, discofield, dslrguide, florianreichelt, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nPISTOL AND GLOVES   model \"animatedpistol\" downloaded from Sketchfab; author and licence still to be confirmed and credited before the game is distributed\n\nLEVELS, TARGETS, OPERATOR ART, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
+const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, CosmoX45, discofield, dslrguide, florianreichelt, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nPISTOL AND GLOVES   model \"animatedpistol\" downloaded from Sketchfab; author and licence still to be confirmed and credited before the game is distributed\n\nLEVELS, target_defs(), OPERATOR ART, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
 fn txt(s: &str, font: &Handle<Font>, size: f32, color: Color) -> (Text, TextFont, TextColor) {
     (Text::new(s), TextFont { font: font.clone(), font_size: size * FS, ..default() }, TextColor(color))
 }
@@ -188,6 +188,15 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             button(r, &f, "CREDITS", Act::Credits, false);
             button(r, &f, "QUIT GAME", Act::Quit, false);
         });
+        // escolha do mapa para o percurso livre (o tutorial e a missão 2 usam sempre a casa de treino)
+        s.spawn(Node { column_gap: Val::Px(10.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
+            r.spawn(txt("MAP FOR FREE RUN", &f.semi, 13.0, CYAN));
+            for (i, m) in MAPS.iter().enumerate() {
+                r.spawn((Button, Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(7.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(CYAN), BackgroundColor(Color::NONE), Act::Map(i as u8)))
+                    .with_children(|b| { b.spawn((txt(&format!("{} · {}", i + 1, m.name.to_uppercase()), &f.bold, 16.0, BONE), Tag::MapBtn(i as u8))); });
+            }
+        });
+        s.spawn((txt("", &f.body, 13.0, MUTE), Tag::MapNote));
         s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), margin: UiRect::top(Val::Px(10.0)), ..default() }).with_children(|l| {
             for (i, (a, b)) in [("FUNDAMENTALS", "movement, aiming, leaning, crouching and the two views"), ("SLICING THE PIE", "going around a corner in an arc"), ("FATAL FUNNEL", "centre door and near corners"),
                 ("POSITIVE ID", "tan is a threat, white is a no-shoot"), ("CLOSED DOOR AND T", "open from the side, clear both sides"), ("DEAD SPACE", "what tall furniture hides")].iter().enumerate() {
@@ -259,7 +268,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
 }
 
 /// Cliques nos botões e teclas de confirmação/pausa.
-pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>) {
+pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>) {
     // durante a demonstração só existe uma ação: sair dela
     if game.demo { if c.pause || c.confirm { game.demo_end = true; } return; }
     let mut act: Option<Act> = None;
@@ -277,11 +286,13 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
     let Some(a) = act else { return };
     sfx.write(Sfx::Ui);
     match a {
-        Act::Start => { reset.write(ResetGame { free: false, mission2: false }); }
+        // tutorial e missão 2 são da casa de treino: volta para ela se outro mapa estiver montado
+        Act::Start => { if map_index() != 0 { mapreq.0 = Some(0); } reset.write(ResetGame { free: false, mission2: false }); }
         Act::Free => { reset.write(ResetGame { free: true, mission2: false }); }
         Act::CardGo | Act::Resume => { game.mode = Mode::Play; }
         Act::Restart => { reset.write(ResetGame { free: game.free, mission2: game.mission2 }); }
-        Act::Mission2 => { reset.write(ResetGame { free: true, mission2: true }); }
+        Act::Mission2 => { if map_index() != 0 { mapreq.0 = Some(0); } reset.write(ResetGame { free: true, mission2: true }); }
+        Act::Map(i) => { mapreq.0 = Some(i as usize); }
         Act::Quit => { exit.write(AppExit::Success); }
         Act::Demo => { game.demo_req = true; }
         Act::Flash => { game.flash = !game.flash; game.flag_flash = true; }
@@ -305,13 +316,13 @@ pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: R
     // a posição de ameaças e reféns é sorteada a cada partida, em todos os modos (cada alvo continua no seu cômodo)
     let mut seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(7) | 1;
     let mut rnd = move || { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; seed };
-    let mut pool: Vec<usize> = (0..SLOTS.len()).collect();
+    let mut pool: Vec<usize> = (0..slots().len()).collect();
     for i in (1..pool.len()).rev() { let j = (rnd() as usize) % (i + 1); pool.swap(i, j); }
     for (i, t) in targets.list.iter_mut().enumerate() {
-        t.def = TARGETS[i];
+        t.def = target_defs()[i];
         if !t.def.passive {
-            if let Some(k) = pool.iter().position(|&s| SLOTS[s].0 == t.def.zone) {
-                let s = SLOTS[pool.remove(k)];
+            if let Some(k) = pool.iter().position(|&s| slots()[s].0 == t.def.zone) {
+                let s = slots()[pool.remove(k)];
                 t.def.x = s.1; t.def.z = s.2; t.def.fx = s.3; t.def.fz = s.4;
             }
         }
@@ -328,12 +339,18 @@ pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: R
     fx.decals.clear();
     tac.reset();
     tac.corner_zone = None;
+    if let Some(z) = std::env::var("CQB_ZOOM").ok().and_then(|v| v.parse::<f32>().ok()) { game.bird_zoom = z; }
     if free {
         game.free = true; game.mission2 = m2; game.mode = Mode::Play;
         if m2 {
             p.pos = Vec2::new(19.5, 1.7); p.yaw = std::f32::consts::PI; p.zone = 6; p.eye = Vec3::new(19.5, EYE_STAND, 1.7);
             game.toast("Mission 2: you start in Room C. Clear the house back to the Staging area. Targets in random positions, no hints.", 1, 6.0);
-        } else { game.toast("Free run: targets in random positions, no instructions. Clear the whole house.", 1, 4.5); }
+        } else {
+            let st = map().start;
+            if map_index() != 0 { p.pos = Vec2::new(st.0, st.1); p.yaw = st.2; p.eye = Vec3::new(st.0, EYE_STAND, st.1); p.zone = zone_at(st.0, st.1).unwrap_or(0); }
+            let msg = format!("Free run · {}: targets in random positions, no instructions. Clear every room.", map().name);
+            game.toast(&msg, 1, 4.5);
+        }
     } else { start_lesson(&mut game, &mut tac, 0); }
 }
 
@@ -371,7 +388,7 @@ pub fn update_ui(
     // rótulos das aberturas em foco: graus já fatiados de 180
     let mut pies: Vec<(usize, Vec2)> = Vec::new();
     if game.tac && play {
-        for (i, o) in OPENINGS.iter().enumerate() {
+        for (i, o) in openings().iter().enumerate() {
             let near = p.eye2().distance(o.mid()) < 8.0 && (p.eye2() - o.mid()).dot(o.n) < 0.0;
             if tac.pct[zone_index(o.zone)] < 0.95 && near && o.door.map_or(true, |d| level.doors[d].open > 0.5) { pies.push((i, o.mid() + o.n * 0.9)); }
         }
@@ -497,10 +514,10 @@ pub fn update_ui(
                     ("White targets (no-shoot) hit".into(), s.civ_hit.to_string(), if s.civ_hit > 0 { BAD } else { GOOD }, if s.civ_hit > 0 { "The most serious error on the course. Confirm the target colour before every shot." } else { "" }),
                     ("Times hit (simulated)".into(), s.hits_taken.to_string(), if s.hits_taken > 0 { BAD } else { GOOD }, if s.hits_taken > 0 { "A threat had time to react with a clear line of fire to you." } else { "" }),
                     ("Threats you saw first".into(), format!("{} of {}", first, contact), if first == contact { GOOD } else { AMBER }, if first < contact { "For the others, you appeared without looking at them." } else { "" }),
-                    ("Fan opened before entering (of 180°)".into(), format!("A {} · B {} · Corridor 3 {} · C {}", en(0), en(1), en(2), en(3)), BONE, ""),
+                    ("Fan opened before entering (of 180°)".into(), doorways().iter().enumerate().map(|(k, w)| format!("{} {}", w.zone, en(k))).collect::<Vec<_>>().join(" · "), BONE, ""),
                     ("Technique warnings during the run".into(), { let n: u32 = game.warns.iter().sum(); if n == 0 { "none".to_string() } else { WARN_NAMES.iter().zip(game.warns.iter()).filter(|(_, c)| **c > 0).map(|(k, c)| format!("{k} {c}")).collect::<Vec<_>>().join(" · ") } },
                         if game.warns.iter().sum::<u32>() == 0 { GOOD } else { AMBER }, ""),
-                    ("Time in the fatal funnel".into(), format!("{} · {} · {} · {}", dw(0), dw(1), dw(2), dw(3)), BONE, ""),
+                    ("Time in the fatal funnel".into(), doorways().iter().enumerate().map(|(k, _)| dw(k)).collect::<Vec<_>>().join(" · "), BONE, ""),
                     ("Shots, accuracy and hits by zone".into(), format!("{} shots · {}% on target · A {} · C {} · D {}", s.shots, acc, s.zone_a, s.zone_c, s.zone_d), BONE, ""),
                     ("Total time".into(), format!("{} min {:02} s", (game.time / 60.0) as i32, (game.time % 60.0) as i32), BONE, ""),
                 ];
@@ -538,8 +555,10 @@ pub fn update_ui(
     };
     for (tag, mut t, mut col) in texts.iter_mut() {
         match *tag {
-            Tag::LessonKick => set(&mut t, if game.mission2 { "MISSION 2 · REVERSE ROUTE" } else if game.free { "FREE RUN" } else { lesson.kicker }),
-            Tag::LessonTitle => set(&mut t, if game.mission2 { "FROM ROOM C TO STAGING" } else if game.free { "CLEAR THE WHOLE HOUSE" } else { lesson.title }),
+            Tag::LessonKick => set(&mut t, &if game.mission2 { "MISSION 2 · REVERSE ROUTE".to_string() } else if game.free { format!("FREE RUN · {}", map().name.to_uppercase()) } else { lesson.kicker.to_string() }),
+            Tag::MapBtn(i) => { col.0 = if i as usize == map_index() { AMBER } else { BONE }; }
+            Tag::MapNote if game.mode == Mode::Menu => set(&mut t, &format!("Selected: {} — {}. Enemy and hostage positions are random on every run.", map().name, map().blurb)),
+            Tag::LessonTitle => set(&mut t, if game.mission2 { "FROM ROOM C TO STAGING" } else if game.free { "CLEAR EVERY ROOM" } else { lesson.title }),
             Tag::ReplayTitle => set(&mut t, &format!("ENTRY REPLAY · {}", lesson.title.to_uppercase())),
             Tag::CardKick => set(&mut t, lesson.kicker),
             Tag::CardTitle => set(&mut t, &lesson.title.to_uppercase()),
@@ -579,11 +598,11 @@ pub fn update_ui(
             Tag::TacCornerNote => { match tac.pie_active {
                 Some(i) => {
                     let tip = if p.lean_blocked { " · lean blocked by the wall".to_string() } else { match tac.lean_hint { Some((side, gain)) => format!(" · lean {} for +{}°", if side < 0.0 { "Q" } else { "E" }, gain.round() as i32), None => String::new() } };
-                    set(&mut t, &format!("{}{}", OPENINGS[i].name, tip));
+                    set(&mut t, &format!("{}{}", openings()[i].name, tip));
                 }
                 None => set(&mut t, "no opening in focus") } }
             Tag::TacBody => { match tac.primary { Some(_) => { set(&mut t, &format!("{} cm", tac.body_cm.round() as i32)); col.0 = if tac.body_cm > 30.0 { BAD } else if tac.body_cm > 15.0 { AMBER } else { GOOD }; } None => { set(&mut t, "—"); col.0 = MUTE; } } }
-            Tag::TacZoneName => set(&mut t, &format!("{} · AREA SEEN", ZONES[p.zone].name.to_uppercase())),
+            Tag::TacZoneName => set(&mut t, &format!("{} · AREA SEEN", zones()[p.zone].name.to_uppercase())),
             Tag::TacZone => set(&mut t, &format!("{}%", (tac.pct[p.zone] * 100.0).round() as i32)),
             Tag::TacExpo => { set(&mut t, &format!("{}°", tac.expo_deg.round() as i32)); col.0 = if tac.expo_deg >= 45.0 { BAD } else { BONE }; }
             Tag::Label(k) => {

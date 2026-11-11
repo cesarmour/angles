@@ -45,6 +45,7 @@ fn main() {
         .init_resource::<state::Controls>()
         .init_resource::<bot::Bot>()
         .init_resource::<lessons::DemoSnap>()
+        .init_resource::<state::MapReq>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window { title: "Point of Entry".into(), resolution: { let r = WindowResolution::new(1440.0, 810.0); match std::env::var("CQB_SCALE").ok().and_then(|s| s.parse::<f32>().ok()) { Some(sc) => r.with_scale_factor_override(sc), None => r } }, present_mode: if std::env::var("CQB_NOVSYNC").is_ok() { PresentMode::AutoNoVsync } else { PresentMode::AutoVsync }, ..default() }),
             ..default()
@@ -54,7 +55,7 @@ fn main() {
         .add_event::<ui::ResetGame>()
         .add_systems(Startup, (gizmo_cfg, world::setup_world, player::setup_player, combat::setup_targets, tactical::setup_tactical, gi::setup_gi, ui::setup_ui, audio::setup_audio, bot::setup_bot).chain())
         .add_systems(Update, (
-            player::gather_input, bot::bot_drive, ui::ui_actions, lessons::demo_system, ui::do_reset, player::cursor_grab,
+            player::gather_input, bot::bot_drive, ui::ui_actions, world::map_switch, lessons::demo_system, ui::do_reset, player::cursor_grab,
             player::update_player, combat::combat, combat::update_fx, player::update_gun, player::update_cameras,
             tactical::tac_update, lessons::update_lessons, lessons::coach_system, lessons::replay_system, tactical::tac_gizmos, lessons::guide_system, ui::update_ui, audio::play_sfx,
         ).chain())

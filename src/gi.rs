@@ -40,7 +40,7 @@ fn clear(level: &Level, a: Vec3, b: Vec3) -> bool {
 
 fn direct(level: &Level, p: Vec3, n: Vec3) -> Vec3 {
     let mut e = Vec3::ZERO;
-    for l in LIGHTS.iter() {
+    for l in lights().iter() {
         let lp = Vec3::new(l.x, 3.9, l.z);
         let v = lp - p;
         let d2 = v.length_squared();
@@ -67,7 +67,7 @@ pub fn setup_gi(mut commands: Commands, mut images: ResMut<Assets<Image>>, level
     // 1) pontos de luz virtuais no piso e nas paredes
     let mut vpls: Vec<Vpl> = Vec::new();
     let step = 0.8;
-    for q in ZONES.iter() {
+    for q in zones().iter() {
         let (nx, nz) = (((q.x2 - q.x1) / step).round().max(1.0) as usize, ((q.z2 - q.z1) / step).round().max(1.0) as usize);
         let (sx, sz) = ((q.x2 - q.x1) / nx as f32, (q.z2 - q.z1) / nz as f32);
         for i in 0..nx { for j in 0..nz {
