@@ -1,0 +1,559 @@
+<title>Point of Entry</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Saira+Stencil+One&display=swap">
+<style>
+/* Layout: a range briefing board. The hero is a live plan of a doorway being sliced;
+   each section below is a station of the shoot house, signed in the wall stencil.
+   One dark look on purpose: these are the game's own HUD colours, each with a meaning. */
+:root{
+  --ink:#0c0e0f; --panel:#14181a; --panel-2:#1b2023; --line:#2c3336;
+  --text:#ece8df; --dim:#a3abaa;
+  --cyan:#62d3ea;   /* covering now */
+  --green:#72d391;  /* seen */
+  --red:#ff5d4d;    /* not clear */
+  --amber:#f4b53f;  /* lesson, action */
+  --display:'Saira Stencil One','Rajdhani',Impact,'Arial Narrow',sans-serif;
+  --ui:'Rajdhani','Avenir Next Condensed','Arial Narrow',system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--ink);color:var(--text);font-family:var(--ui);font-weight:500;font-size:19px;line-height:1.45;-webkit-font-smoothing:antialiased}
+a{color:var(--cyan);text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+h1,h2,h3,p,ol,ul,dl,dd,figure{margin:0}
+ol,ul{padding:0;list-style:none}
+img{display:block}
+.wrap{max-width:1180px;margin-inline:auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.num{font-variant-numeric:tabular-nums}
+
+/* top bar */
+.top{border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:16px 28px;flex-wrap:wrap;padding-block:12px}
+.brand{display:flex;align-items:center;gap:12px;color:var(--text);text-decoration:none;font-family:var(--display);font-size:20px;letter-spacing:.04em;margin-right:auto}
+.brand img{width:36px;height:36px;border-radius:8px}
+.top nav{display:flex;gap:6px 22px;flex-wrap:wrap}
+.top nav a{color:var(--dim);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:.08em;text-transform:uppercase}
+.top nav a:hover{color:var(--text)}
+
+/* hero */
+.hero{background:
+  linear-gradient(var(--ink),transparent 30%,transparent 70%,var(--ink)),
+  repeating-linear-gradient(0deg,transparent 0 59px,rgba(98,211,234,.05) 59px 60px),
+  repeating-linear-gradient(90deg,transparent 0 59px,rgba(98,211,234,.05) 59px 60px),var(--ink)}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:40px 56px;align-items:center;padding-block:56px 64px}
+.kicker{color:var(--amber);font-weight:700;font-size:16px;letter-spacing:.14em;text-transform:uppercase}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(52px,8.4vw,104px);line-height:.88;letter-spacing:.01em;margin-top:14px;text-wrap:balance}
+.lede{font-size:clamp(24px,2.6vw,31px);font-weight:600;line-height:1.15;margin-top:22px;text-wrap:balance}
+.hero-copy p.body{color:var(--dim);margin-top:14px;max-width:34em}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.btn{display:inline-flex;align-items:center;gap:10px;font-family:var(--ui);font-weight:700;font-size:18px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;padding:13px 22px;border:2px solid var(--amber);background:var(--amber);color:#15110a}
+.btn:hover{background:#ffc75a;border-color:#ffc75a}
+.btn.ghost{background:transparent;color:var(--text);border-color:#6d7676}
+.btn.ghost:hover{border-color:var(--text);background:transparent}
+.meta{color:var(--dim);font-size:16px;letter-spacing:.04em;margin-top:14px}
+
+/* the live board (shaped like the game's tactical panel) */
+.board{background:rgba(10,12,13,.86);border:1px solid var(--line);border-right:3px solid var(--cyan);min-width:0}
+.board-head{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;font-weight:700;font-size:15px;letter-spacing:.1em;text-transform:uppercase}
+.board-head span:first-child{color:var(--cyan)}
+.board-head span:last-child{color:var(--dim)}
+#slice{display:block;width:100%;aspect-ratio:700/630;background:#07080a}
+.coach{display:flex;gap:12px;align-items:baseline;padding:10px 14px;border-top:2px solid var(--amber);background:var(--panel);min-height:66px}
+.coach b{color:var(--amber);font-size:14px;letter-spacing:.12em;flex:none}
+.coach span{font-size:17px;line-height:1.3}
+.reads{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+.reads div{padding:10px 14px;border-left:1px solid var(--line)}
+.reads div:first-child{border-left:0}
+.reads dt{color:var(--dim);font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;line-height:1.2;min-height:2.4em}
+.reads dd{font-weight:700;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--red)}
+.reads dd.ok{color:var(--green)}
+.reads dd.plain{color:var(--text)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 14px;border-top:1px solid var(--line);color:var(--dim);font-size:15px}
+.legend i{display:inline-block;width:11px;height:11px;margin-right:7px}
+
+/* sections */
+section.band{border-top:1px solid var(--line)}
+section.band .wrap{padding-block:72px}
+.sign{font-family:var(--display);color:#737c7b;font-size:18px;letter-spacing:.12em}
+h2{font-weight:700;font-size:clamp(32px,4.2vw,50px);line-height:1.02;letter-spacing:.005em;margin-top:8px;text-wrap:balance}
+.intro{color:var(--dim);max-width:40em;margin-top:16px}
+.split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:32px 48px;align-items:start;margin-top:36px}
+.split.flip{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr)}
+.shot{border:1px solid var(--line);background:#07080a;min-width:0}
+.shot img{width:100%;height:auto}
+.shot figcaption{color:var(--dim);font-size:15px;padding:9px 12px;border-top:1px solid var(--line)}
+
+/* tactical readings */
+.reading{display:grid;gap:22px}
+.reading div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 16px;align-items:baseline;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.reading div:last-child{border-bottom:0;padding-bottom:0}
+.reading dt{font-weight:700;font-size:15px;letter-spacing:.1em;text-transform:uppercase}
+.reading .val{font-weight:700;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.reading dd{grid-column:1/-1;color:var(--dim);font-size:18px}
+.c-cyan{color:var(--cyan)}.c-green{color:var(--green)}.c-red{color:var(--red)}.c-amber{color:var(--amber)}
+
+/* targets strip */
+.targets{display:grid;grid-template-columns:auto minmax(0,1fr);gap:28px 40px;align-items:center;margin-top:56px;padding:28px;background:var(--panel);border:1px solid var(--line)}
+.targets .pair{display:flex;gap:18px;align-items:flex-end}
+.targets img{height:150px;width:auto}
+.targets h3{font-size:26px;font-weight:700;line-height:1.1}
+.targets p{color:var(--dim);margin-top:8px;max-width:38em}
+.targets p b{color:var(--text);font-weight:600}
+
+/* course */
+.course{display:grid;gap:0;counter-reset:l}
+.course li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:0 14px;padding:14px 0;border-bottom:1px solid var(--line);counter-increment:l}
+.course li:first-child{padding-top:0}
+.course li::before{content:counter(l);font-family:var(--display);font-size:34px;line-height:1;color:var(--amber)}
+.course h3{font-size:22px;font-weight:700;line-height:1.15}
+.course h3 small{display:block;color:var(--amber);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.course p{color:var(--dim);font-size:18px;margin-top:3px}
+.notes{display:grid;gap:10px;margin-top:20px;color:var(--dim);font-size:18px}
+.notes li{padding-left:18px;position:relative}
+.notes li::before{content:"";position:absolute;left:0;top:.62em;width:8px;height:2px;background:var(--cyan)}
+.notes b{color:var(--text);font-weight:600}
+
+/* scoring */
+.weights{display:grid;gap:14px;margin-top:4px}
+.bar{display:flex;height:34px;border:1px solid var(--line);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase}
+.bar span{display:flex;align-items:center;padding-inline:10px;white-space:nowrap;overflow:hidden;color:#0d1011}
+.bar .r{width:40%;background:var(--cyan)}
+.bar .k{width:60%;background:var(--green)}
+.weights p{color:var(--dim);font-size:18px}
+.weights p b{color:var(--text);font-weight:600}
+.badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:0 32px;margin-top:40px;border-top:1px solid var(--line)}
+.badges li{padding:14px 0;border-bottom:1px solid var(--line)}
+.badges b{display:block;font-family:var(--display);font-weight:400;font-size:17px;letter-spacing:.06em;color:var(--amber)}
+.badges span{color:var(--dim);font-size:17px;line-height:1.3;display:block;margin-top:2px}
+
+/* maps */
+.maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin-top:36px}
+.maps figure{border:1px solid var(--line);background:#07080a;min-width:0}
+.maps img{width:100%;height:auto}
+.maps figcaption{padding:12px 14px;border-top:1px solid var(--line)}
+.maps b{font-family:var(--display);font-weight:400;font-size:19px;letter-spacing:.06em;display:block}
+.maps span{color:var(--dim);font-size:17px}
+
+/* controls */
+.keys{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:0 36px;margin-top:32px}
+.keys div{display:flex;justify-content:space-between;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line)}
+.keys dt{color:var(--dim);font-size:18px}
+.keys dd{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+kbd{font-family:var(--ui);font-weight:700;font-size:15px;letter-spacing:.04em;border:1px solid #586062;border-bottom-width:2px;padding:1px 8px;background:var(--panel-2);color:var(--text);white-space:nowrap}
+
+/* download */
+.get{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px 56px;margin-top:32px;align-items:start}
+.steps{counter-reset:s;display:grid;gap:14px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px}
+.steps li::before{content:counter(s);font-family:var(--display);font-size:26px;line-height:1.1;color:var(--amber)}
+.steps b{font-weight:700}
+.steps span{color:var(--dim);display:block;font-size:18px}
+pre{margin:10px 0 0;padding:10px 12px;background:var(--panel);border:1px solid var(--line);overflow-x:auto;font:500 14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text)}
+.getbox{background:var(--panel);border:1px solid var(--line);padding:24px}
+.getbox h3{font-size:24px;font-weight:700}
+.getbox ul{color:var(--dim);font-size:18px;margin-top:10px;display:grid;gap:4px}
+.getbox .cta{margin-top:20px}
+code{font:500 .85em ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;color:var(--text)}
+
+footer{border-top:1px solid var(--line);color:var(--dim);font-size:17px}
+footer .wrap{padding-block:36px 48px;display:grid;gap:12px}
+footer p{max-width:60em}
+footer .warn{color:var(--text);font-weight:600}
+
+@media (max-width:900px){
+  .hero .wrap,.split,.split.flip,.get{grid-template-columns:minmax(0,1fr)}
+  .hero .wrap{padding-block:32px 44px;gap:0}
+  .hero-copy{display:contents}
+  .hero-copy>*{order:1}
+  .hero .board{order:2;margin-top:28px}
+  .hero-copy p.body{order:3;margin-top:20px}
+  .coach{min-height:92px}
+  section.band .wrap{padding-block:52px}
+  .targets{grid-template-columns:minmax(0,1fr);padding:20px}
+}
+@media (max-width:560px){
+  body{font-size:18px}
+  .maps{grid-template-columns:minmax(0,1fr)}
+  .top nav{display:none}
+  .kicker{font-size:14px;letter-spacing:.1em}
+  .cta{margin-top:22px}
+  .reads dd{font-size:24px}
+  .reads dt{font-size:12px;letter-spacing:.05em}
+  .reads div{padding:9px 10px}
+  .btn{flex:1 1 auto;justify-content:center}
+  .targets img{height:118px}
+}
+</style>
+<!--BODY-->
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top-of-page"><img src="{{img:icon.png}}" alt="">POINT OF ENTRY</a>
+    <nav aria-label="Sections">
+      <a href="#tactical">Tactical view</a>
+      <a href="#course">Course</a>
+      <a href="#debrief">Debrief</a>
+      <a href="#maps">Maps</a>
+      <a href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top-of-page">
+<div class="hero">
+  <div class="wrap">
+    <div class="hero-copy">
+      <p class="kicker">CQB fundamentals · Teaching simulator</p>
+      <h1>POINT OF ENTRY</h1>
+      <p class="lede">Clear the room before you walk into it.</p>
+      <p class="body">A shoot house with cardboard targets and a tactical view that puts numbers on technique: how many degrees of a doorway you have opened, how much of your body the corner shows, and how long you stood in a line of fire.</p>
+      <div class="cta">
+        <a class="btn" href="{{download}}">Download for Mac</a>
+        <a class="btn ghost" href="{{repo}}">Source on GitHub</a>
+      </div>
+      <p class="meta">Version {{version}} · {{size}} · Mac with Apple silicon · Free</p>
+    </div>
+
+    <figure class="board">
+      <div class="board-head"><span>Tactical view</span><span>Room A · centre door</span></div>
+      <canvas id="slice" role="img" aria-label="Top-down animation. An operator moves in an arc outside a doorway. With each side step a wider slice of the room turns from dark red to green, and the count of degrees opened goes up."></canvas>
+      <div class="coach"><b id="coach-kind">STEP</b><span id="coach-text">Slice the door from one jamb to the other. Watch the fan degrees go up.</span></div>
+      <dl class="reads">
+        <div><dt>Opening: now / cleared (of 180°)</dt><dd id="r-open">26° / 58°</dd></div>
+        <div><dt>Room A · area seen</dt><dd id="r-area" class="plain">31%</dd></div>
+        <div><dt>Threats neutralized</dt><dd id="r-down">0 / 2</dd></div>
+      </dl>
+      <div class="legend">
+        <span><i style="background:var(--cyan)"></i>covering now</span>
+        <span><i style="background:var(--green)"></i>seen</span>
+        <span><i style="background:var(--red)"></i>not clear</span>
+        <span><i style="background:var(--amber)"></i>ideal route</span>
+      </div>
+    </figure>
+  </div>
+</div>
+
+<section class="band" id="tactical">
+  <div class="wrap">
+    <p class="sign">THE TACTICAL VIEW</p>
+    <h2>Technique, in degrees and centimetres</h2>
+    <p class="intro">Press G and the house shows what you have already seen, what nobody has looked at yet, and what your eyes and gun cover right now. The panel reads the same thing back as numbers that change with every step.</p>
+    <div class="split">
+      <figure class="shot">
+        <img src="{{img:tactical.jpg}}" width="1600" height="900" alt="First-person view down a corridor with the tactical panel and minimap on the right; the floor ahead is tinted green where it has been seen.">
+        <figcaption>First person with the tactical view on. Apartment map, entry hall.</figcaption>
+      </figure>
+      <dl class="reading">
+        <div><dt>Your sector</dt><span class="val c-cyan">70° <span style="color:var(--dim)">/</span> 32°</span>
+          <dd>What eyes and gun cover: 70° at the ready, 32° through the sights. A target outside it has not been identified.</dd></div>
+        <div><dt>Opening: now / cleared</dt><span class="val c-red">42° <span style="color:var(--dim)">/</span> 44°</span>
+          <dd>Every doorway and corner is a 180° fan. The first number is what you see at this instant; the second is what you have cleared so far.</dd></div>
+        <div><dt>Body exposed to the corner</dt><span class="val c-amber">25 cm</span>
+          <dd>Width of torso past the edge. Lean with Q or E toward the open side and the same slice costs you head and gun only.</dd></div>
+        <div><dt>Exposure to uncleared area</dt><span class="val c-red">291°</span>
+          <dd>Degrees around you that open onto floor nobody has checked. Turn your back on it and the coach tells you.</dd></div>
+      </dl>
+    </div>
+
+    <div class="targets">
+      <div class="pair">
+        <img src="{{img:target-threat.png}}" width="230" height="380" alt="Tan cardboard target with A, C and D scoring zones">
+        <img src="{{img:target-noshoot.png}}" width="230" height="380" alt="White cardboard target crossed with a black X">
+      </div>
+      <div>
+        <h3>Cardboard, not people</h3>
+        <p><b>Tan is a threat.</b> It drops with two hits, or one in the A zone. <b>White with an X is a no-shoot:</b> hostage, resident, teammate. Hitting one is the most serious error on the course. Both change position on every run, so the route you memorised last time will not save you.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="course">
+  <div class="wrap">
+    <p class="sign">THE COURSE</p>
+    <h2>Six lessons, one house</h2>
+    <p class="intro">Nobody wins here by shooting fast. You win by seeing first, exposing little and firing only at what you have identified. Each lesson takes one idea to one part of the building.</p>
+    <div class="split flip">
+      <ol class="course">
+        <li><div><h3><small>Staging area</small>Fundamentals</h3><p>Move, lean, crouch, aim, and read the tactical view before anything can shoot back.</p></div></li>
+        <li><div><h3><small>Corridor corner</small>Slicing the pie</h3><p>Go around a corner in an arc, one side step at a time, with the gun already on the new slice.</p></div></li>
+        <li><div><h3><small>Room A, centre door</small>Fatal funnel and near corners</h3><p>Clear what you can from outside, cross the doorway without stopping, check the near corners first.</p></div></li>
+        <li><div><h3><small>Room B, corner door</small>Positive identification</h3><p>Tan or white? Confirm what it is and what is behind it before every shot.</p></div></li>
+        <li><div><h3><small>Corridor 3</small>Closed door and T-junction</h3><p>Open from the jamb, off the line of fire. Slice both sides of the corridor before you step out.</p></div></li>
+        <li><div><h3><small>Room C</small>Dead space</h3><p>Tall furniture hides floor you cannot see from the door. While any floor is red, the room is not clear.</p></div></li>
+      </ol>
+      <div>
+        <figure class="shot">
+          <img src="{{img:demo.jpg}}" width="1600" height="900" alt="Top-down view of the training house during a demo: the operator stands in a doorway with a cyan sector cone, the ideal route drawn on the floor in amber.">
+          <figcaption>Watch demo: a scripted operator runs the lesson along the ideal route, then hands the controls back.</figcaption>
+        </figure>
+        <ul class="notes">
+          <li><b>Ideal route on the floor.</b> Always on, a tip that fades after 8 seconds, or off.</li>
+          <li><b>Live coaching.</b> Six technique warnings, from stopping in a doorway to turning your back on uncleared floor.</li>
+          <li><b>Replay</b> after every lesson.</li>
+          <li><b>Mission 2</b> runs the house in reverse. <b>Free run</b> gives no instructions at all.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="debrief">
+  <div class="wrap">
+    <p class="sign">THE DEBRIEF</p>
+    <h2>Scored on route, angle and exposure</h2>
+    <p class="intro">The grade is built from things you can see and repeat, and the debrief lists every one of them. While you move, the odds-of-success box turns the same measurements into a live percentage.</p>
+    <div class="split">
+      <figure class="shot">
+        <img src="{{img:debrief.jpg}}" width="1600" height="900" alt="Course debrief screen: grade B, house clear, with rows for ideal route, slice angle at each kill, body exposed at each kill, badges earned and time in the fatal funnel.">
+        <figcaption>Course debrief after the six lessons.</figcaption>
+      </figure>
+      <div class="weights">
+        <div class="bar" role="img" aria-label="Score weights: 40% route, 60% how each threat dropped"><span class="r">Route 40%</span><span class="k">Each threat 60%</span></div>
+        <p><b>Route.</b> Your average distance from the ideal line, in centimetres.</p>
+        <p><b>Slice angle.</b> Degrees between the target and the edge hiding it when it dropped. Engage as soon as the slice shows it.</p>
+        <p><b>Body exposed.</b> Width of your torso the target could see.</p>
+        <p><b>Time in its line of fire.</b> Seconds between first contact and the hit.</p>
+        <p>Hitting a white target or taking a (simulated) hit costs points.</p>
+      </div>
+    </div>
+    <ul class="badges" aria-label="Badges">
+      <li><b>SLICE THE PIE</b><span>Opened 110° or more of a doorway's fan before entering.</span></li>
+      <li><b>FATAL FUNNEL</b><span>Crossed a doorway in under a second, without stopping in it.</span></li>
+      <li><b>DIG THE CORNERS</b><span>Checked every near corner within 3 seconds of entering.</span></li>
+      <li><b>POSITIVE ID</b><span>Cleared a room with no-shoot targets without hitting one.</span></li>
+      <li><b>MINIMUM EXPOSURE</b><span>Dropped a threat showing 10 cm of body or less.</span></li>
+      <li><b>TIGHT ANGLE</b><span>Dropped a threat at a slice angle of 8° or less.</span></li>
+      <li><b>SEE FIRST, SHOOT FIRST</b><span>Dropped a threat within a second of first contact.</span></li>
+      <li><b>DOOR FROM THE JAMB</b><span>Opened a closed door from the side, off the doorway.</span></li>
+      <li><b>DEAD SPACE</b><span>Cleared the area hidden behind the tall furniture.</span></li>
+      <li><b>ON THE LINE</b><span>Finished a lesson within 25 cm of the ideal route on average.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="band" id="maps">
+  <div class="wrap">
+    <p class="sign">THE HOUSES</p>
+    <h2>Four maps, never the same twice</h2>
+    <p class="intro">The training house carries the six lessons. The other three are free runs: threats and no-shoot targets are placed at random in every room, every time.</p>
+    <div class="maps">
+      <figure><img src="{{img:map-house.jpg}}" width="960" height="540" alt="Top-down view of the training house"><figcaption><b>TRAINING HOUSE</b><span>The tutorial shoot house: six lessons, Mission 2 and free run.</span></figcaption></figure>
+      <figure><img src="{{img:map-apartment.jpg}}" width="960" height="540" alt="Top-down view of the apartment map"><figcaption><b>APARTMENT</b><span>Tight rooms off a central corridor, two closed doors.</span></figcaption></figure>
+      <figure><img src="{{img:map-office.jpg}}" width="960" height="540" alt="Top-down view of the office map"><figcaption><b>OFFICE</b><span>Open-plan floor with low partitions, a corridor and three closed doors.</span></figcaption></figure>
+      <figure><img src="{{img:map-warehouse.jpg}}" width="960" height="540" alt="Top-down view of the warehouse map"><figcaption><b>WAREHOUSE</b><span>Big floor with tall shelving rows and dead space, an office, a back corridor and three rooms.</span></figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="controls">
+  <div class="wrap">
+    <p class="sign">CONTROLS</p>
+    <h2>Playable on a trackpad</h2>
+    <p class="intro">Nothing needs a right or middle mouse button: Space aims, Z locks the aim, L switches the flashlight.</p>
+    <dl class="keys">
+      <div><dt>Move</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dd></div>
+      <div><dt>Look</dt><dd><kbd>Mouse</kbd></dd></div>
+      <div><dt>Fire</dt><dd><kbd>Click</kbd></dd></div>
+      <div><dt>Aim</dt><dd><kbd>Space</kbd><kbd>Right button</kbd></dd></div>
+      <div><dt>Lock the aim</dt><dd><kbd>Z</kbd></dd></div>
+      <div><dt>Lean left / right</dt><dd><kbd>Q</kbd><kbd>E</kbd></dd></div>
+      <div><dt>Crouch</dt><dd><kbd>C</kbd><kbd>Ctrl</kbd></dd></div>
+      <div><dt>Fast step</dt><dd><kbd>Shift</kbd></dd></div>
+      <div><dt>Reload</dt><dd><kbd>R</kbd></dd></div>
+      <div><dt>Open door</dt><dd><kbd>F</kbd></dd></div>
+      <div><dt>Flashlight</dt><dd><kbd>L</kbd></dd></div>
+      <div><dt>Tactical view</dt><dd><kbd>G</kbd></dd></div>
+      <div><dt>Top-down view</dt><dd><kbd>V</kbd></dd></div>
+      <div><dt>Ideal route: always, tip, off</dt><dd><kbd>T</kbd></dd></div>
+      <div><dt>Hide the lesson box</dt><dd><kbd>O</kbd></dd></div>
+      <div><dt>Review lesson, watch demo</dt><dd><kbd>H</kbd></dd></div>
+      <div><dt>Pause</dt><dd><kbd>Esc</kbd></dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="band" id="download">
+  <div class="wrap">
+    <p class="sign">GET IT</p>
+    <h2>Download for Mac</h2>
+    <div class="get">
+      <ol class="steps">
+        <li><div><b>Download and unzip.</b><span>PointOfEntry-mac.zip, {{size}}. You get one app: Point of Entry.</span></div></li>
+        <li><div><b>Open it once.</b><span>The app is not signed with an Apple developer certificate, so macOS stops the first launch.</span></div></li>
+        <li><div><b>Allow it.</b><span>On macOS 15 or later: System Settings, Privacy &amp; Security, then Open Anyway. On earlier versions: right-click the app and choose Open.</span></div></li>
+        <li><div><b>Start with the tutorial.</b><span>The six lessons teach every control as you go.</span></div></li>
+      </ol>
+      <div class="getbox">
+        <h3>Point of Entry {{version}}</h3>
+        <ul>
+          <li>Mac with Apple silicon (M1 or later)</li>
+          <li>Keyboard and trackpad or mouse</li>
+          <li>Free. Single player, no account, works offline</li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="{{download}}">Download · {{size}}</a>
+          <a class="btn ghost" href="{{repo}}/releases">All versions</a>
+        </div>
+        <p class="meta">Prefer to build it? Rust and one command: <code>cargo run --release</code></p>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="warn">A teaching tool for fundamentals. Real technique is learned with a qualified instructor, as a team, in a controlled environment.</p>
+    <p>Built with Rust and Bevy. Textures and furniture from Poly Haven (CC0), sounds from Freesound (CC0), Rajdhani and Saira Stencil One under the SIL Open Font License. <a href="{{repo}}/blob/main/CREDITS.md">Full credits</a> · <a href="{{repo}}">github.com/cesarmour/point-of-entry</a></p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var cv=document.getElementById('slice'); if(!cv||!cv.getContext) return;
+  var ctx=cv.getContext('2d');
+  // world, in metres: the room is above the door wall (y>0), the corridor below it
+  var WX0=-3.5,WX1=3.5,WY0=-2.45,WY1=3.85,RX0=-3.2,RX1=3.2,RY1=3.6,DOOR=0.55,WALL=0.09;
+  var CY='98,211,234',GR='114,211,145',RD='255,93,77',AM='244,181,63';
+  var s=1,dpr=1,cw=0,ch=0;
+  var seen=document.createElement('canvas'),sx=seen.getContext('2d');
+  var lay=document.createElement('canvas'),lx=lay.getContext('2d');
+  function X(x){return (x-WX0)*s} function Y(y){return (WY1-y)*s}
+  function img(src){var i=new Image();i.onload=function(){if(!running)draw()};i.src=src;return i}
+  var IM={op:img('{{img:operator.png}}'),th:img('{{img:target-threat.png}}'),ns:img('{{img:target-noshoot.png}}')};
+
+  var SWEEP=11,HOLD=3.4;
+  function ease(p){return p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2}
+  function pos(p){var a=(0.04+0.92*ease(p))*Math.PI;return {x:-1.75*Math.cos(a),y:-0.5-1.3*Math.sin(a)}}
+  function deg(r){return r*180/Math.PI}
+  function interval(P){return {lo:deg(Math.atan2(-P.y,DOOR-P.x)),hi:deg(Math.atan2(-P.y,-DOOR-P.x))}}
+  function vis(P,Q){var t=-P.y/(Q.y-P.y),x=P.x+(Q.x-P.x)*t;return Math.abs(x)<DOOR-0.01}
+
+  var threats=[{x:2.05,y:2.45},{x:-2.25,y:2.75}],noshoot={x:-1.0,y:2.25,seen:2};
+  // when each threat is first seen and dropped, and what the debrief would say about it
+  threats.forEach(function(T){
+    T.seen=2;T.down=2;
+    for(var q=0;q<=1;q+=0.002){ if(vis(pos(q),T)){T.seen=q;break} }
+    T.down=Math.min(1,T.seen+0.024);
+    var P=pos(T.down),iv=interval(P),a=deg(Math.atan2(T.y-P.y,T.x-P.x));
+    T.slice=Math.max(1,Math.round(Math.min(a-iv.lo,iv.hi-a)));
+    var dx=T.x-P.x,dy=T.y-P.y,l=Math.hypot(dx,dy),nx=-dy/l,ny=dx/l,n=0;
+    for(var k=0;k<=22;k++){var o=-0.23+0.46*k/22; if(vis({x:P.x+nx*o,y:P.y+ny*o},T)) n++}
+    T.expo=Math.round(46*n/23);
+    T.dt=((T.down-T.seen)*SWEEP).toFixed(1);
+  });
+  for(var q=0;q<=1;q+=0.002){ if(vis(pos(q),noshoot)){noshoot.seen=q;break} }
+
+  var bins=new Uint8Array(181),binN=0,GW=36,GH=20,grid=new Uint8Array(GW*GH),gridN=0;
+  function tri(c,P){var k=40;c.moveTo(X(P.x),Y(P.y));c.lineTo(X(P.x+(-DOOR-P.x)*k),Y(P.y-P.y*k));c.lineTo(X(P.x+(DOOR-P.x)*k),Y(P.y-P.y*k));c.closePath()}
+  function mark(P){
+    var iv=interval(P),b,i,j;
+    for(b=Math.ceil(iv.lo);b<=Math.floor(iv.hi);b++) if(!bins[b]){bins[b]=1;binN++}
+    for(j=0;j<GH;j++) for(i=0;i<GW;i++){var g=j*GW+i; if(!grid[g]&&vis(P,{x:RX0+(i+.5)*(RX1-RX0)/GW,y:(j+.5)*RY1/GH})){grid[g]=1;gridN++}}
+    sx.setTransform(dpr,0,0,dpr,0,0);sx.save();sx.beginPath();sx.rect(X(RX0),Y(RY1),(RX1-RX0)*s,RY1*s);sx.clip();
+    sx.beginPath();tri(sx,P);sx.fillStyle='#fff';sx.fill();sx.restore();
+  }
+  function reset(){bins.fill(0);grid.fill(0);binN=0;gridN=0;sx.setTransform(1,0,0,1,0,0);sx.clearRect(0,0,seen.width,seen.height)}
+  function simulateTo(p){reset();for(var q=0;q<p;q+=0.003)mark(pos(q));mark(pos(p))}
+
+  function layer(fill,fog){
+    lx.setTransform(1,0,0,1,0,0);lx.globalCompositeOperation='source-over';lx.clearRect(0,0,lay.width,lay.height);lx.fillStyle=fill;
+    if(fog){lx.fillRect(X(RX0)*dpr,Y(RY1)*dpr,(RX1-RX0)*s*dpr,RY1*s*dpr);lx.globalCompositeOperation='destination-out';lx.drawImage(seen,0,0)}
+    else{lx.drawImage(seen,0,0);lx.globalCompositeOperation='source-in';lx.fillRect(0,0,lay.width,lay.height)}
+    lx.globalCompositeOperation='source-over';
+  }
+  function glow(x,y,r,a){var g=ctx.createRadialGradient(X(x),Y(y),0,X(x),Y(y),r*s);g.addColorStop(0,'rgba(255,248,230,'+a+')');g.addColorStop(1,'rgba(255,248,230,0)');ctx.fillStyle=g;ctx.fillRect(X(x-r),Y(y+r),2*r*s,2*r*s)}
+  function wall(x0,y0,x1,y1){ctx.fillStyle='#0d0f10';ctx.fillRect(X(x0),Y(y1),(x1-x0)*s,(y1-y0)*s);ctx.strokeStyle='#5d625f';ctx.lineWidth=1;ctx.strokeRect(X(x0)+.5,Y(y1)+.5,(x1-x0)*s-1,(y1-y0)*s-1)}
+  function label(t,x,y,px,col,font,align){ctx.font=font||('700 '+px+'px Rajdhani, "Arial Narrow", sans-serif');ctx.textAlign=align||'center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=Math.max(3,px*.28);ctx.strokeStyle='rgba(6,7,8,.85)';ctx.strokeText(t,X(x),Y(y));ctx.fillStyle=col;ctx.fillText(t,X(x),Y(y))}
+  function target(T,im,down){
+    var w=0.5*s,h=w*380/230; if(!im.complete||!im.naturalWidth) return;
+    ctx.save();ctx.translate(X(T.x),Y(T.y)); if(down){ctx.rotate(1.35);ctx.globalAlpha=.5}
+    ctx.drawImage(im,-w/2,-h/2,w,h);ctx.restore();
+  }
+
+  var p=0.22,hold=0,last=0,running=false,txt={};
+  function set(id,v,cls){var e=document.getElementById(id); if(!e) return; if(txt[id]!==v){e.textContent=v;txt[id]=v} if(cls!==undefined&&e.className!==cls) e.className=cls}
+
+  function draw(){
+    if(!cw) return;
+    var P=pos(p),iv=interval(P),now=Math.round(iv.hi-iv.lo),k,a;
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.globalAlpha=1;
+    ctx.fillStyle='#07080a';ctx.fillRect(0,0,cw,ch);
+    // floors
+    ctx.fillStyle='#3b3e3c';ctx.fillRect(0,Y(0),cw,ch-Y(0));
+    ctx.fillStyle='rgba('+GR+',.13)';ctx.fillRect(0,Y(0),cw,ch-Y(0));
+    ctx.fillStyle='#4b4b46';ctx.fillRect(X(RX0),Y(RY1),(RX1-RX0)*s,RY1*s);
+    ctx.save();ctx.beginPath();ctx.rect(X(RX0),Y(RY1),(RX1-RX0)*s,RY1*s);ctx.clip();glow(-1.6,1.9,2.2,.20);glow(1.6,1.9,2.2,.20);ctx.restore();
+    glow(0,-1.25,2.4,.12);
+    // targets, then what has been seen (green) and what has not (dark red)
+    threats.forEach(function(T){target(T,IM.th,p>=T.down)});
+    target(noshoot,IM.ns,false);
+    layer('rgb('+GR+')',false);ctx.globalAlpha=.24;ctx.drawImage(lay,0,0,cw,ch);
+    layer('rgb(54,13,18)',true);ctx.globalAlpha=1;ctx.drawImage(lay,0,0,cw,ch);
+    label('ROOM A',0,RY1-0.42,Math.round(.34*s),'rgba(236,232,223,.22)','400 '+Math.round(.34*s)+'px "Saira Stencil One", Rajdhani, sans-serif');
+    // what eyes and gun cover right now
+    ctx.save();ctx.beginPath();ctx.rect(X(RX0),Y(RY1),(RX1-RX0)*s,ch);ctx.clip();
+    ctx.beginPath();tri(ctx,P);ctx.fillStyle='rgba('+CY+',.24)';ctx.fill();ctx.strokeStyle='rgba('+CY+',.85)';ctx.lineWidth=1.25;ctx.stroke();ctx.restore();
+    // ideal route
+    ctx.beginPath();for(k=0;k<=60;k++){var Q=pos(k/60);k?ctx.lineTo(X(Q.x),Y(Q.y)):ctx.moveTo(X(Q.x),Y(Q.y))}
+    ctx.setLineDash([.14*s,.12*s]);ctx.strokeStyle='rgba('+AM+',.7)';ctx.lineWidth=2;ctx.stroke();ctx.setLineDash([]);
+    var E=pos(1);ctx.beginPath();ctx.moveTo(X(E.x)-.1*s,Y(E.y)+.16*s);ctx.lineTo(X(E.x)+.03*s,Y(E.y)-.02*s);ctx.lineTo(X(E.x)-.17*s,Y(E.y)-.02*s);ctx.closePath();ctx.fillStyle='rgba('+AM+',.8)';ctx.fill();
+    // walls
+    wall(RX0-.16,-WALL,-DOOR,WALL);wall(DOOR,-WALL,RX1+.16,WALL);
+    wall(RX0-.16,WALL,RX0,RY1);wall(RX1,WALL,RX1+.16,RY1);wall(RX0-.16,RY1,RX1+.16,RY1+.16);
+    // the doorway's 180° fan: one tick every 3°
+    var R=.98*s;
+    for(a=0;a<=180;a+=3){var c=(a>=iv.lo&&a<=iv.hi)?CY:(bins[a]?GR:RD),ca=Math.cos(a*Math.PI/180),sa=Math.sin(a*Math.PI/180);
+      ctx.beginPath();ctx.moveTo(X(0)+ca*R,Y(0)-sa*R);ctx.lineTo(X(0)+ca*(R+.11*s),Y(0)-sa*(R+.11*s));ctx.strokeStyle='rgba('+c+',.95)';ctx.lineWidth=1.6;ctx.stroke()}
+    label(now+'° now · '+binN+'° of 180°',0,1.5,Math.max(13,Math.round(.25*s)),binN>=110?'rgb('+GR+')':'rgb('+RD+')');
+    // shots
+    threats.forEach(function(T){
+      if(p>=T.down&&p<T.down+0.014){ctx.beginPath();ctx.moveTo(X(P.x),Y(P.y));ctx.lineTo(X(T.x),Y(T.y));ctx.strokeStyle='rgba(255,236,190,.9)';ctx.lineWidth=1.5;ctx.stroke()}
+    });
+    // operator
+    var head=(iv.lo+iv.hi)/2*Math.PI/180;
+    ctx.beginPath();ctx.arc(X(P.x),Y(P.y),.43*s,0,Math.PI*2);ctx.fillStyle='rgba('+CY+',.14)';ctx.fill();ctx.strokeStyle='rgb('+CY+')';ctx.lineWidth=2.5;ctx.stroke();
+    if(IM.op.complete&&IM.op.naturalWidth){var w=.74*s,h=w*220/200;ctx.save();ctx.translate(X(P.x),Y(P.y));ctx.rotate(Math.PI/2-head);ctx.drawImage(IM.op,-w/2,-h*.66,w,h);ctx.restore()}
+    // what is still unseen when the slice is done
+    if(p>=1){var f=Math.min(1,hold/.6),px=Math.max(11,Math.round(.2*s));ctx.globalAlpha=f;
+      label('NEAR CORNER',-2.3,.52,px,'rgb('+RD+')');label('NEAR CORNER',2.3,.52,px,'rgb('+RD+')');ctx.globalAlpha=1}
+
+    // panel
+    set('r-open',now+'° / '+binN+'°',binN>=110?'ok':'');
+    set('r-area',Math.round(100*gridN/(GW*GH))+'%','plain');
+    var d=threats.filter(function(T){return p>=T.down}),L=d[d.length-1];
+    set('r-down',d.length+' / '+threats.length,d.length===threats.length?'ok':'');
+    if(p>=1){set('coach-kind','STEP');set('coach-text',binN+'° of 180° opened from outside. What is left are the near corners: check them first as you go in.')}
+    else if(L){set('coach-kind','SCORE');set('coach-text','Threat down · slice angle '+L.slice+'° · body exposed '+L.expo+' cm · '+L.dt+' s in its line of fire')}
+    else{set('coach-kind','STEP');set('coach-text','Slice the door from one jamb to the other. Watch the fan degrees go up.')}
+  }
+
+  function fit(){
+    var w=cv.clientWidth; if(!w) return false;
+    cw=w;ch=Math.round(w*(WY1-WY0)/(WX1-WX0));dpr=Math.min(2,window.devicePixelRatio||1);s=cw/(WX1-WX0);
+    cv.width=seen.width=lay.width=Math.round(cw*dpr);cv.height=seen.height=lay.height=Math.round(ch*dpr);
+    simulateTo(p);draw();return true;
+  }
+  function frame(t){
+    if(!running) return;
+    var dt=Math.min(.05,(t-last)/1000||0);last=t;
+    if(p<1){p=Math.min(1,p+dt/SWEEP);mark(pos(p))}
+    else{hold+=dt;if(hold>HOLD){reset();p=0;hold=0}}
+    draw();requestAnimationFrame(frame);
+  }
+  var still=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches,onscreen=true;
+  function sync(){
+    var go=!still&&onscreen&&!document.hidden&&cw>0;
+    if(go&&!running){running=true;last=0;requestAnimationFrame(frame)} else if(!go) running=false;
+  }
+  if(still) p=0.62;
+  cv._seek=function(q){p=Math.max(0,Math.min(1,q));hold=p>=1?1:0;simulateTo(p);draw()};
+  fit();
+  if(window.ResizeObserver) new ResizeObserver(function(){if(cv.clientWidth&&cv.clientWidth!==cw){fit();sync()}}).observe(cv);
+  else window.addEventListener('resize',function(){fit();sync()});
+  if(window.IntersectionObserver) new IntersectionObserver(function(e){onscreen=e[0].isIntersecting;sync()}).observe(cv);
+  document.addEventListener('visibilitychange',sync);
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){if(!running)draw()});
+  sync();
+})();
+</script>

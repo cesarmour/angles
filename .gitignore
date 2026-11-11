@@ -4,3 +4,5 @@ shots/
 dist/
 .DS_Store
 *.zip
+site/index.html
+site/artifact.html
