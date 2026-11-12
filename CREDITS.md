@@ -44,8 +44,21 @@ A teaching tool for close-quarters battle fundamentals. Real technique is learne
 | interruptor_1.mp3 | Nox_Sound | https://freesound.org/people/Nox_Sound/sounds/557509/ |
 | roupa_1.mp3 | WasabiWielder | https://freesound.org/people/WasabiWielder/sounds/334219/ |
 
-## Pistol and gloves (first person)
-- Model file `assets/models/pistola_colt.glb`, converted from `animatedpistol.zip` (`source/MyPistol.fbx`), which the project owner downloaded from Sketchfab. **Author and licence are not recorded in the download.** Before distributing the game, find the original Sketchfab page and credit the author as its licence requires (most Sketchfab downloads are CC BY 4.0). Animation clips were re-exported with Blender.
+## First-person weapons and 3D operator — Sketchfab, all CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+| In the game | Original work | Author | Source | Changes |
+|---|---|---|---|---|
+| Pistol and gloves (`pistola_colt.glb`, `pistola_colt_anim.glb`) | AnimatedPistol | JUST (teenjust500) | https://sketchfab.com/3d-models/animatedpistol-e0bbe625b9504ed59db273c310e1cce7 | Converted from FBX to glTF; animation clips re-exported |
+| SCAR rifle (`scar.glb`) | SCAR | JUST (teenjust500); rifle mesh by DelthorGames (https://sketchfab.com/DelthorGames) | https://sketchfab.com/3d-models/scar-afd0c02ccc1847e2a787917dad5ba260 | Converted from FBX to glTF; textures reduced |
+| Operator on the menu and debrief (`operator.glb`) and armed threats (`threat.glb`) | FSB Operator | Mateusz Woliński (jeandiz). The author credits the AKS-74u to N-GONE and clothing pieces to ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess | https://sketchfab.com/3d-models/fsb-operator-43a561e941704eefb1ab0614be4f0049 | Recoloured (black operator, tan threat); original insignia and night-vision goggles removed; on the threat the rifle is replaced by the AnimatedPistol model above; low-ready, aiming, recoil and four falling clips made for this game; mesh and textures reduced |
+
+## Hostage — Sketchfab, CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only
+| In the game | Original work | Author | Source | Changes |
+|---|---|---|---|---|
+| Hostage (`hostage.glb`) | Women in jeans | aribb (RiceBeBe) | https://sketchfab.com/3d-models/women-in-jeans-e766ff60190248f09721cfe018182e5f | Original showcase pose removed; hands-up pose, idle clip and four falling clips made for this game; facial shape keys and small face parts removed; mesh and textures reduced; height set to 1.70 m |
+
+**This model's licence does not allow commercial use.** While it is in the game, the game cannot be sold or bundled with anything sold. Replace it before any commercial release.
+
+The pistol was matched to its Sketchfab page by triangle count (25,216) and clip names. Conversion scripts are in `tools3d/`.
 
 ## Everything else
 - Level layouts, targets, top-down operator art, icons, diagrams, interface, lesson texts and code were made for this project with Claude Code.

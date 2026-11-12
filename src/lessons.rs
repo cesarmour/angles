@@ -22,17 +22,17 @@ pub const LESSONS: [Lesson; 6] = [
         points: &["From outside: slice the door from one jamb to the other. Watch the fan degrees go up; what is left are the near corners.", "On entry: don't stop in the doorway. Go in and get off the door line.", "Near corners first: they are the only part of the room you haven't seen yet.", "The barricade in the middle of the room covers anyone crouching behind it, on either side."],
         objs: &["From outside, slice the door from both sides (110° of 180°)", "Cross the doorway without stopping (1.5 s max)", "Check both near corners", "Neutralize the 2 threats", "Room A clear"] },
     Lesson { title: "Positive identification", kicker: "Lesson 4 of 6 · Room B, corner door", corners: Some("B"),
-        lead: "Not every target is a shoot target. A tan target is a threat. A white target with an X is a no-shoot: hostage, resident, teammate. Before every shot, confirm what it is and what is behind it.",
-        points: &["White with an X: don't shoot. Hitting one is the most serious error on the course.", "Tan: threat. Two shots in the A zone.", "Corner door: the whole room lies to one side. The near corner is the one that runs along the door wall.", "The flashlight (L) helps tell tan from white in dark corners."],
-        objs: &["Slice the door before entering (100° of 180°)", "Neutralize the 2 threats (tan targets)", "Don't shoot a white target", "Room B clear"] },
+        lead: "Not everyone in the house is a threat. The armed figure in tan is a threat. The unarmed person with hands up is a hostage: a no-shoot. Before every shot, confirm what it is and what is behind it.",
+        points: &["Hands up and no weapon: don't shoot. Hitting a hostage is the most serious error on the course.", "Tan: threat. Two shots in the A zone.", "Corner door: the whole room lies to one side. The near corner is the one that runs along the door wall.", "The flashlight (L) helps you see hands and weapons in dark corners."],
+        objs: &["Slice the door before entering (100° of 180°)", "Neutralize the 2 threats (tan targets)", "Don't shoot a hostage (hands up, unarmed)", "Room B clear"] },
     Lesson { title: "Closed door and T-junction", kicker: "Lesson 5 of 6 · Corridor 3", corners: None,
         lead: "A closed door tells you nothing about what is behind it. Don't stand in front of it: open it from the side, off the line of fire of whoever is on the other side.",
         points: &["Stand by the jamb and open with F.", "Behind this door the corridor runs both ways: two corners at once.", "Slice one side from inside the room, then the other.", "When you step out you turn your back on one side. Only step out when both are clear."],
         objs: &["Open the door from the side, off the doorway (F)", "Slice both sides of the corridor without leaving the room (70° of 180°)", "Neutralize the 2 threats"] },
     Lesson { title: "Dead space", kicker: "Lesson 6 of 6 · Room C", corners: Some("C"),
         lead: "Tall furniture creates areas you can't see from the door or from the middle of the room. While any floor is still red, the room is not clear.",
-        points: &["Treat the furniture like a corner: slice it in an arc, from a distance.", "Don't walk right past the furniture.", "Hostage (white) and threat (tan) can be side by side. Identify each one."],
-        objs: &["Open the door from the side, off the doorway (F)", "Neutralize the 2 threats", "Don't hit the hostage (white target)", "Clear the dead space behind the cabinet"] },
+        points: &["Treat the furniture like a corner: slice it in an arc, from a distance.", "Don't walk right past the furniture.", "Hostage (hands up) and threat (armed) can be side by side. Identify each one."],
+        objs: &["Open the door from the side, off the doorway (F)", "Neutralize the 2 threats", "Don't hit the hostage (hands up, unarmed)", "Clear the dead space behind the cabinet"] },
 ];
 
 pub struct Ctx<'a> { pub p: &'a Player, pub game: &'a Game, pub tac: &'a Tac, pub targets: &'a Targets, pub level: &'a Level }
@@ -101,10 +101,10 @@ pub fn fail_msg(l: usize, i: usize) -> Option<&'static str> {
         (2, 0) => Some("You entered with too little of the fan open. From the corridor, move from one side of the door to the other, gun on the opening, before entering."),
         (2, 1) => Some("You stood still in the doorway. In the fatal funnel, whoever stops becomes the target."),
         (3, 0) => Some("You entered with too little of the fan open. From inside Room A, open the door angle in an arc."),
-        (3, 2) => Some("You hit a white target (no-shoot). Confirm the colour before pressing the trigger."),
+        (3, 2) => Some("You hit a hostage. Look for the weapon before pressing the trigger."),
         (4, 0) | (5, 0) => Some("You opened the door standing in front of it. Stay by the jamb."),
         (4, 1) => Some("You stepped into the corridor with one side still red."),
-        (5, 2) => Some("You hit the hostage (white target). Identify every target before firing."),
+        (5, 2) => Some("You hit the hostage. Identify every target before firing."),
         _ => None,
     }
 }
@@ -254,7 +254,7 @@ pub fn ideal(l: usize) -> &'static [Step] {
             Start(10.5, 8.0, 14.0, 10.9),
             Say("Corner door: the whole room lies to one side. Slice it in an arc from inside Room A."),
             Go(12.5, 8.2, 15.0, 12.0), Go(12.2, 9.5, 17.0, 11.5), Go(12.2, 10.95, 20.5, 10.95), Go(12.6, 11.6, 20.0, 7.0), Shoot("T4"), Go(13.4, 11.6, 16.0, 6.5),
-            Say("Identify before you shoot: tan is a threat, white with an X is a no-shoot."),
+            Say("Identify before you shoot: armed is a threat, hands up and unarmed is a hostage."),
             Mv(13.4, 10.95), Go(14.9, 10.95, 14.75, 6.85), Shoot("T5"), Mv(16.0, 10.6), Scan, Mv(19.5, 10.0), Scan,
         ],
         4 => &[
@@ -385,7 +385,7 @@ pub const BADGES: [(&str, &str); 10] = [
     ("SLICE THE PIE", "opened 110° or more of a doorway's fan before entering"),
     ("FATAL FUNNEL", "crossed a doorway in under a second, without stopping in it"),
     ("DIG THE CORNERS", "checked every near corner within 3 seconds of entering"),
-    ("POSITIVE ID", "cleared a room with no-shoot targets without hitting one"),
+    ("POSITIVE ID", "cleared a room with hostages without hitting one"),
     ("MINIMUM EXPOSURE", "dropped a threat showing 10 cm of body or less"),
     ("TIGHT ANGLE", "dropped a threat at a slice angle of 8° or less"),
     ("SEE FIRST, SHOOT FIRST", "dropped a threat within a second of first contact"),
@@ -562,7 +562,7 @@ pub fn demo_system(time: Res<Time>, mut game: ResMut<Game>, mut p: ResMut<Player
             targets: targets.list.iter().map(|t| TSnap { alive: t.alive, fall: t.fall, fall_v: t.fall_v, hits: t.hits, seen: t.seen, vis: t.vis, react: t.react, contact: t.contact, contact_t: t.contact_t,
                 first_facing: t.first_facing, sw: t.sw, swv: t.swv, landed: t.landed, marks: t.marks.len() }).collect(),
         }));
-        p.vel = Vec2::ZERO; p.lean = 0.0; p.crouching = false; p.mag = 8; p.reloading = false; p.pitch = -0.04;
+        p.vel = Vec2::ZERO; p.lean = 0.0; p.crouching = false; p.mag = p.def().mag; p.reloading = false; p.switch_to = None; p.pitch = -0.04;
         game.mode = Mode::Play; game.demo = true; game.demo_end = false; game.demo_idle = 0.0; game.view = View::Bird; game.tac = true; game.toast = None; game.coach = None; game.guide_i = 0; game.ui_dirty = true;
         bot.demo_q = crate::bot::steps_cmds(game.lesson, true).into();
         bot.n = 0; bot.demo_frames = 0; bot.hold_ads = false; bot.hold_lean = 0.0; bot.hold_crouch = false;

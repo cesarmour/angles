@@ -12,7 +12,9 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize),
+    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize),
+    /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
+    Near(bool, usize, f32),
 }
 
 #[derive(Resource, Default)]
@@ -90,6 +92,33 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         }
             // porta fechada num mapa novo (cozinha do apartamento): abre de lado e atravessa
             v.extend([Map(1), Wait(20), Start(true), Wait(60), Tp(8.1, 6.9, 0.0, 0.0), Face(8.95, 6.0), Wait(10), Interact, Wait(90), Go(8.95, 6.9, None), Go(8.95, 4.8, None), Snap("porta"), Shot("m1-cozinha"), Quit]); v },
+        // as duas armas: em pronto, na mira, atirando, no meio da troca e nas duas recargas
+        "guns" => { let mut v = vec![Wait(60), Start(false), Wait(20), Confirm, Wait(40), Tp(3.0, 16.6, 0.0, -0.02), Wait(70)];
+            for (i, n) in [(0usize, ["w0-hip", "w0-ads", "w0-fire", "w0-reload", "w0-switch"]), (1, ["w1-hip", "w1-ads", "w1-fire", "w1-reload", "w1-switch"])] {
+                if i > 0 { v.extend([Weapon(i), Wait(40), Shot(n[4]), Wait(160)]); }
+                v.extend([Shot(n[0]), Ads(90), Shot(n[1]), Fire, Wait(3), Shot(n[2]), Ads(0), Wait(60), Reload, Wait(150), Shot(n[3]), Snap("arma"), Wait(420)]);
+            }
+            v.extend([Go(3.0, 14.2, None), Shot("w1-walk"), Weapon(0), Wait(200), Go(3.0, 16.0, None), Shot("w0-walk"), Snap("fim"), Quit]); v },
+        "ads" => vec![Wait(60), Start(false), Wait(20), Confirm, Wait(40), Tp(3.0, 16.6, 0.0, -0.02), Wait(70), Weapon(1), Wait(200), Ads(120), Shot("a1"), Ads(0), Quit],
+        // esvazia o carregador e recarrega: pistola e SCAR
+        "empty" => { let mut v = vec![Wait(60), Start(false), Wait(20), Confirm, Wait(40), Tp(3.0, 16.6, 0.0, -0.02), Wait(70)];
+            for _ in 0..8 { v.extend([Fire, Wait(24)]); }
+            v.extend([Reload, Wait(70), Shot("e0-emergency"), Snap("pistola recarregando"), Wait(420), Snap("pistola cheia"), Weapon(1), Wait(200)]);
+            for _ in 0..30 { v.extend([Fire, Wait(20)]); }
+            v.extend([Reload, Wait(220), Shot("e1-emergency"), Snap("scar recarregando"), Wait(420), Snap("scar cheio"), Fire, Wait(30), Reload, Wait(60), Snap("scar tática"), Wait(420), Snap("scar 30+1"), Quit]); v },
+        "host" => vec![Wait(60), Start(true), Wait(120), Near(true, 0, 3.2), Wait(120), Shot("h1"), Near(true, 1, 2.0), Wait(120), Shot("h2"), Near(false, 1, 3.5), Wait(120), Shot("t1"), Near(false, 2, 2.2), Wait(90), Shot("t2"), Wait(200), Shot("t3"),
+            Near(true, 0, 3.0), Wait(60), Fire, Wait(60), Shot("h3"), Wait(200), Shot("h4"), ViewTo(View::Bird), Wait(120), Shot("h5"), Snap("fim"), Quit],
+        // ameaça de frente: levanta o fuzil ao ver o operador e atira; várias capturas seguidas para pegar o clarão
+        "enemy" => vec![Wait(60), Start(true), Wait(120), Near(false, 1, 3.0), Wait(50), Shot("e01"), Wait(130), Shot("e02"), Shot("e03"), Shot("e04"), Shot("e05"), Shot("e06"), Shot("e07"), Shot("e08"), Shot("e09"),
+            Near(true, 0, 2.6), Wait(140), Shot("e10"), Snap("fim"), Quit],
+        // queda: derruba uma ameaça e um refém de perto e captura a sequência
+        "fall" => vec![Wait(60), Start(true), Wait(120), Near(false, 1, 3.0), Wait(30), Ads(40), Fire, Wait(10), Shot("f1"), Wait(14), Fire, Shot("f2"), Wait(20), Shot("f3"), Wait(60), Shot("f4"), Ads(0),
+            Near(true, 0, 3.0), Wait(60), Fire, Wait(14), Shot("f5"), Wait(30), Shot("f6"), Wait(80), Shot("f7"), ViewTo(View::Bird), Wait(120), Shot("f8"), Snap("fim"), Quit],
+        // quedas sorteadas: derruba quatro ameaças seguidas e mostra cada uma caída
+        "falls" => { let mut v = vec![Wait(60), Start(true), Wait(120)];
+            for (i, n) in ["q0", "q1", "q2", "q3"].into_iter().enumerate() { v.extend([Near(false, i, 3.0), Wait(30), Fire, Wait(14), Fire, Wait(150), Shot(n)]); }
+            v.extend([Snap("fim"), Quit]); v },
+        "menu" => vec![Wait(200), Shot("menu1"), Wait(400), Shot("menu2"), Wait(400), Shot("menu3"), Quit],
         "demo" => vec![Wait(60), Start(false), Wait(20), DemoOf(1), WaitDemo, DemoOf(2), WaitDemo, DemoOf(3), WaitDemo, DemoOf(4), WaitDemo, DemoOf(5), WaitDemo, Wait(20), Quit],
         _ => {
             // percurso completo: a lição 1 testa os controles; as demais seguem o mesmo traçado ideal que o jogador vê no chão
@@ -226,6 +255,7 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         Cmd::Snap(name) => {
             let pct: Vec<String> = crate::map::zones().iter().enumerate().map(|(i, z)| format!("{}={}", z.id, (tac.pct[i] * 100.0).round() as i32)).collect();
             let prim = format!("{:?} entr={:?}", (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>(), game.entry_pie.map(|e| e.map(|v| v as i32)));
+            println!("BOT ARMA {name}: arma={} {} carregador={} reserva={} recarregando={} vazia={} troca={:?}", p.weapon, p.def().hud, p.mag, p.reserve, p.reloading, p.reload_empty, p.switch_to);
             println!("BOT POS {name}: ({:.2},{:.2}) portas={:?}", p.pos.x, p.pos.y, level.doors.iter().map(|d| (d.open * 100.0).round() as i32).collect::<Vec<_>>());
             println!("BOT PTS {name}: rota={:?} derrubadas={:?} base={:.0} chances={:.0} badges={:#012b} abates={:?}", game.route_score().map(|v| v.round()), game.kill_score().map(|v| v.round()), game.base_score(), game.odds, game.badges, game.kills.iter().map(|k| (k.angle.round() as i32, k.expo_cm.round() as i32, k.pts.round() as i32)).collect::<Vec<_>>());
             println!("BOT ANG {name}: setor={:.0} agora={:?} abertas={:?} foco={:?} lean={:.2} olho=({:.2},{:.2}) ads={:.2} dica={:?} bloq={}", tac.hfov.to_degrees(), tac.pie_now.iter().map(|v| v.map(|(a, b)| (b - a).round() as i32)).collect::<Vec<_>>(), (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>(), tac.pie_active, p.lean, p.eye.x, p.eye.z, p.g_ads, tac.lean_hint.map(|h| (h.0, h.1.round())), p.lean_blocked);
@@ -241,6 +271,18 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         Cmd::OpenDoor(i) => { if level.doors[i].open < 0.5 && !level.doors[i].opening { c.interact = true; } done = true; }
         Cmd::DemoOf(l) => { game.lesson = l; game.obj = vec![0; crate::lessons::LESSONS[l].objs.len()]; game.mode = Mode::Card; game.demo_req = true; game.ui_dirty = true; done = true; }
         Cmd::Map(i) => { mapreq.0 = Some(i); done = true; }
+        Cmd::Weapon(i) => { c.weapon = Some(i); done = true; }
+        Cmd::Near(civil, n, dist) => {
+            let want = if civil { TKind::Civil } else { TKind::Threat };
+            if let Some(t) = targets.list.iter().filter(|t| t.def.kind == want && !t.def.passive && t.alive).nth(n) {
+                let tp = Vec2::new(t.def.x, t.def.z);
+                // recua na direção para onde o alvo olha, até onde houver chão livre
+                let d = level.cast_ray(tp.x, tp.y, t.fwd.x, t.fwd.y, dist + 0.4, 1.0);
+                let pos = tp + t.fwd * (d - 0.4).clamp(0.8, dist);
+                p.pos = pos; p.vel = Vec2::ZERO; p.yaw = (-(tp.x - pos.x)).atan2(-(tp.y - pos.y)); p.pitch = -0.08;
+            }
+            done = true;
+        }
         Cmd::WaitDemo => { done = bot.n > 3 && !game.demo && !game.demo_req; }
     }
     if done { if demo { bot.demo_q.pop_front(); } else { bot.queue.pop_front(); } bot.n = 0; }

@@ -6,6 +6,7 @@ mod combat;
 mod gi;
 mod lessons;
 mod map;
+mod operator;
 mod player;
 mod state;
 mod tactical;
@@ -53,12 +54,12 @@ fn main() {
         .add_plugins(TemporalAntiAliasPlugin)
         .add_event::<state::Sfx>()
         .add_event::<ui::ResetGame>()
-        .add_systems(Startup, (gizmo_cfg, world::setup_world, player::setup_player, combat::setup_targets, tactical::setup_tactical, gi::setup_gi, ui::setup_ui, audio::setup_audio, bot::setup_bot).chain())
+        .add_systems(Startup, (gizmo_cfg, world::setup_world, player::setup_player, operator::setup_operator, combat::setup_targets, tactical::setup_tactical, gi::setup_gi, ui::setup_ui, audio::setup_audio, bot::setup_bot).chain())
         .add_systems(Update, (
             player::gather_input, bot::bot_drive, ui::ui_actions, world::map_switch, lessons::demo_system, ui::do_reset, player::cursor_grab,
             player::update_player, combat::combat, combat::update_fx, player::update_gun, player::update_cameras,
             tactical::tac_update, lessons::update_lessons, lessons::coach_system, lessons::replay_system, tactical::tac_gizmos, lessons::guide_system, ui::update_ui, audio::play_sfx,
         ).chain())
-        .add_systems(Update, (light_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::gun_anim_setup, player::gun_anim_drive, player::body_anim))
+        .add_systems(Update, (light_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::gun_anim_setup, player::gun_anim_drive, player::body_anim, operator::update_operator, operator::fig_system))
         .run();
 }

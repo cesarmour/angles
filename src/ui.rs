@@ -27,7 +27,7 @@ pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8),
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
-    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows,
+    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait,
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8) }
@@ -36,7 +36,7 @@ pub struct ResetGame { pub free: bool, pub mission2: bool }
 
 /// A fonte da interface (Rajdhani) tem letras mais baixas que a anterior: compensa no tamanho.
 const FS: f32 = 1.1;
-const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, CosmoX45, discofield, dslrguide, florianreichelt, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nPISTOL AND GLOVES   model \"animatedpistol\" downloaded from Sketchfab; author and licence still to be confirmed and credited before the game is distributed\n\nLEVELS, target_defs(), OPERATOR ART, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
+const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, CosmoX45, discofield, dslrguide, florianreichelt, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nFIRST-PERSON WEAPONS (CC BY 4.0, sketchfab.com)   Pistol and gloves: \"AnimatedPistol\" by JUST  ·  Rifle: \"SCAR\" by JUST, rifle mesh by DelthorGames\n\nOPERATOR AND THREATS (CC BY 4.0)   \"FSB Operator\" by Mateusz Wolinski (jeandiz), with AKS-74u by N-GONE and clothing pieces by ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess  ·  changed for this game: recoloured, insignia and goggles removed, the threat carries the pistol above, aiming, recoil and falling clips added, mesh and textures reduced\n\nHOSTAGE (CC BY-NC 4.0, non-commercial)   \"Women in jeans\" by aribb  ·  changed for this game: hands-up pose, idle and falling clips, mesh and textures reduced\n\nLEVELS, PRACTICE TARGET, TOP-DOWN OPERATOR ART, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
 fn txt(s: &str, font: &Handle<Font>, size: f32, color: Color) -> (Text, TextFont, TextColor) {
     (Text::new(s), TextFont { font: font.clone(), font_size: size * FS, ..default() }, TextColor(color))
 }
@@ -58,7 +58,7 @@ fn screen(tag: Tag) -> (Node, BackgroundColor, Tag, GlobalZIndex) {
      BackgroundColor(SCREEN), tag, GlobalZIndex(5))
 }
 
-pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut images: ResMut<Assets<Image>>, mini: Res<crate::player::MiniTex>) {
+pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut images: ResMut<Assets<Image>>, mini: Res<crate::player::MiniTex>, portrait: Res<crate::operator::PortraitTex>) {
     let f = UiFonts {
         bold: fonts.add(Font::try_from_bytes(art::FONT_BOLD.to_vec()).expect("fonte")),
         semi: fonts.add(Font::try_from_bytes(art::FONT_SEMI.to_vec()).expect("fonte")),
@@ -177,10 +177,13 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     });
 
     /* ---------- telas ---------- */
+    // operador 3D à direita no menu e na avaliação (desenhado pela câmera do estúdio, fundo transparente)
+    commands.spawn((ImageNode::new(portrait.0.clone()), Node { position_type: PositionType::Absolute, right: Val::Px(36.0), bottom: Val::Px(0.0), width: Val::Px(530.0), height: Val::Px(795.0), display: Display::None, ..default() },
+        GlobalZIndex(6), bevy::ui::FocusPolicy::Pass, Tag::Portrait));
     commands.spawn(screen(Tag::Menu)).with_children(|s| {
         s.spawn(txt("CLOSE-QUARTERS BATTLE SIMULATOR · TUTORIAL", &f.semi, 14.0, AMBER));
         s.spawn(txt("POINT OF ", &f.bold, 104.0, BONE)).with_children(|t| { t.spawn((TextSpan::new("ENTRY"), TextFont { font: f.bold.clone(), font_size: 104.0 * FS, ..default() }, TextColor(AMBER))); });
-        s.spawn((txt("A shoot house with cardboard targets and six short lessons on how to enter a room: see first, expose little and fire only at what you have identified.", &f.body, 19.0, BONE), Node { max_width: Val::Px(640.0), ..default() }));
+        s.spawn((txt("A shoot house with armed threats and hostages, and six short lessons on how to enter a room: see first, expose little and fire only at what you have identified.", &f.body, 19.0, BONE), Node { max_width: Val::Px(640.0), ..default() }));
         s.spawn(Node { column_gap: Val::Px(10.0), ..default() }).with_children(|r| {
             button(r, &f, "START TUTORIAL", Act::Start, true);
             button(r, &f, "MISSION 2 · REVERSE ROUTE", Act::Mission2, false);
@@ -199,7 +202,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         s.spawn((txt("", &f.body, 13.0, MUTE), Tag::MapNote));
         s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), margin: UiRect::top(Val::Px(10.0)), ..default() }).with_children(|l| {
             for (i, (a, b)) in [("FUNDAMENTALS", "movement, aiming, leaning, crouching and the two views"), ("SLICING THE PIE", "going around a corner in an arc"), ("FATAL FUNNEL", "centre door and near corners"),
-                ("POSITIVE ID", "tan is a threat, white is a no-shoot"), ("CLOSED DOOR AND T", "open from the side, clear both sides"), ("DEAD SPACE", "what tall furniture hides")].iter().enumerate() {
+                ("POSITIVE ID", "armed is a threat, hands up and unarmed is a hostage"), ("CLOSED DOOR AND T", "open from the side, clear both sides"), ("DEAD SPACE", "what tall furniture hides")].iter().enumerate() {
                 l.spawn(Node { column_gap: Val::Px(10.0), align_items: AlignItems::Baseline, ..default() }).with_children(|r| {
                     r.spawn(txt(&format!("{}", i + 1), &f.bold, 19.0, AMBER));
                     r.spawn(txt(a, &f.semi, 19.0, BONE));
@@ -243,7 +246,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             toggle_button(r, &f, Act::Guide, Tag::GuideBtn);
             toggle_button(r, &f, Act::Box, Tag::BoxBtn);
         });
-        s.spawn((txt("W A S D move   ·   Space or right button: aim (Z locks the aim)   ·   Q / E lean   ·   C toggles crouch, Ctrl crouches while held\nShift fast step   ·   R reload   ·   F open door   ·   L or middle mouse button: flashlight   ·   G tactical view   ·   V top-down view\nT ideal route: always / tip / off   ·   O hide the lesson box   ·   H review the lesson and watch the demo", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
+        s.spawn((txt("W A S D move   ·   Space or right button: aim (Z locks the aim)   ·   Q / E lean   ·   C toggles crouch, Ctrl crouches while held\nShift fast step   ·   R reload   ·   1 2 or X: pistol / SCAR   ·   F open door   ·   L or middle mouse button: flashlight   ·   G tactical view   ·   V top-down view\nT ideal route: always / tip / off   ·   O hide the lesson box   ·   H review the lesson and watch the demo", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
         s.spawn((txt("", &f.semi, 15.0, AMBER), Node { max_width: Val::Px(900.0), ..default() }, Tag::BadgeList));
     });
     commands.spawn(screen(Tag::Debrief)).with_children(|s| {
@@ -311,7 +314,7 @@ pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: R
     let (free, m2) = (e.free, e.mission2);
     let (sens, guide, hide_box) = (game.sens, game.guide, game.hide_box);
     *game = Game { sens, guide, hide_box, ..default() };
-    *p = Player::default();
+    *p = Player::with_weapon(p.weapon);
     level.reset();
     // a posição de ameaças e reféns é sorteada a cada partida, em todos os modos (cada alvo continua no seu cômodo)
     let mut seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(7) | 1;
@@ -403,6 +406,7 @@ pub fn update_ui(
             Tag::Card => show(&mut node, game.mode == Mode::Card),
             Tag::Pause => show(&mut node, game.mode == Mode::Pause),
             Tag::Debrief => show(&mut node, game.mode == Mode::Debrief),
+            Tag::Portrait => show(&mut node, matches!(game.mode, Mode::Menu | Mode::Debrief)),
             Tag::TacPanel => show(&mut node, game.tac),
             Tag::MiniFrame | Tag::Legend => show(&mut node, game.tac && !bird),
             Tag::Prompt => show(&mut node, play && game.near_door.is_some()),
@@ -511,7 +515,7 @@ pub fn update_ui(
                     ("Time in a threat's line of fire (smaller is better)".into(), if game.kills.is_empty() { "—".to_string() } else { format!("average {:.1} s before each kill  ·  {:.1} s in total", kavg(|k| k.dt), game.expo_total) }, if game.kills.is_empty() { BONE } else { grade3(kavg(|k| k.dt), 0.8, 1.4) }, ""),
                     ("Badges earned".into(), format!("{} of {}", badge_names.len(), BADGES.len()), if badge_names.is_empty() { BONE } else { AMBER }, &badge_note),
                     ("Threats neutralized".into(), format!("{} of {}", dn, th.len()), if dn == th.len() { GOOD } else { BAD }, ""),
-                    ("White targets (no-shoot) hit".into(), s.civ_hit.to_string(), if s.civ_hit > 0 { BAD } else { GOOD }, if s.civ_hit > 0 { "The most serious error on the course. Confirm the target colour before every shot." } else { "" }),
+                    ("Hostages hit (no-shoot)".into(), s.civ_hit.to_string(), if s.civ_hit > 0 { BAD } else { GOOD }, if s.civ_hit > 0 { "The most serious error on the course. Confirm the target colour before every shot." } else { "" }),
                     ("Times hit (simulated)".into(), s.hits_taken.to_string(), if s.hits_taken > 0 { BAD } else { GOOD }, if s.hits_taken > 0 { "A threat had time to react with a clear line of fire to you." } else { "" }),
                     ("Threats you saw first".into(), format!("{} of {}", first, contact), if first == contact { GOOD } else { AMBER }, if first < contact { "For the others, you appeared without looking at them." } else { "" }),
                     ("Fan opened before entering (of 180°)".into(), doorways().iter().enumerate().map(|(k, w)| format!("{} {}", w.zone, en(k))).collect::<Vec<_>>().join(" · "), BONE, ""),
@@ -566,7 +570,7 @@ pub fn update_ui(
             Tag::CardPoints => { let s: Vec<String> = lesson.points.iter().map(|x| format!("–  {x}")).collect(); set(&mut t, &s.join("\n\n")); }
             Tag::AmmoMag => { set(&mut t, &if p.reloading { "··".to_string() } else { p.mag.to_string() }); col.0 = if p.mag <= 2 && !p.reloading { BAD } else { BONE }; }
             Tag::AmmoRes => set(&mut t, &format!("/ {}", p.reserve)),
-            Tag::AmmoMode => set(&mut t, &format!("PISTOL .45 · {}", if p.reloading { "RELOADING" } else if p.mag == 0 { "EMPTY · R" } else { "SEMI-AUTO" })),
+            Tag::AmmoMode => set(&mut t, &format!("{} · {}", p.def().hud, if p.switching() { "SWITCHING" } else if p.reloading { if p.reload_empty { "EMERGENCY RELOAD" } else { "TACTICAL RELOAD" } } else if p.mag == 0 { "EMPTY · R" } else { "SEMI-AUTO · 1 2" })),
             Tag::Stance => {
                 let mut s = if p.crouch > 0.5 { "CROUCHED".to_string() } else { "STANDING".to_string() };
                 if p.fast && p.speed > 2.4 { s = "FAST STEP · GUN LOW".into(); } else if p.ads { s += " · AIMING"; }

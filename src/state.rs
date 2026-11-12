@@ -75,16 +75,26 @@ pub struct Player {
     pub g_ads: f32, pub g_kick: f32, pub g_block: f32, pub g_lower: f32, pub g_sway: Vec2, pub recoil: Vec2, pub last_look: Vec2,
     /// O jogador pediu para inclinar, mas a parede ao lado não deixa.
     pub lean_blocked: bool,
+    /// Arma em uso (índice em `WEAPONS`), munição guardada de cada arma (carregador, reserva) e troca em andamento (destino, progresso 0..1).
+    pub weapon: usize, pub ammo: [(u32, u32); 2], pub switch_to: Option<usize>, pub switch_t: f32,
+    /// Recarga em andamento: de emergência (carregador vazio) ou tática, e quanto dura.
+    pub reload_empty: bool, pub reload_dur: f32, pub warned_empty: bool,
 }
 impl Default for Player {
     fn default() -> Self {
         Player { pos: Vec2::new(3.0, 15.4), vel: Vec2::ZERO, yaw: 0.0, pitch: 0.0, lean: 0.0, crouch: 0.0, crouching: false, ads: false, fast: false, speed: 0.0,
             step_acc: 0.0, bob: 0.0, eye: Vec3::new(3.0, EYE_STAND, 15.4), mag: 8, reserve: 64, reloading: false, reload_t: 0.0, fire_cool: 0.0, zone: 0,
             look_acc: 0.0, move_acc: 0.0, ads_acc: 0.0, reloads: 0, shot_n: 0, lean_acc: 0.0, crouch_acc: 0.0,
-            g_ads: 0.0, g_kick: 0.0, g_block: 0.0, g_lower: 0.0, g_sway: Vec2::ZERO, recoil: Vec2::ZERO, last_look: Vec2::ZERO, lean_blocked: false }
+            g_ads: 0.0, g_kick: 0.0, g_block: 0.0, g_lower: 0.0, g_sway: Vec2::ZERO, recoil: Vec2::ZERO, last_look: Vec2::ZERO, lean_blocked: false,
+            weapon: 0, ammo: [(WEAPONS[0].mag, WEAPONS[0].reserve), (WEAPONS[1].mag, WEAPONS[1].reserve)], switch_to: None, switch_t: 0.0,
+            reload_empty: false, reload_dur: 2.1, warned_empty: false }
     }
 }
 impl Player {
+    /// Estado inicial mantendo a arma que o jogador tinha escolhido.
+    pub fn with_weapon(w: usize) -> Self { let mut p = Player::default(); p.weapon = w.min(WEAPONS.len() - 1); p.mag = WEAPONS[p.weapon].mag; p.reserve = WEAPONS[p.weapon].reserve; p }
+    pub fn def(&self) -> &'static WeaponDef { &WEAPONS[self.weapon] }
+    pub fn switching(&self) -> bool { self.switch_to.is_some() }
     pub fn fwd(&self) -> Vec2 { Vec2::new(-self.yaw.sin(), -self.yaw.cos()) }
     pub fn right(&self) -> Vec2 { Vec2::new(self.yaw.cos(), -self.yaw.sin()) }
     pub fn eye2(&self) -> Vec2 { Vec2::new(self.eye.x, self.eye.z) }
@@ -102,6 +112,8 @@ pub struct Controls {
     pub guide: bool, pub pace: f32,
     /// Mostra/oculta a caixa da lição.
     pub hide_box: bool,
+    /// Troca de arma: índice pedido (teclas 1 e 2) ou a outra (X).
+    pub weapon: Option<usize>, pub weapon_next: bool,
 }
 
 pub struct TargetState {
@@ -119,3 +131,34 @@ impl Targets {
 /// Eventos sonoros disparados pela simulação.
 #[derive(Event, Clone, Copy)]
 pub enum Sfx { Shot, EnemyShot(Vec3), Dry, Click, Reload, Step(bool), Impact(Vec3), Metal(Vec3), Paper(Vec3), Thwack(Vec3), Fall(Vec3), Door(Vec3), Casing(Vec3), Good, Bad, Hurt, Ui, Rustle }
+
+/// Uma arma de primeira pessoa: modelo, clipes de animação e números de jogo.
+/// Medidas em metros no espaço da câmera (X direita, Y cima, -Z frente), relativas à pose em que o autor do modelo deixou a arma.
+pub struct WeaponDef {
+    pub hud: &'static str,
+    /// Arquivo do modelo e arquivo de onde vêm os clipes (pode ser o mesmo).
+    pub file: &'static str, pub anim: &'static str,
+    /// Escala do modelo e posição do olho do autor no arquivo (o modelo olha para +Z).
+    pub scale: f32, pub eye: Vec3,
+    /// Deslocamento em pronto e na mira, boca do cano e ponto em torno do qual a arma gira.
+    pub hip: Vec3, pub ads: Vec3, pub muzzle: Vec3, pub wrist: Vec3,
+    /// Inclinação extra na mira (radianos, negativo = cano para baixo) para alinhar alça e massa de mira com o olho.
+    pub ads_pitch: f32, pub ads_yaw: f32,
+    pub mag: u32, pub reserve: u32, pub cool: f32, pub kick: f32,
+    /// Distância da parede à frente a partir da qual a arma precisa ser recolhida (arma longa pede mais recuo).
+    pub block: f32,
+    /// Duração da recarga tática (ainda há munição no carregador) e da de emergência (carregador vazio).
+    pub reload_s: f32, pub reload_empty_s: f32,
+    /// Nomes dos clipes no arquivo; vazio = não tem.
+    pub idle: &'static str, pub shoot: &'static str, pub reload: &'static str, pub reload_empty: &'static str, pub take: &'static str, pub hide: &'static str, pub walk: &'static str, pub run: &'static str,
+}
+pub const WEAPONS: [WeaponDef; 2] = [
+    WeaponDef { hud: "PISTOL .45", file: "models/pistola_colt.glb", anim: "models/pistola_colt_anim.glb", scale: 0.019, eye: Vec3::new(0.0, 34.0, 0.0),
+        hip: Vec3::new(0.035, -0.035, 0.01), ads: Vec3::new(-0.0085, 0.0395, 0.0), muzzle: Vec3::new(0.0125, -0.05, -0.35), wrist: Vec3::new(0.05, -0.1, -0.16),
+        ads_pitch: 0.0, ads_yaw: 0.0, mag: 8, reserve: 64, cool: 0.15, kick: 1.0, block: 0.62, reload_s: 2.1, reload_empty_s: 2.6,
+        idle: "Idle", shoot: "Shoot", reload: "Reload", reload_empty: "Reload", take: "Take", hide: "Hide", walk: "", run: "" },
+    WeaponDef { hud: "SCAR 5.56", file: "models/scar.glb", anim: "models/scar.glb", scale: 0.019, eye: Vec3::new(0.0, 34.0, 0.0),
+        hip: Vec3::new(0.012, -0.022, 0.0), ads: Vec3::new(-0.0324, 0.0069, 0.03), muzzle: Vec3::new(0.038, -0.06, -0.55), wrist: Vec3::new(0.05, -0.12, -0.05),
+        ads_pitch: -0.03, ads_yaw: 0.0, mag: 30, reserve: 90, cool: 0.12, kick: 0.6, block: 0.84, reload_s: 2.7, reload_empty_s: 3.3,
+        idle: "Idle", shoot: "Shoot", reload: "Reload", reload_empty: "Reload", take: "Take", hide: "Hide", walk: "Walk", run: "Run" },
+];

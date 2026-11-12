@@ -19,14 +19,8 @@ use bevy::window::{CursorGrabMode, MonitorSelection, PrimaryWindow, WindowMode};
 pub const LEAN_M: f32 = 0.38;
 /// Folga mínima entre a cabeça e a parede ao inclinar.
 pub const LEAN_GAP: f32 = 0.08;
-pub const MAG_SIZE: u32 = 8;
-const PISTOL: &str = "models/pistola_colt.glb";
-const PISTOL_SCALE: f32 = 0.019;
-// deslocamentos em relação à pose do autor do modelo: arma em pronto (mais baixa) e mira alinhada ao olho
-const GUN_HIP: Vec3 = Vec3::new(0.035, -0.035, 0.01);
-const GUN_ADS: Vec3 = Vec3::new(-0.0085, 0.0395, 0.0);
-const MUZZLE: Vec3 = Vec3::new(0.0125, -0.05, -0.35);
-const WRIST: Vec3 = Vec3::new(0.05, -0.1, -0.16);
+/// Duração da troca de arma: metade guardando a atual, metade sacando a outra.
+pub const SWITCH_S: f32 = 0.9;
 pub const FLASH_LUMENS: f32 = 700_000.0;
 
 #[derive(Component)] pub struct FpCam;
@@ -34,8 +28,10 @@ pub const FLASH_LUMENS: f32 = 700_000.0;
 #[derive(Component)] pub struct MiniCam;
 #[derive(Component)] pub struct GunRoot;
 #[derive(Component)] pub struct Muzzle;
-/// Arquivo do modelo da arma, para ler os clipes de animação pelo nome.
-#[derive(Resource)] pub struct GunGltf(pub Handle<Gltf>);
+/// Modelo de uma das armas (índice em `WEAPONS`); só o da arma em uso fica visível.
+#[derive(Component)] pub struct GunModel(pub usize);
+/// Arquivos de onde vêm os clipes de cada arma, para lê-los pelo nome.
+#[derive(Resource)] pub struct GunGltfs(pub Vec<Handle<Gltf>>);
 #[derive(Component)] pub struct Body;
 /// Perna do operador visto de cima (+1 ou -1): balança no passo.
 #[derive(Component)] pub struct BodyLeg(pub f32);
@@ -102,18 +98,24 @@ pub fn setup_player(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mu
     // a interface tem tela própria, transparente, composta por cima da cena
     commands.spawn((Camera2d, Camera { order: 10, clear_color: ClearColorConfig::Custom(Color::NONE), output_mode: CameraOutputMode::Write { blend_state: Some(BlendState::ALPHA_BLENDING), clear_color: ClearColorConfig::None }, ..default() }, IsDefaultUiCamera, Msaa::Off, RenderLayers::layer(7)));
 
-    /* --- pistola com mãos (modelo glTF com esqueleto) --- */
+    /* --- armas com mãos (modelos glTF com esqueleto): pistola e SCAR; só a arma em uso aparece --- */
     let g = commands.spawn((Transform::IDENTITY, Visibility::default(), GunRoot)).id();
     commands.entity(fp).add_child(g);
-    // no arquivo, o olho do autor fica em (0, 34, 0) olhando para +Z; aqui a frente é -Z
-    let model = commands.spawn((
-        SceneRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(PISTOL))),
-        Transform { translation: Vec3::new(0.0, -34.0 * PISTOL_SCALE, 0.0), rotation: Quat::from_rotation_y(std::f32::consts::PI), scale: Vec3::splat(PISTOL_SCALE) },
-        NoShadowScene,
-    )).id();
-    commands.entity(g).add_child(model);
-    commands.insert_resource(GunGltf(asset.load("models/pistola_colt_anim.glb")));
-    let mz = commands.spawn((Transform::from_xyz(MUZZLE.x, MUZZLE.y, MUZZLE.z), Muzzle)).id();
+    let mut files = Vec::new();
+    for (i, w) in WEAPONS.iter().enumerate() {
+        // no arquivo, o olho do autor fica em `eye` olhando para +Z; aqui a frente é -Z
+        let model = commands.spawn((
+            SceneRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(w.file))),
+            Transform { translation: Vec3::new(w.eye.x, -w.eye.y, w.eye.z) * w.scale, rotation: Quat::from_rotation_y(std::f32::consts::PI), scale: Vec3::splat(w.scale) },
+            if i == 0 { Visibility::Inherited } else { Visibility::Hidden },
+            NoShadowScene, GunModel(i),
+        )).id();
+        commands.entity(g).add_child(model);
+        files.push(asset.load(w.anim));
+    }
+    commands.insert_resource(GunGltfs(files));
+    commands.insert_resource(GunAnims((0..WEAPONS.len()).map(|_| None).collect()));
+    let mz = commands.spawn((Transform::from_translation(WEAPONS[0].muzzle), Muzzle)).id();
     commands.entity(g).add_child(mz);
 
     /* --- corpo do operador nas vistas de cima: desenho visto de cima (capacete, colete, braços na pistola) e botas que alternam no passo.
@@ -171,6 +173,8 @@ pub fn gather_input(
         guide: keys.just_pressed(KeyCode::KeyT),
         hide_box: play && keys.just_pressed(KeyCode::KeyO),
         pace: 0.0,
+        weapon: if !play { None } else if keys.just_pressed(KeyCode::Digit1) { Some(0) } else if keys.just_pressed(KeyCode::Digit2) { Some(1) } else { None },
+        weapon_next: play && keys.just_pressed(KeyCode::KeyX),
     };
 }
 
@@ -210,7 +214,7 @@ pub fn update_player(time: Res<Time>, c: Res<Controls>, mut p: ResMut<Player>, m
     p.crouch = damp(p.crouch, if low { 1.0 } else { 0.0 }, 9.0, dt);
     if low { p.crouch_acc += dt; }
     p.fast = c.fast && w.length() > 0.1 && (bird || c.mv.y > 0.0 || c.world_move.is_some()) && !c.ads && !low && c.lean == 0.0;
-    p.ads = c.ads && !p.reloading && !p.fast;
+    p.ads = c.ads && !p.reloading && !p.fast && !p.switching();
     if p.ads { p.ads_acc += dt; }
     let mut spd = if p.fast { 3.7 } else if low { 1.2 } else if p.ads { 1.35 } else { 2.05 };
     if c.lean != 0.0 { spd *= 0.55; }
@@ -246,10 +250,38 @@ pub fn update_player(time: Res<Time>, c: Res<Controls>, mut p: ResMut<Player>, m
         if inside && (tac.pct[zi] < 0.95 || targets.list.iter().any(|t| t.alive && t.def.kind == TKind::Threat && t.def.zone == w.zone)) { game.dwell[k] += dt; }
     }
     if p.fire_cool > 0.0 { p.fire_cool -= dt; }
-    if c.reload && !p.reloading && p.mag < MAG_SIZE && p.reserve > 0 { p.reloading = true; p.reload_t = 0.0; sfx.write(Sfx::Reload); }
+    // troca de arma: a atual desce (clipe de guardar), a outra sobe (clipe de sacar); cada arma guarda a própria munição
+    let want = if c.weapon_next { Some((p.weapon + 1) % WEAPONS.len()) } else { c.weapon };
+    if let Some(w) = want { if w < WEAPONS.len() && w != p.weapon && !p.switching() && !p.reloading { p.switch_to = Some(w); p.switch_t = 0.0; sfx.write(Sfx::Rustle); } }
+    if let Some(w) = p.switch_to {
+        let before = p.switch_t;
+        p.switch_t += dt / SWITCH_S;
+        if before < 0.5 && p.switch_t >= 0.5 {
+            let cur = p.weapon;
+            p.ammo[cur] = (p.mag, p.reserve);
+            p.weapon = w; p.mag = p.ammo[w].0; p.reserve = p.ammo[w].1;
+            sfx.write(Sfx::Click); game.ui_dirty = true;
+        }
+        if p.switch_t >= 1.0 { p.switch_to = None; p.switch_t = 0.0; }
+    }
+    // recarga tática (ainda há munição: mais rápida e fica um cartucho na câmara) ou de emergência (carregador vazio: mais lenta)
+    let def = p.def();
+    if c.reload && !p.reloading && !p.switching() && p.mag < def.mag && p.reserve > 0 {
+        p.reloading = true; p.reload_t = 0.0; p.reload_empty = p.mag == 0;
+        p.reload_dur = if p.reload_empty { def.reload_empty_s } else { def.reload_s };
+        sfx.write(Sfx::Reload);
+        if p.reload_empty && !p.warned_empty && !game.demo {
+            p.warned_empty = true;
+            game.toast("Emergency reload: you ran dry. Reload behind cover before the next door \u{2014} a tactical reload is faster and keeps one round in the chamber.", 2, 6.0);
+        }
+    }
     if p.reloading {
-        p.reload_t += dt / 2.1;
-        if p.reload_t >= 1.0 { let n = (MAG_SIZE - p.mag).min(p.reserve); p.mag += n; p.reserve -= n; p.reloading = false; p.reloads += 1; }
+        p.reload_t += dt / p.reload_dur;
+        if p.reload_t >= 1.0 {
+            let cap = def.mag + if p.reload_empty { 0 } else { 1 };
+            let n = cap.saturating_sub(p.mag).min(p.reserve);
+            p.mag += n; p.reserve -= n; p.reloading = false; p.reloads += 1;
+        }
     }
     if c.flash { game.flash = !game.flash; game.flag_flash = true; game.ui_dirty = true; sfx.write(Sfx::Click); }
     if c.guide && !game.free { game.next_guide(); sfx.write(Sfx::Ui); }
@@ -338,7 +370,15 @@ pub fn update_cameras(
     }
 }
 
-pub fn update_gun(time: Res<Time>, mut p: ResMut<Player>, c: Res<Controls>, game: Res<Game>, level: Res<Level>, mut gun: Query<&mut Transform, With<GunRoot>>) {
+pub fn update_gun(time: Res<Time>, mut p: ResMut<Player>, c: Res<Controls>, game: Res<Game>, level: Res<Level>, mut gun: Query<&mut Transform, With<GunRoot>>,
+    mut muzzle: Query<&mut Transform, (With<Muzzle>, Without<GunRoot>)>, mut models: Query<(&GunModel, &mut Visibility)>) {
+    let def = p.def();
+    // só a arma em uso aparece; no menu a tela é do operador, sem arma na frente
+    for (m, mut v) in &mut models {
+        let want = if m.0 == p.weapon && game.mode != Mode::Menu { Visibility::Inherited } else { Visibility::Hidden };
+        if *v != want { *v = want; }
+    }
+    if let Ok(mut m) = muzzle.single_mut() { if m.translation != def.muzzle { m.translation = def.muzzle; } }
     let dt = time.delta_secs().min(0.05);
     let play = game.mode == Mode::Play;
     let f = p.fwd();
@@ -346,7 +386,7 @@ pub fn update_gun(time: Res<Time>, mut p: ResMut<Player>, c: Res<Controls>, game
     p.g_ads = damp(p.g_ads, if p.ads && play { 1.0 } else { 0.0 }, 14.0, dt);
     p.g_kick = damp(p.g_kick, 0.0, 14.0, dt);
     p.recoil.x = damp(p.recoil.x, 0.0, 7.0, dt); p.recoil.y = damp(p.recoil.y, 0.0, 7.0, dt);
-    p.g_block = damp(p.g_block, ((0.62 - block_d) / 0.3).clamp(0.0, 1.0), 12.0, dt);
+    p.g_block = damp(p.g_block, ((def.block - block_d) / 0.3).clamp(0.0, 1.0), 12.0, dt);
     p.g_lower = damp(p.g_lower, if p.fast && p.speed > 2.4 { 1.0 } else { 0.0 }, 9.0, dt);
     let look = if play { c.look } else { Vec2::ZERO };
     p.g_sway.x = damp(p.g_sway.x, (-look.x * 0.0009).clamp(-0.05, 0.05), 10.0, dt);
@@ -355,57 +395,122 @@ pub fn update_gun(time: Res<Time>, mut p: ResMut<Player>, c: Res<Controls>, game
     let calm = 1.0 - a * 0.85;
     let sp = p.speed.min(1.0);
     let bob = p.bob * 3.6;
-    let mut pos = GUN_HIP.lerp(GUN_ADS, a);
-    pos.x += bob.sin() * 0.005 * calm * sp + p.g_sway.x * 0.25;
-    pos.y += -bob.cos().abs() * 0.0045 * calm * sp + p.g_sway.y * 0.25 - p.g_block * 0.03 - p.g_lower * 0.12;
-    pos.z += p.g_kick * 0.008 + p.g_block * 0.06;
-    let rx = p.g_kick * 0.07 + p.g_sway.y * 0.6 + p.g_block * 0.8 - p.g_lower * 0.7;
-    let ry = p.g_sway.x * 0.8 + p.g_lower * 0.2;
+    // arma com clipe próprio de andar/correr balança menos por código, para não somar os dois movimentos
+    let bobk = if def.walk.is_empty() { 1.0 } else { 0.3 };
+    let lower = p.g_lower * if def.run.is_empty() { 1.0 } else { 0.25 };
+    // na troca a arma desce até sair da tela, o modelo é trocado lá embaixo e a outra sobe
+    let sw = if p.switching() { (p.switch_t * std::f32::consts::PI).sin() } else { 0.0 };
+    let mut pos = def.hip.lerp(def.ads, a);
+    pos.x += bob.sin() * 0.005 * calm * sp * bobk + p.g_sway.x * 0.25;
+    pos.y += -bob.cos().abs() * 0.0045 * calm * sp * bobk + p.g_sway.y * 0.25 - p.g_block * 0.03 - lower * 0.12 - sw * 0.2;
+    pos.z += p.g_kick * 0.008 * def.kick + p.g_block * 0.06;
+    let rx = p.g_kick * 0.07 * def.kick + p.g_sway.y * 0.6 + p.g_block * 0.8 - lower * 0.7 - sw * 0.5 + a * def.ads_pitch;
+    let ry = p.g_sway.x * 0.8 + lower * 0.2 + a * def.ads_yaw;
     let mut rz = p.g_sway.x * -0.6 - p.lean * 0.05 * (1.0 - a);
     if p.reloading { let t = p.reload_t.clamp(0.0, 1.0); let k = (t * std::f32::consts::PI).sin(); pos.y -= k * 0.01; rz += k * 0.04; }
     if let Ok(mut tf) = gun.single_mut() {
         let rot = Quat::from_euler(EulerRot::XYZ, rx, ry, rz);
         tf.rotation = rot;
-        tf.translation = pos + WRIST - rot * WRIST;
+        tf.translation = pos + def.wrist - rot * def.wrist;
     }
 }
 
+/// Clipes de uma arma já ligados ao esqueleto dela.
+pub struct GunAnim {
+    pub player: Entity, pub idle: AnimationNodeIndex, pub shoot: AnimationNodeIndex, pub reload: AnimationNodeIndex, pub reload_empty: AnimationNodeIndex,
+    pub take: Option<AnimationNodeIndex>, pub hide: Option<AnimationNodeIndex>, pub walk: Option<AnimationNodeIndex>, pub run: Option<AnimationNodeIndex>,
+    pub reload_len: f32, pub reload_empty_len: f32, pub take_len: f32, pub hide_len: f32,
+    /// Sem clipe de parada: a pose de repouso é o primeiro quadro do clipe de tiro, congelado.
+    pub idle_frozen: bool,
+}
 #[derive(Resource)]
-pub struct GunAnim { pub player: Entity, pub idle: AnimationNodeIndex, pub shoot: AnimationNodeIndex, pub reload: AnimationNodeIndex, pub reload_len: f32 }
+pub struct GunAnims(pub Vec<Option<GunAnim>>);
 
-/// Liga os clipes de animação (parada, tiro, recarga) ao esqueleto da arma assim que modelo e clipes carregam.
-pub fn gun_anim_setup(mut commands: Commands, gun: Res<GunGltf>, gltfs: Res<Assets<Gltf>>, clips: Res<Assets<AnimationClip>>, mut graphs: ResMut<Assets<AnimationGraph>>,
-    mut players: Query<(Entity, &mut AnimationPlayer)>, names: Query<(Entity, &Name), Added<Name>>,
-    skinned: Query<Entity, Added<bevy::render::mesh::skinning::SkinnedMesh>>, ready: Option<Res<GunAnim>>) {
+/// Liga os clipes de animação de cada arma ao esqueleto dela assim que modelo e clipes carregam.
+pub fn gun_anim_setup(mut commands: Commands, files: Res<GunGltfs>, gltfs: Res<Assets<Gltf>>, clips: Res<Assets<AnimationClip>>, mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut anims: ResMut<GunAnims>, mut players: Query<(Entity, &mut AnimationPlayer)>, parents: Query<&ChildOf>, models: Query<&GunModel>, names: Query<(Entity, &Name), Added<Name>>,
+    skinned: Query<Entity, Added<bevy::render::mesh::skinning::SkinnedMesh>>) {
     for (e, n) in &names { if n.as_str().contains("Icosphere") { commands.entity(e).insert(Visibility::Hidden); } }
     // malhas com esqueleto têm caixa de recorte calculada na pose de repouso: sem isto elas somem da tela
     for e in &skinned { commands.entity(e).insert(bevy::render::view::NoFrustumCulling); }
-    if ready.is_some() { return; }
-    let Some(g) = gltfs.get(&gun.0) else { return };
-    let Some((e, mut pl)) = players.iter_mut().next() else { return };
-    let (Some(idle), Some(shoot), Some(reload)) = (g.named_animations.get("Idle"), g.named_animations.get("Shoot"), g.named_animations.get("Reload")) else { return };
-    let reload_len = clips.get(reload).map(|c| c.duration()).unwrap_or(3.7);
-    let (graph, idx) = AnimationGraph::from_clips([idle.clone(), shoot.clone(), reload.clone()]);
-    commands.entity(e).insert(AnimationGraphHandle(graphs.add(graph)));
-    pl.play(idx[0]).repeat();
-    commands.insert_resource(GunAnim { player: e, idle: idx[0], shoot: idx[1], reload: idx[2], reload_len });
+    if anims.0.iter().all(|a| a.is_some()) { return; }
+    for (e, mut pl) in &mut players {
+        // sobe na hierarquia até achar de qual arma é este esqueleto (o operador do menu também tem um)
+        let (mut cur, mut which) = (e, None);
+        for _ in 0..24 {
+            if let Ok(m) = models.get(cur) { which = Some(m.0); break; }
+            match parents.get(cur) { Ok(p) => cur = p.parent(), Err(_) => break }
+        }
+        let Some(i) = which else { continue };
+        if anims.0[i].is_some() { continue; }
+        let w = &WEAPONS[i];
+        let Some(g) = gltfs.get(&files.0[i]) else { continue };
+        let get = |n: &str| if n.is_empty() { None } else { g.named_animations.get(n).cloned() };
+        let (Some(shoot), Some(reload), Some(reload_empty)) = (get(w.shoot), get(w.reload), get(w.reload_empty)) else { continue };
+        let len = |h: &Handle<AnimationClip>| clips.get(h).map(|c| c.duration()).unwrap_or(1.0);
+        let (reload_len, reload_empty_len) = (len(&reload), len(&reload_empty));
+        let (take, hide, walk, run, idle) = (get(w.take), get(w.hide), get(w.walk), get(w.run), get(w.idle));
+        let (take_len, hide_len) = (take.as_ref().map(&len).unwrap_or(0.4), hide.as_ref().map(&len).unwrap_or(0.4));
+        let idle_frozen = idle.is_none();
+        let mut graph = AnimationGraph::new();
+        let root = graph.root;
+        let idle_n = graph.add_clip(idle.unwrap_or_else(|| shoot.clone()), 1.0, root);
+        let shoot_n = graph.add_clip(shoot, 1.0, root);
+        let reload_n = graph.add_clip(reload, 1.0, root);
+        let reload_empty_n = graph.add_clip(reload_empty, 1.0, root);
+        let take_n = take.map(|h| graph.add_clip(h, 1.0, root));
+        let hide_n = hide.map(|h| graph.add_clip(h, 1.0, root));
+        let walk_n = walk.map(|h| graph.add_clip(h, 1.0, root));
+        let run_n = run.map(|h| graph.add_clip(h, 1.0, root));
+        // o clipe de parada entra pelo controle de transições: se entrasse direto no tocador ele nunca sairia e
+        // ficaria misturado meio a meio com tiro, recarga e os demais
+        let mut tr = AnimationTransitions::new();
+        let a = tr.play(&mut pl, idle_n, std::time::Duration::ZERO);
+        if idle_frozen { a.set_speed(0.0); } else { a.repeat(); }
+        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr));
+        anims.0[i] = Some(GunAnim { player: e, idle: idle_n, shoot: shoot_n, reload: reload_n, reload_empty: reload_empty_n, take: take_n, hide: hide_n, walk: walk_n, run: run_n,
+            reload_len, reload_empty_len, take_len, hide_len, idle_frozen });
+    }
 }
 
-/// Toca tiro e recarga conforme o que o jogador faz.
-pub fn gun_anim_drive(anim: Option<Res<GunAnim>>, p: Res<Player>, mut players: Query<&mut AnimationPlayer>, mut last: Local<(u32, bool)>) {
-    let Some(a) = anim else { return };
-    let Ok(mut pl) = players.get_mut(a.player) else { return };
-    if p.reloading && !last.1 {
-        pl.stop_all();
-        pl.start(a.reload).set_speed(a.reload_len / 2.1);
-    } else if p.shot_n != last.0 && !p.reloading {
-        pl.stop_all();
-        pl.start(a.shoot);
-    } else if !p.reloading {
-        let busy = pl.animation(a.shoot).map_or(false, |x| !x.is_finished()) || pl.animation(a.reload).map_or(false, |x| !x.is_finished());
-        if !busy && !pl.is_playing_animation(a.idle) { pl.stop_all(); pl.play(a.idle).repeat(); }
+#[derive(Default)]
+pub struct GunDrive { shot_n: u32, reloading: bool, weapon: usize, phase: u8, fp: bool, cur: Option<AnimationNodeIndex>, once: bool }
+
+/// Escolhe o clipe da arma em uso: guardar e sacar na troca (e ao voltar para a primeira pessoa), recarga tática ou de
+/// emergência, tiro, e parada / passo / corrida quando a arma tem esses clipes.
+pub fn gun_anim_drive(anims: Res<GunAnims>, p: Res<Player>, game: Res<Game>, mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>, mut st: Local<GunDrive>) {
+    use std::time::Duration;
+    let fp = game.mode == Mode::Play && game.view == View::Fp;
+    let phase: u8 = match p.switch_to { Some(_) if p.switch_t < 0.5 => 1, Some(_) => 2, None => 0 };
+    let (was_fp, was_phase, was_reloading, was_shot) = (st.fp, st.phase, st.reloading, st.shot_n);
+    st.fp = fp; st.phase = phase; st.reloading = p.reloading; st.shot_n = p.shot_n;
+    if st.weapon != p.weapon { st.weapon = p.weapon; st.cur = None; st.once = false; }
+    let Some(Some(a)) = anims.0.get(p.weapon) else { return };
+    let Ok((mut pl, mut tr)) = players.get_mut(a.player) else { return };
+    let half = SWITCH_S * 0.5;
+    let mut one: Option<(AnimationNodeIndex, f32)> = None;
+    if phase != was_phase && phase == 1 { one = a.hide.map(|n| (n, a.hide_len / half)); }
+    else if phase != was_phase && phase == 2 { one = a.take.map(|n| (n, a.take_len / half)); }
+    else if fp && !was_fp && phase == 0 && !p.reloading { one = a.take.map(|n| (n, a.take_len / 0.45)); }
+    else if p.reloading && !was_reloading { one = Some(if p.reload_empty { (a.reload_empty, a.reload_empty_len / p.reload_dur) } else { (a.reload, a.reload_len / p.reload_dur) }); }
+    else if p.shot_n != was_shot && !p.reloading && phase == 0 { one = Some((a.shoot, 1.0)); }
+    if let Some((n, speed)) = one {
+        tr.play(&mut pl, n, Duration::from_millis(50)).set_speed(speed.max(0.05));
+        st.cur = Some(n); st.once = true;
+        return;
     }
-    *last = (p.shot_n, p.reloading);
+    let busy = st.once && st.cur.and_then(|n| pl.animation(n)).map_or(false, |x| !x.is_finished());
+    if busy || phase != 0 || p.reloading { return; }
+    let want = match (a.run, a.walk) {
+        (Some(r), _) if p.fast && p.speed > 2.4 => r,
+        (_, Some(w)) if p.speed > 0.5 && !p.ads && fp => w,
+        _ => a.idle,
+    };
+    if st.cur != Some(want) || st.once {
+        let x = tr.play(&mut pl, want, Duration::from_millis(170));
+        if want == a.idle && a.idle_frozen { x.set_speed(0.0); } else { x.repeat(); }
+        st.cur = Some(want); st.once = false;
+    }
 }
 
 /// Passada do operador nas vistas de cima: as pernas alternam conforme a distância andada.

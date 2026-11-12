@@ -6,3 +6,4 @@ dist/
 *.zip
 site/index.html
 site/artifact.html
+__pycache__/

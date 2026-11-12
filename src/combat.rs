@@ -29,9 +29,22 @@ pub struct Fx {
 
 /// Malhas e materiais dos alvos, guardados para remontar os alvos quando o mapa muda.
 #[derive(Resource, Clone)]
-pub struct TargetArt { pub frame: Handle<Mesh>, pub board: Handle<Mesh>, pub shoot: Handle<StandardMaterial>, pub no_shoot: Handle<StandardMaterial>, pub wood: Handle<StandardMaterial> }
+pub struct TargetArt { pub frame: Handle<Mesh>, pub board: Handle<Mesh>, pub shoot: Handle<StandardMaterial>, pub no_shoot: Handle<StandardMaterial>, pub wood: Handle<StandardMaterial>,
+    /// Bonecos 3D (cena e arquivo, de onde saem os clipes): refém de roupa clara com as mãos para o alto e ameaça armada de cáqui.
+    pub hostage: Handle<Scene>, pub hostage_file: Handle<Gltf>, pub threat: Handle<Scene>, pub threat_file: Handle<Gltf> }
 
-/// Cria os alvos do mapa atual (papelão tipo IPSC grampeado em dois sarrafos).
+/// O alvo é um boneco 3D? Reféns e ameaças são; o alvo fixo de treino da primeira lição continua de papelão.
+pub fn is_fig(def: &TargetDef) -> bool { def.kind == TKind::Civil || !def.passive }
+/// Zona atingida num boneco em pé, pela distância ao eixo do corpo e pela altura: 3 = cabeça ou centro do peito (equivale à zona A),
+/// 2 = tronco (C), 1 = braços e pernas (D), 0 = fora.
+pub fn fig_zone(lx: f32, y: f32) -> u8 {
+    if !(0.02..=1.78).contains(&y) { return 0; }
+    if y >= 1.52 { return if lx <= 0.11 { 3 } else { 0 }; }
+    if y >= 0.95 { return if lx <= 0.10 && y >= 1.12 { 3 } else if lx <= 0.21 { 2 } else if lx <= 0.30 { 1 } else { 0 }; }
+    if lx <= 0.20 { 1 } else { 0 }
+}
+
+/// Cria os alvos do mapa atual: ameaças e reféns são bonecos 3D; o alvo de treino é papelão tipo IPSC grampeado em dois sarrafos.
 pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) -> Vec<TargetState> {
     let mut list = Vec::new();
     for (i, def) in target_defs().iter().enumerate() {
@@ -40,8 +53,17 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         let root = commands.spawn((Transform::from_xyz(def.x, 0.0, def.z).with_rotation(Quat::from_rotation_y(ry)), Visibility::default())).id();
         let pivot = commands.spawn((Transform::IDENTITY, Visibility::default(), TargetPivot(i))).id();
         let fr = commands.spawn((Mesh3d(art.frame.clone()), MeshMaterial3d(art.wood.clone()), Transform::IDENTITY)).id();
-        let bd = commands.spawn((Mesh3d(art.board.clone()), MeshMaterial3d(if def.kind == TKind::Civil { art.no_shoot.clone() } else { art.shoot.clone() }), Transform::from_xyz(0.0, BOARD_Y0 + BOARD_H / 2.0, 0.0))).id();
+        let civil = def.kind == TKind::Civil;
+        let bd = commands.spawn((Mesh3d(art.board.clone()), MeshMaterial3d(if civil { art.no_shoot.clone() } else { art.shoot.clone() }), Transform::from_xyz(0.0, BOARD_Y0 + BOARD_H / 2.0, 0.0))).id();
         commands.entity(pivot).add_children(&[fr, bd]);
+        if is_fig(def) {
+            // o alvo é o boneco; papelão e sarrafos ficam ocultos (o papelão continua existindo só para a lógica de marcas)
+            commands.entity(fr).insert(Visibility::Hidden);
+            commands.entity(bd).insert(Visibility::Hidden);
+            let (scene, file) = if civil { (art.hostage.clone(), art.hostage_file.clone()) } else { (art.threat.clone(), art.threat_file.clone()) };
+            let h = commands.spawn((SceneRoot(scene), Transform::IDENTITY, Visibility::default(), crate::operator::Fig { target: i, file, threat: !civil, fell: false })).id();
+            commands.entity(pivot).add_child(h);
+        }
         commands.entity(root).add_child(pivot);
         let mut t = TargetState {
             def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
@@ -53,7 +75,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
     list
 }
 
-pub fn setup_targets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut smats: ResMut<Assets<StandardMaterial>>, mut images: ResMut<Assets<Image>>, mats: Res<Mats>, level: Res<Level>) {
+pub fn setup_targets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut smats: ResMut<Assets<StandardMaterial>>, mut images: ResMut<Assets<Image>>, mats: Res<Mats>, level: Res<Level>, asset: Res<AssetServer>) {
     let frame = meshes.add(boxes_mesh(&[b3(-0.17, 0.0, -0.028, -0.13, 1.5, -0.006), b3(0.13, 0.0, -0.028, 0.17, 1.5, -0.006), b3(-0.17, 0.0, -0.24, -0.13, 0.04, 0.24), b3(0.13, 0.0, -0.24, 0.17, 0.04, 0.24), b3(-0.17, 0.04, -0.03, 0.17, 0.08, -0.004)], 1.0));
     let board = meshes.add(Rectangle::new(BOARD_W, BOARD_H));
     let mk = |images: &mut Assets<Image>, smats: &mut Assets<StandardMaterial>, ns: bool| {
@@ -61,7 +83,9 @@ pub fn setup_targets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, m
         smats.add(StandardMaterial { base_color_texture: Some(tex), alpha_mode: AlphaMode::Mask(0.5), cull_mode: None, double_sided: true, perceptual_roughness: 0.92, reflectance: 0.2, ..default() })
     };
     let (shoot, no_shoot) = (mk(&mut images, &mut smats, false), mk(&mut images, &mut smats, true));
-    let art = TargetArt { frame, board, shoot, no_shoot, wood: mats.wood.clone() };
+    let art = TargetArt { frame, board, shoot, no_shoot, wood: mats.wood.clone(),
+        hostage: asset.load(GltfAssetLabel::Scene(0).from_asset("models/hostage.glb")), hostage_file: asset.load("models/hostage.glb"),
+        threat: asset.load(GltfAssetLabel::Scene(0).from_asset("models/threat.glb")), threat_file: asset.load("models/threat.glb") };
     let list = spawn_targets(&mut commands, &art, &level);
     commands.insert_resource(Targets { list, masks: Vec::new() });
     commands.insert_resource(art);
@@ -135,6 +159,23 @@ fn raycast(level: &Level, targets: &Targets, o: Vec3, d: Vec3) -> Option<Hit> {
     }
     for (i, tg) in targets.list.iter().enumerate() {
         if !tg.alive { continue; }
+        // boneco em pé: plano vertical de frente para quem atira, com zonas pelo corpo
+        if is_fig(&tg.def) {
+            let base = Vec3::new(tg.def.x, 0.0, tg.def.z);
+            let h = Vec2::new(o.x - base.x, o.z - base.z);
+            if h.length() < 0.05 { continue; }
+            let hn = h.normalize();
+            let n = Vec3::new(hn.x, 0.0, hn.y);
+            let den = d.dot(n);
+            if den.abs() < 1e-5 { continue; }
+            let t = (base - o).dot(n) / den;
+            if t <= 0.0 { continue; }
+            let q = o + d * t;
+            let lx = ((q.x - base.x) * hn.y - (q.z - base.z) * hn.x).abs();
+            let zone = fig_zone(lx, q.y);
+            if zone != 0 { consider(Hit { t, point: q, normal: n, target: Some((i, zone)), through: Vec::new(), metal: false }); }
+            continue;
+        }
         let n = Vec3::new(tg.fwd.x, 0.0, tg.fwd.y);
         let den = d.dot(n);
         if den.abs() < 1e-5 { continue; }
@@ -244,10 +285,10 @@ pub fn combat(
     for (mut tf, dl) in doors.iter_mut() { tf.rotation = Quat::from_rotation_y(level.doors[dl.0].open * 172f32.to_radians()); }
 
     /* ---------- disparo ---------- */
-    if c.fire && !p.reloading && p.fire_cool <= 0.0 && (bird || (p.g_block < 0.55 && p.g_lower < 0.5)) {
+    if c.fire && !p.reloading && !p.switching() && p.fire_cool <= 0.0 && (bird || (p.g_block < 0.55 && p.g_lower < 0.5)) {
         if p.mag == 0 { sfx.write(Sfx::Dry); p.fire_cool = 0.2; }
         else {
-            p.mag -= 1; p.fire_cool = 0.15; game.stats.shots += 1; p.shot_n = p.shot_n.wrapping_add(1);
+            p.mag -= 1; p.fire_cool = p.def().cool; game.stats.shots += 1; p.shot_n = p.shot_n.wrapping_add(1);
             let q = Quat::from_euler(EulerRot::YXZ, p.yaw + if bird { 0.0 } else { p.recoil.y }, if bird { 0.0 } else { p.pitch + p.recoil.x }, 0.0);
             let (mut dir, right, up) = (q * Vec3::NEG_Z, q * Vec3::X, q * Vec3::Y);
             let spread = ((if p.ads { 0.004 } else { 0.02 }) + p.speed * 0.006 * if p.ads { 0.4 } else { 1.0 } - p.crouch * 0.004f32).max(0.001);
@@ -268,7 +309,7 @@ pub fn combat(
                     t.swv -= 2.6 * t.fall_dir.signum().abs();
                     if t.def.kind == TKind::Civil {
                         t.alive = false; t.fall_v = 1.0; game.stats.civ_hit += 1; sfx.write(Sfx::Bad);
-                        if game.free { game.toast("You hit a white target (no-shoot). Confirm the colour before firing.", 2, 5.0); }
+                        if game.free { game.toast("You hit a hostage. Look for the weapon before firing.", 2, 5.0); }
                     } else {
                         let one_shot = t.hits == 0 && zone == 3;
                         t.hits += if zone == 3 { 2 } else { 1 };
@@ -313,8 +354,8 @@ pub fn combat(
                     Transform::from_translation(mz - dir * 0.12 + right * 0.02 + up * 0.02), Casing { vel, ang: Vec3::new(17.0, -11.0, 23.0), life: 4.0, rest: false }));
             }
             p.g_kick = 1.0;
-            p.recoil.x += 0.028 + rand01(game.time * 8.9) * 0.01;
-            p.recoil.y += (rand01(game.time * 12.3) - 0.5) * 0.02;
+            p.recoil.x += (0.028 + rand01(game.time * 8.9) * 0.01) * p.def().kick;
+            p.recoil.y += (rand01(game.time * 12.3) - 0.5) * 0.02 * p.def().kick;
             sfx.write(Sfx::Shot);
         }
     }
@@ -356,6 +397,11 @@ pub fn combat(
                 game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
                 let src = Vec3::new(t.def.x + t.fwd.x * 0.25, 1.3, t.def.z + t.fwd.y * 0.25);
                 sfx.write(Sfx::EnemyShot(src)); sfx.write(Sfx::Hurt);
+                // o disparo da ameaça aparece: clarão na boca do fuzil e traço até o operador
+                let to = (Vec3::new(p.eye.x, p.eye.y - 0.3, p.eye.z) - Vec3::new(t.def.x, 1.45, t.def.z)).normalize_or_zero();
+                let mz = Vec3::new(t.def.x, 1.45, t.def.z) + Vec3::new(to.x, 0.0, to.z).normalize_or_zero() * 0.72;
+                game.tracers.push((mz, Vec3::new(p.eye.x, p.eye.y - 0.3, p.eye.z) - to * 0.45, 0.1));
+                puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
                 let seen_now = t.vis;
                 game.toast(if seen_now { "Hit (simulated). The threat had a clear line of fire for too long: identify and neutralize faster." }
                     else { "Hit (simulated) by a threat you were not looking at. There was uncleared area with a line of fire to you." }, 2, 6.5);
@@ -367,7 +413,8 @@ pub fn combat(
     if exposed { game.expo_now += dt; game.expo_total += dt; } else { game.expo_now = (game.expo_now - dt * 2.0).max(0.0); }
     for (mut tf, tp) in pivots.iter_mut() {
         let t = &targets.list[tp.0];
-        tf.rotation = Quat::from_rotation_x(t.fall_dir * t.fall_max * t.fall + t.sw * 0.06 * (1.0 - t.fall));
+        // papelão tomba em torno da base; boneco não tomba como placa: quem mostra a queda é o clipe de animação dele
+        tf.rotation = if is_fig(&t.def) { Quat::from_rotation_x(t.sw * 0.03 * (1.0 - t.fall)) } else { Quat::from_rotation_x(t.fall_dir * t.fall_max * t.fall + t.sw * 0.06 * (1.0 - t.fall)) };
     }
 }
 
