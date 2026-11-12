@@ -232,7 +232,7 @@ pub fn update_player(time: Res<Time>, c: Res<Controls>, mut p: ResMut<Player>, m
     p.lean_blocked = c.lean != 0.0 && lim < 0.35;
     p.lean = damp(p.lean, c.lean * lim, 9.0, dt);
     if p.lean.abs() > 0.5 { p.lean_acc += dt; }
-    let eye_h = EYE_STAND + (EYE_CROUCH - EYE_STAND) * p.crouch - p.lean.abs() * 0.05;
+    let eye_h = EYE_STAND + (EYE_CROUCH - EYE_STAND) * p.crouch - p.lean.abs() * 0.05 + crate::map::ramp_h(p.pos.x, p.pos.y);   // na escada os olhos acompanham os degraus
     p.eye = Vec3::new(p.pos.x + r.x * p.lean * LEAN_M, eye_h, p.pos.y + r.y * p.lean * LEAN_M);
     // zona, entradas e tempo no funil fatal
     if let Some(z) = zone_at(p.pos.x, p.pos.y) { p.zone = z; }

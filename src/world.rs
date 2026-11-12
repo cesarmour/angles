@@ -216,7 +216,12 @@ pub fn map_switch(
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, images: &mut Assets<Image>, asset: &AssetServer, level: &Level, m: &Mats) {
     // piso e forro
-    sb(&mut *commands, &mut *meshes, &[b3(MAP_X1, -0.1, MAP_Z1, MAP_X2, 0.0, MAP_Z2)], 0.4, &m.floor);
+    // (com o vão da escada do andar de cima aberto, quando o mapa tem um)
+    let floor: Vec<B3> = match map().pit {
+        Some((x1, z1, x2, z2, _)) => vec![b3(MAP_X1, -0.1, MAP_Z1, MAP_X2, 0.0, z1), b3(MAP_X1, -0.1, z2, MAP_X2, 0.0, MAP_Z2), b3(MAP_X1, -0.1, z1, x1, 0.0, z2), b3(x2, -0.1, z1, MAP_X2, 0.0, z2)],
+        None => vec![b3(MAP_X1, -0.1, MAP_Z1, MAP_X2, 0.0, MAP_Z2)],
+    };
+    sb(&mut *commands, &mut *meshes, &floor, 0.4, &m.floor);
     let ce = sb(&mut *commands, &mut *meshes, &[b3(MAP_X1, WALL_H, MAP_Z1, MAP_X2, WALL_H + 0.1, MAP_Z2)], 0.4, &m.ceil);
     commands.entity(ce).insert((RenderLayers::layer(L_FP), NotShadowCaster));
     // paredes em duas faixas de pintura
@@ -286,6 +291,19 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
                 let water = mats.add(StandardMaterial { base_color: Color::srgb(0.08, 0.32, 0.46), perceptual_roughness: 0.12, reflectance: 0.6, ..default() });
                 sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.19, 0.0, p.z1 + 0.19, p.x2 - 0.19, p.h - 0.05, p.z2 - 0.19)], 1.0, &water);
             }
+            // guarda-corpo da escada: vidro com montantes pretos, como o da casa
+            PropKind::Rail => {
+                let glass = mats.add(StandardMaterial { base_color: Color::srgba(0.75, 0.86, 0.9, 0.16), alpha_mode: AlphaMode::Blend, perceptual_roughness: 0.05, reflectance: 0.6, ..default() });
+                let top = |x: f32| ramp_h(x, p.z1 - 0.2) + 0.95;
+                let mut posts = Vec::new();
+                let n = ((w / 0.62).round() as usize).max(1);
+                for i in 0..=n { let x = p.x1 + 0.03 + (w - 0.06) * i as f32 / n as f32; posts.push(b3(x - 0.025, 0.0, mz - 0.025, x + 0.025, top(x) + 0.06, mz + 0.025)); }
+                sb(&mut *commands, &mut *meshes, &posts, 1.0, &m.frame);
+                let mut panes = Vec::new();
+                for i in 0..n { let (xa, xb) = (p.x1 + 0.03 + (w - 0.06) * i as f32 / n as f32, p.x1 + 0.03 + (w - 0.06) * (i + 1) as f32 / n as f32); panes.push(b3(xa + 0.03, 0.02, mz - 0.006, xb - 0.03, top((xa + xb) / 2.0), mz + 0.006)); }
+                let e = sb(&mut *commands, &mut *meshes, &panes, 1.0, &glass);
+                commands.entity(e).insert(NotShadowCaster);
+            }
             PropKind::Cover => {
                 // nenhuma face de uma peça coincide com a de outra (faces no mesmo plano piscam): as chapas param
                 // embaixo da tampa, a tampa sobra 12 mm para fora e os pés ficam 10 mm para fora das chapas
@@ -295,6 +313,67 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
                     b3(p.x1 - 0.012, cap, za - 0.012, p.x2 + 0.012, p.h, zb + 0.012)], 1.0, &m.frame);
             }
         }
+    }
+    // escadas (casa de dois andares): degraus de granito preto como os da casa, o vão do andar de cima revestido, os vãos
+    // escuros por onde a escada continua para o outro andar e as escadas de mão do quintal. Os degraus são só desenho: a
+    // altura de quem anda neles vem de `ramp_h`.
+    if !map().ramps.is_empty() || !map().portals.is_empty() {
+        let granite = mats.add(StandardMaterial { base_color: Color::srgb(0.07, 0.07, 0.078), perceptual_roughness: 0.2, reflectance: 0.6, ..default() });
+        let pale = mats.add(StandardMaterial { base_color: Color::srgb(0.42, 0.42, 0.44), perceptual_roughness: 0.35, ..default() });
+        let white = mats.add(StandardMaterial { base_color: Color::srgb(0.86, 0.86, 0.84), perceptual_roughness: 0.5, ..default() });
+        let dark = mats.add(StandardMaterial { base_color: Color::BLACK, unlit: true, ..default() });
+        let (mut steps, mut ladders, mut holes, mut lining) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut nosing, mut rails): (Vec<B3>, Vec<(Vec3, Vec3)>) = (Vec::new(), Vec::new());
+        let bottom = map().pit.map_or(0.0, |p| -p.4 - 0.25);
+        for r in map().ramps {
+            // base de cada degrau: o piso (escada que sobe) ou o fundo do vão (escada que desce)
+            let y0 = if r.ha < -0.01 || r.hb < -0.01 { bottom } else { 0.0 };
+            let (lo, hi) = if r.along_x { (r.x1, r.x2) } else { (r.z1, r.z2) };
+            let slab = |c0: f32, c1: f32, h: f32| { let (c0, c1) = (c0.min(c1), c0.max(c1)); if r.along_x { b3(c0, y0, r.z1, c1, h, r.z2) } else { b3(r.x1, y0, c0, r.x2, h, c1) } };
+            let n = ((r.hb - r.ha).abs() / 0.19).round() as usize;
+            for i in 0..n {
+                let (c0, c1) = (r.a + (r.b - r.a) * i as f32 / n as f32, r.a + (r.b - r.a) * (i + 1) as f32 / n as f32);
+                // subindo, o degrau já tem a altura do seguinte; descendo, cada piso fica um espelho abaixo do anterior
+                let h = r.ha + (r.hb - r.ha) * (i + 1) as f32 / n as f32;
+                steps.push(slab(c0, c1 + (c1 - c0).signum() * 0.004, h));
+                // friso claro na quina de cada degrau (o granito preto some no escuro) e corrimão branco na parede
+                let edge = if r.hb > r.ha { c0 } else { c1 };
+                let (e0, e1) = (edge.min(edge + (c1 - c0).signum() * if r.hb > r.ha { 0.04 } else { -0.04 }), edge.max(edge + (c1 - c0).signum() * if r.hb > r.ha { 0.04 } else { -0.04 }));
+                nosing.push(if r.along_x { b3(e0, h, r.z1 + 0.002, e1, h + 0.006, r.z2 - 0.002) } else { b3(r.x1 + 0.002, h, e0, r.x2 - 0.002, h + 0.006, e1) });
+            }
+            // corrimão branco na parede, inclinado junto com o lance
+            if n > 0 {
+                let (pa, pb) = if r.along_x { (Vec3::new(r.a, r.ha + 0.92, r.z1 + 0.045), Vec3::new(r.b, r.hb + 0.92, r.z1 + 0.045)) } else { (Vec3::new(r.x1 + 0.045, r.ha + 0.92, r.a), Vec3::new(r.x1 + 0.045, r.hb + 0.92, r.b)) };
+                rails.push((pa, pb));
+            }
+            // patamares: o que sobra do retângulo antes de `a` e depois de `b`
+            let (before, after) = if r.a < r.b { ((lo, r.a), (r.b, hi)) } else { ((r.a, hi), (lo, r.b)) };
+            if (before.1 - before.0).abs() > 0.02 && (r.ha - y0).abs() > 0.02 { steps.push(slab(before.0, before.1, r.ha)); }
+            if (after.1 - after.0).abs() > 0.02 && (r.hb - y0).abs() > 0.02 { steps.push(slab(after.0, after.1, r.hb)); }
+        }
+        if let Some((x1, z1, x2, z2, _)) = map().pit {
+            // paredes do vão, do fundo até o piso (por fora do retângulo, para não coincidirem com os degraus)
+            lining.push(b3(x1 - 0.03, bottom, z1 - 0.03, x2, 0.0, z1)); lining.push(b3(x1 - 0.03, bottom, z2, x2, 0.0, z2 + 0.03));
+            lining.push(b3(x1 - 0.03, bottom, z1, x1, 0.0, z2));
+        }
+        for d in map().darks { holes.push(b3(d.0, d.1, d.2, d.3, d.4, d.5)); }
+        for q in map().portals.iter().filter(|q| q.alt) {
+            // escada de mão presa à parede da casa, no quintal
+            let (cx, z) = (q.ha.0, q.z1 - 0.3 + WALL_T / 2.0 + 0.04);
+            ladders.push(b3(cx - 0.23, 0.0, z - 0.02, cx - 0.19, WALL_H, z + 0.02)); ladders.push(b3(cx + 0.19, 0.0, z - 0.02, cx + 0.23, WALL_H, z + 0.02));
+            let mut y = 0.28;
+            while y < WALL_H - 0.05 { ladders.push(b3(cx - 0.19, y, z - 0.012, cx + 0.19, y + 0.028, z + 0.012)); y += 0.3; }
+        }
+        sb(&mut *commands, &mut *meshes, &steps, 1.0, &granite);
+        sb(&mut *commands, &mut *meshes, &nosing, 1.0, &pale);
+        for (pa, pb) in rails {
+            let d = pb - pa;
+            commands.spawn((Mesh3d(meshes.add(Cuboid::new(0.05, 0.07, d.length()))), MeshMaterial3d(white.clone()),
+                Transform::from_translation((pa + pb) / 2.0).looking_to(d.normalize(), Vec3::Y), NotShadowCaster, MapEntity));
+        }
+        sb(&mut *commands, &mut *meshes, &lining, 0.6, &m.wall_lo);
+        sb(&mut *commands, &mut *meshes, &ladders, 1.0, &m.frame);
+        sb(&mut *commands, &mut *meshes, &holes, 1.0, &dark);
     }
     if map_index() == 0 {
         model(&mut *commands, "korean_fire_extinguisher_01", Vec3::new(4.32, 0.0, 11.3), hp2, Vec3::ONE, Vec3::ZERO);

@@ -29,7 +29,7 @@ pub enum SolidKind { Wall, Prop, Door }
 pub struct Solid { pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub h: f32, pub on: bool, pub kind: SolidKind }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PropKind { Bench, Crate, Barrel, Sofa, Table, Shelf, Locker, Cover, Bed, Pool }
+pub enum PropKind { Bench, Crate, Barrel, Sofa, Table, Shelf, Locker, Cover, Bed, Pool, Rail }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Prop { pub kind: PropKind, pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub h: f32 }
@@ -103,11 +103,32 @@ pub struct MapDef {
     /// Aparece na escolha de mapa do percurso livre; mapa de defesa (ondas de invasores, sem percurso livre);
     /// passagens entre dois pontos do mapa (escada entre andares desenhados lado a lado).
     pub pick: bool, pub defense: bool, pub portals: &'static [Portal],
+    /// Escadas de verdade: trechos em rampa, o vão aberto no piso do andar de cima (x1, z1, x2, z2, profundidade) e os vãos
+    /// escuros por onde a escada continua para o outro andar (caixas x1, y1, z1, x2, y2, z2).
+    pub ramps: &'static [Ramp], pub pit: Option<(f32, f32, f32, f32, f32)>, pub darks: &'static [(f32, f32, f32, f32, f32, f32)],
 }
-/// Passagem: quem pisa no retângulo (x1, z1, x2, z2) sai em (ex, ez) olhando para `yaw`. `player` = o operador também usa
-/// (escada); senão só os invasores (subida pela laje). `alt` = só metade dos invasores conhece este caminho.
+/// Passagem entre andares: quem pisa no retângulo (x1, z1, x2, z2) sai em (ex, ez) olhando para `yaw`. `player` = o
+/// operador também usa (escada); senão só os invasores (escada de mão até a sacada). `alt` = só metade dos invasores
+/// conhece este caminho. `ha` = para onde o invasor some na partida (atrás do vão escuro da escada; na escada de mão, o pé
+/// dela) e `hb` = de onde ele sai na chegada (atrás do vão escuro de lá).
 #[derive(Clone, Copy, Debug)]
-pub struct Portal { pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub ex: f32, pub ez: f32, pub yaw: f32, pub player: bool, pub alt: bool }
+pub struct Portal { pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub ex: f32, pub ez: f32, pub yaw: f32, pub player: bool, pub alt: bool,
+    pub ha: (f32, f32), pub hb: (f32, f32) }
+/// Trecho de escada: dentro do retângulo, a altura do piso vai de `ha` (na coordenada `a`) a `hb` (na coordenada `b`), ao
+/// longo de x (`along_x`) ou de z; além de `a` e de `b` fica constante. Vale para os olhos do operador e para os invasores.
+#[derive(Clone, Copy, Debug)]
+pub struct Ramp { pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub along_x: bool, pub a: f32, pub b: f32, pub ha: f32, pub hb: f32 }
+/// Altura do piso em (x, z): zero fora das escadas.
+pub fn ramp_h(x: f32, z: f32) -> f32 {
+    for r in map().ramps {
+        if x >= r.x1 && x <= r.x2 && z >= r.z1 && z <= r.z2 {
+            let c = if r.along_x { x } else { z };
+            let k = if (r.b - r.a).abs() < 1e-4 { 0.0 } else { ((c - r.a) / (r.b - r.a)).clamp(0.0, 1.0) };
+            return r.ha + (r.hb - r.ha) * k;
+        }
+    }
+    0.0
+}
 pub const MAX_ZONES: usize = 12;
 pub const MAX_DOORWAYS: usize = 12;
 pub const MAX_DOORS: usize = 4;
@@ -194,7 +215,7 @@ pub static MAPS: [MapDef; 6] = [
         ],
         doors: &[("D1", 17.0, 6.0), ("D2", 19.0, 4.0)],
         corners: &[("A", 6.5, 6.5), ("A", 13.5, 6.5), ("B", 14.5, 6.5), ("B", 14.5, 11.6), ("C", 20.6, 3.6), ("C", 15.4, 3.6)],
-        start: (3.0, 15.4, 0.0), pick: true, defense: false, portals: &[],
+        start: (3.0, 15.4, 0.0), pick: true, defense: false, portals: &[], ramps: &[], pit: None, darks: &[],
     },
     /* ---------- 1 · apartamento: hall → corredor central com três cômodos de um lado e dois do outro ---------- */
     MapDef {
@@ -235,7 +256,7 @@ pub static MAPS: [MapDef; 6] = [
         ],
         doors: &[("D1", 8.4, 6.0), ("D2", 12.4, 8.0)],
         corners: &[],
-        start: (2.0, 12.8, 0.0), pick: true, defense: false, portals: &[],
+        start: (2.0, 12.8, 0.0), pick: true, defense: false, portals: &[], ramps: &[], pit: None, darks: &[],
     },
     /* ---------- 2 · escritório: recepção, salão aberto com divisórias baixas, corredor e salas fechadas ---------- */
     MapDef {
@@ -279,7 +300,7 @@ pub static MAPS: [MapDef; 6] = [
         ],
         doors: &[("D1", 3.4, 6.0), ("D2", 10.0, 6.0), ("D3", 16.4, 8.0)],
         corners: &[],
-        start: (2.5, 14.2, 0.0), pick: true, defense: false, portals: &[],
+        start: (2.5, 14.2, 0.0), pick: true, defense: false, portals: &[], ramps: &[], pit: None, darks: &[],
     },
     /* ---------- 3 · galpão: doca, salão grande com fileiras de estantes altas (espaço morto), escritório, corredor de fundo e três salas ---------- */
     MapDef {
@@ -329,7 +350,7 @@ pub static MAPS: [MapDef; 6] = [
         ],
         doors: &[("D1", 2.4, 12.0), ("D2", 4.0, 4.0), ("D3", 17.4, 4.0)],
         corners: &[],
-        start: (3.0, 16.8, 0.0), pick: true, defense: false, portals: &[],
+        start: (3.0, 16.8, 0.0), pick: true, defense: false, portals: &[], ramps: &[], pit: None, darks: &[],
     },
     /* ---------- 4 · corredor: portas frente a frente dos dois lados e um cruzamento em X ---------- */
     MapDef {
@@ -373,15 +394,15 @@ pub static MAPS: [MapDef; 6] = [
         ],
         doors: &[],
         corners: &[],
-        start: (8.6, 15.2, 0.0), pick: true, defense: false, portals: &[],
+        start: (8.6, 15.2, 0.0), pick: true, defense: false, portals: &[], ramps: &[], pit: None, darks: &[],
     },
     /* ---------- 5 · casa de dois andares (defesa): andar de cima em z 0..6, terraço em z 6..7, térreo em z 7..13, quintal em
        z 13..17,2 e rua em z 17,2..18,4. Os invasores nascem na rua, atrás do muro, e entram pelos portões. A escada liga os dois
-       andares por uma passagem; parte dos que entram pela garagem sobe pela laje até o terraço e entra pelas portas-balcão ---------- */
+       andares (degraus de verdade nas duas pontas e uma passagem no meio); parte dos que entram pela garagem sobe pela laje até o terraço e entra pelas portas-balcão ---------- */
     MapDef {
         name: "Family home", blurb: "two floors drawn side by side: bedrooms upstairs, living area, yard and street downstairs",
         zones: &[
-            zn("Hl", "Upstairs hall", 2.0, 0.0, 9.3, 1.4), zn("S1", "Suite 1", 0.0, 1.4, 4.7, 6.0), zn("S2", "Suite 2", 4.7, 1.4, 9.3, 6.0), zn("Ms", "Master suite", 9.3, 0.0, 14.0, 6.0),
+            zn("Hl", "Upstairs hall", 0.0, 0.0, 9.3, 1.4), zn("S1", "Suite 1", 0.0, 1.4, 4.7, 6.0), zn("S2", "Suite 2", 4.7, 1.4, 9.3, 6.0), zn("Ms", "Master suite", 9.3, 0.0, 14.0, 6.0),
             zn("Tr", "Terrace", 0.0, 6.0, 9.3, 7.0),
             zn("St", "Stairs", 0.0, 7.0, 1.2, 8.0), zn("Lv", "Living room", 0.0, 8.0, 10.0, 13.0), zn("Gm", "Gourmet area", 10.0, 7.0, 14.0, 13.0), zn("Yd", "Yard", 0.0, 13.0, 14.0, 17.2),
             zn("Rd", "Street", 0.0, 17.2, 14.0, 18.4),
@@ -392,7 +413,7 @@ pub static MAPS: [MapDef; 6] = [
             op("Suite 1 door", "S1", 3.6, 1.4, 4.5, 1.4, 0.0, 1.0, None), op("Suite 2 door", "S2", 6.6, 1.4, 7.5, 1.4, 0.0, 1.0, None), op("Master suite door", "Ms", 9.3, 0.2, 9.3, 1.2, 1.0, 0.0, None),
             op("Front door", "Lv", 3.3, 13.0, 4.4, 13.0, 0.0, -1.0, None), op("Gourmet opening", "Gm", 10.6, 13.0, 13.4, 13.0, 0.0, -1.0, None), op("Garage gate", "Yd", 2.6, 17.2, 5.4, 17.2, 0.0, -1.0, None),
         ],
-        lights: &[lt(4.3, 0.7, WARM, 0.7, false), lt(7.6, 0.7, WARM, 0.7, false), lt(2.6, 3.7, WARM, 0.85, false), lt(6.2, 3.7, WARM, 0.85, false), lt(11.0, 4.1, WARM, 0.9, false), lt(11.6, 1.1, WARM, 0.6, false),
+        lights: &[lt(1.4, 0.7, WARM, 0.85, false), lt(4.3, 0.7, WARM, 0.7, false), lt(7.6, 0.7, WARM, 0.7, false), lt(2.6, 3.7, WARM, 0.85, false), lt(6.2, 3.7, WARM, 0.85, false), lt(11.0, 4.1, WARM, 0.9, false), lt(11.6, 1.1, WARM, 0.6, false),
             lt(4.6, 6.5, COOL, 0.35, false),
             lt(3.0, 10.5, NEUTRAL, 0.95, false), lt(7.4, 10.5, NEUTRAL, 0.95, false), lt(12.0, 10.0, NEUTRAL, 0.9, false), lt(3.6, 15.1, COOL, 0.6, false), lt(10.6, 15.1, COOL, 0.6, false)],
         // dez invasores de reserva: esperam na rua, fora da vista de quem está na casa, até a onda chamá-los
@@ -408,7 +429,7 @@ pub static MAPS: [MapDef; 6] = [
         ],
         walls_h: &[(0.0, 0.0, 14.0, &[]), (6.0, 0.0, 14.0, &[(1.5, 2.4), (6.8, 7.6)]), (1.4, 0.0, 9.3, &[(3.6, 4.5), (6.6, 7.5)]), (2.2, 10.7, 14.0, &[]), (3.7, 7.7, 9.3, &[]), (3.6, 0.0, 1.3, &[]),
             (7.0, 0.0, 14.0, &[]), (8.0, 1.2, 10.0, &[]), (13.0, 0.0, 14.0, &[(3.3, 4.4), (10.6, 13.4)]), (17.2, 0.0, 14.0, &[(2.6, 5.4), (8.3, 9.5)]), (18.4, 0.0, 14.0, &[])],
-        walls_v: &[(0.0, 0.0, 18.4, &[]), (14.0, 0.0, 18.4, &[]), (2.0, 0.0, 1.4, &[]), (4.7, 1.4, 6.0, &[]), (7.7, 1.4, 6.0, &[(2.2, 3.1), (4.4, 5.3)]), (9.3, 0.0, 7.0, &[(0.2, 1.2)]),
+        walls_v: &[(0.0, 0.0, 18.4, &[]), (14.0, 0.0, 18.4, &[]), (4.7, 1.4, 6.0, &[]), (7.7, 1.4, 6.0, &[(2.2, 3.1), (4.4, 5.3)]), (9.3, 0.0, 7.0, &[(0.2, 1.2)]),
             (10.7, 0.0, 2.2, &[(0.5, 1.5)]), (12.7, 2.2, 6.0, &[(2.9, 3.8)]), (1.3, 3.6, 6.0, &[(4.4, 5.3)]),
             (1.2, 7.0, 8.0, &[]), (10.0, 7.0, 13.0, &[(8.6, 9.7)]), (7.5, 13.0, 17.2, &[]),
             // a rua é dividida em dois lados: quem chega pelo lado da piscina só tem o portão lateral, e a casa é atacada por duas frentes
@@ -417,19 +438,35 @@ pub static MAPS: [MapDef; 6] = [
             pr(Bed, 2.6, 3.5, 4.2, 5.6, 0.55), pr(Bed, 5.0, 3.6, 6.6, 5.7, 0.55), pr(Bed, 9.6, 3.6, 11.2, 5.7, 0.55), pr(Locker, 0.15, 9.5, 0.82, 11.52, 2.24),
             pr(Sofa, 0.5, 11.9, 2.3, 12.66, 0.9), pr(Table, 3.8, 9.6, 5.8, 10.55, 0.79), pr(Cover, 6.9, 10.3, 8.9, 10.9, 0.95), pr(Table, 11.0, 10.4, 13.0, 11.35, 0.79),
             pr(Pool, 10.7, 14.0, 13.3, 16.4, 0.12), pr(Crate, 0.3, 14.1, 0.82, 15.34, 0.46), pr(Barrel, 6.7, 13.5, 7.22, 14.02, 0.88),
+            // guarda-corpo de vidro da escada (segura a passagem, não a visão)
+            pr(Rail, 0.1, 8.98, 2.0, 9.06, 0.1),
         ],
         doors: &[],
         corners: &[],
         start: (12.1, 5.0, 1.5708), pick: false, defense: true,
+        // A escada é como a da casa: no térreo, três degraus junto à parede, a curva e o lance que sobe pelo nicho; no andar
+        // de cima, o lance chega direto no fim do corredor. Os dois andares estão desenhados lado a lado, então o meio da
+        // escada é uma passagem: o lance entra num vão escuro e continua no vão escuro do outro andar.
         portals: &[
-            // escada: sobe (do nicho do térreo ao alto da escada) e desce
-            Portal { x1: 0.12, z1: 7.12, x2: 1.08, z2: 7.75, ex: 3.2, ez: 0.7, yaw: -1.5708, player: true, alt: false },
-            Portal { x1: 2.12, z1: 0.12, x2: 2.62, z2: 1.28, ex: 0.6, ez: 8.6, yaw: 3.1416, player: true, alt: false },
-            // laje da garagem: quem conhece o caminho sobe pelo canto do quintal e sai na ponta do terraço
-            Portal { x1: 0.3, z1: 13.3, x2: 1.4, z2: 14.0, ex: 0.6, ez: 6.5, yaw: 0.0, player: false, alt: true },
-            // e pelo lado da piscina: sobe junto ao muro e sai na outra ponta do terraço, perto da porta-balcão da suíte do meio
-            Portal { x1: 7.75, z1: 13.3, x2: 8.7, z2: 14.0, ex: 8.7, ez: 6.5, yaw: 0.0, player: false, alt: true },
+            // sobe: do alto do lance do térreo ao patamar de baixo da escada do andar de cima
+            Portal { x1: 0.5, z1: 7.12, x2: 1.08, z2: 7.6, ex: 0.5, ez: 0.45, yaw: -1.5708, player: true, alt: false, ha: (1.6, 7.35), hb: (0.5, 1.85) },
+            // desce: do patamar de baixo da escada de cima ao alto do lance do térreo
+            Portal { x1: 0.12, z1: 0.8, x2: 0.85, z2: 1.28, ex: 0.3, ez: 7.4, yaw: 3.1416, player: true, alt: false, ha: (0.5, 1.85), hb: (1.6, 7.35) },
+            // escada de mão no canto do quintal: quem conhece o caminho sobe por ela e entra pela ponta da sacada
+            Portal { x1: 0.3, z1: 13.3, x2: 1.4, z2: 14.0, ex: 0.75, ez: 6.5, yaw: 0.0, player: false, alt: true, ha: (0.85, 13.45), hb: (-0.4, 6.5) },
+            // e pelo lado da piscina: sobe junto ao muro e entra pela outra ponta da sacada, perto da porta-balcão da suíte do meio
+            Portal { x1: 7.75, z1: 13.3, x2: 8.7, z2: 14.0, ex: 8.7, ez: 6.5, yaw: 0.0, player: false, alt: true, ha: (8.2, 13.45), hb: (8.7, 7.5) },
         ],
+        ramps: &[
+            // térreo: lance de baixo (sobe para oeste), patamar da curva e lance de cima (sobe para o norte, dentro do nicho)
+            Ramp { x1: 1.19, z1: 8.1, x2: 2.0, z2: 9.0, along_x: true, a: 2.0, b: 1.19, ha: 0.0, hb: 0.57 },
+            Ramp { x1: 0.1, z1: 8.0, x2: 1.19, z2: 9.0, along_x: true, a: 1.19, b: 0.1, ha: 0.57, hb: 0.57 },
+            Ramp { x1: 0.1, z1: 7.1, x2: 1.1, z2: 8.0, along_x: false, a: 8.0, b: 7.43, ha: 0.57, hb: 1.14 },
+            // andar de cima: do fim do corredor desce para oeste até o patamar de baixo
+            Ramp { x1: 0.1, z1: 0.1, x2: 2.6, z2: 1.3, along_x: true, a: 2.6, b: 0.9, ha: 0.0, hb: -1.66 },
+        ],
+        pit: Some((0.1, 0.1, 2.6, 1.3, 1.66)),
+        darks: &[(1.085, 1.14, 7.12, 1.1, 2.78, 7.6), (0.12, -1.66, 1.285, 0.85, -0.02, 1.3), (0.1, 0.0, 6.2, 0.115, 2.0, 6.8), (8.3, 0.0, 6.885, 9.1, 2.0, 6.9)],
     },
 ];
 

@@ -86,8 +86,34 @@ pub const INV_FOLLOW: f32 = 0.26;
 pub const INV_HIT: f32 = 0.95;
 const INV_SPEED: f32 = 2.5;
 /// Saída de uma passagem (escada, laje): quanto tempo o invasor leva para subir e de que profundidade ele vem.
-const RISE_SECS: f32 = 0.5;
-const RISE_DEPTH: f32 = 1.15;
+/// Troca de andar de um invasor: ele anda até sumir no vão escuro da escada (ou sobe a escada de mão até o alto do muro) e sai
+/// andando do vão escuro do outro andar. `leave` e `rise` guardam quanto do trecho já foi andado (zero = fora da passagem).
+const HOP_SPEED: f32 = 2.3;
+const LADDER_TOP: f32 = 3.0;
+fn hop_path(q: &Portal, leaving: bool, start: Vec2) -> Vec<Vec3> {
+    if leaving {
+        let y = ramp_h(start.x, start.y);
+        if q.alt { vec![Vec3::new(start.x, 0.0, start.y), Vec3::new(q.ha.0, 0.0, q.ha.1), Vec3::new(q.ha.0, LADDER_TOP, q.ha.1)] }
+        else { vec![Vec3::new(start.x, y, start.y), Vec3::new(q.ha.0, y, q.ha.1)] }
+    } else {
+        let y = ramp_h(q.ex, q.ez);
+        vec![Vec3::new(q.hb.0, y, q.hb.1), Vec3::new(q.ex, y, q.ez)]
+    }
+}
+/// Ponto a `s` metros do começo do caminho, a direção (no chão) do trecho em que ele está e o comprimento total.
+fn along(path: &[Vec3], s: f32) -> (Vec3, Vec2, f32) {
+    let total: f32 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
+    let mut left = s.clamp(0.0, total);
+    let (mut at, mut dir) = (path[0], Vec2::ZERO);
+    for w in path.windows(2) {
+        let l = w[0].distance(w[1]);
+        let d = Vec2::new(w[1].x - w[0].x, w[1].z - w[0].z);
+        if d.length() > 0.05 { dir = d.normalize(); }
+        if left <= l { at = if l > 1e-4 { w[0].lerp(w[1], left / l) } else { w[1] }; return (at, dir, total); }
+        left -= l; at = w[1];
+    }
+    (at, dir, total)
+}
 const ROAM_SPEED: f32 = 1.6;
 
 /// Tempo do resgate, conforme a dificuldade (CQB_CLOCK troca o valor nos testes).
@@ -280,7 +306,8 @@ pub fn scenario_system(
     /* ---------- passagens entre andares (escada) ---------- */
     game.portal_cd = (game.portal_cd - dt).max(0.0);
     if game.portal_cd <= 0.0 && !dying {
-        if let Some(q) = map().portals.iter().find(|q| q.player && p.pos.x > q.x1 && p.pos.x < q.x2 && p.pos.y > q.z1 && p.pos.y < q.z2) {
+        // só quando o operador anda para dentro do vão escuro: quem acabou de chegar e se ajeita no patamar não volta sem querer
+        if let Some(q) = map().portals.iter().find(|q| q.player && p.pos.x > q.x1 && p.pos.x < q.x2 && p.pos.y > q.z1 && p.pos.y < q.z2 && (Vec2::new(q.ha.0, q.ha.1) - p.pos).dot(p.vel) > 0.15) {
             p.pos = Vec2::new(q.ex, q.ez); p.vel = Vec2::ZERO; p.yaw = q.yaw; p.eye = Vec3::new(q.ex, p.eye.y, q.ez);
             game.portal_cd = 1.2; game.fade_t = 0.45;
             sfx.write(Sfx::Step(true));
@@ -553,10 +580,28 @@ pub fn scenario_system(
         if !t.hunter || !t.alive || t.off { continue; }
         t.alert = t.alert.max(60.0);
         // de frente para o operador e com linha de tiro: para e atira (quem decide é o combate)
-        if t.rise > 0.0 {
-            t.rise = (t.rise - dt).max(0.0);
-            let k = t.rise / RISE_SECS;
-            if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation.y = -RISE_DEPTH * k * k * (3.0 - 2.0 * k); }
+        if t.leave > 0.0 || t.rise > 0.0 {
+            // na passagem entre andares: partida (até sumir no vão escuro ou no alto da escada de mão) e chegada (saindo do vão)
+            let q = &map().portals[(t.via as usize).min(map().portals.len() - 1)];
+            let leaving = t.leave > 0.0;
+            let path = hop_path(q, leaving, Vec2::new(t.def.x, t.def.z));
+            let s = if leaving { &mut t.leave } else { &mut t.rise };
+            *s += HOP_SPEED * dt;
+            let (at, dir, total) = along(&path, *s);
+            let done = *s >= total;
+            // de frente para onde anda; na escada de mão, de frente para a parede
+            let f = if dir != Vec2::ZERO { dir } else { t.fwd };
+            t.fwd = f; t.def.fx = t.def.x + f.x; t.def.fz = t.def.z + f.y;
+            if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = at; tf.rotation = Quat::from_rotation_y(f.x.atan2(f.y)); }
+            if done {
+                if leaving {
+                    t.leave = 0.0; t.rise = 0.001;
+                    t.def.x = q.ex; t.def.z = q.ez;
+                    if let Some(z) = zone_at(q.ex, q.ez) { t.def.zone = zones()[z].id; }
+                    let p0 = hop_path(q, false, Vec2::ZERO)[0];
+                    if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = p0; }
+                } else { t.rise = 0.0; }
+            }
             t.moving = true;
             continue;
         }
@@ -566,14 +611,12 @@ pub fn scenario_system(
         // passagem (escada ou laje): sai do outro lado se por lá o caminho for mais curto
         // (vale o centro da casa da grade em que ele está: é assim que a distância foi calculada)
         let pc = ncell(pos).map_or(pos, ncenter);
-        if let Some(q) = map().portals.iter().find(|q| (t.alt || !q.alt) && pc.x > q.x1 && pc.x < q.x2 && pc.y > q.z1 && pc.y < q.z2) {
+        if let Some((qi, q)) = map().portals.iter().enumerate().find(|(_, q)| (t.alt || !q.alt) && pc.x > q.x1 && pc.x < q.x2 && pc.y > q.z1 && pc.y < q.z2) {
             let (here, there) = (ncell(pos).map_or(u32::MAX, |c| d[c]), ncell(Vec2::new(q.ex, q.ez)).map_or(u32::MAX, |c| d[c]));
-            if there < here {
-                t.def.x = q.ex; t.def.z = q.ez;
-                if let Some(z) = zone_at(q.ex, q.ez) { t.def.zone = zones()[z].id; }
-                // sai do vão de baixo para cima (escada ou laje), em vez de surgir de pé
-                t.rise = RISE_SECS;
-                if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(q.ex, -RISE_DEPTH, q.ez); }
+            if here != u32::MAX && there < here {
+                // começa a subir aqui mesmo; a chegada ao outro andar vem quando ele some no alto
+                t.leave = 0.001; t.via = qi as u8;
+                if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT SOBE {} pela passagem {} em ({:.1},{:.1}) t={:.1}", t.def.id, qi, t.def.x, t.def.z, game.time); }
                 continue;
             }
         }
@@ -631,7 +674,8 @@ pub fn scenario_system(
         let f = Vec2::new(crate::map::damp(t.fwd.x, face.x, 12.0, dt), crate::map::damp(t.fwd.y, face.y, 12.0, dt)).normalize_or_zero();
         t.def.x = np.x; t.def.z = np.y; t.def.fx = np.x + f.x; t.def.fz = np.y + f.y; t.fwd = f; t.moving = true;
         if let Some(z) = zone_at(np.x, np.y) { t.def.zone = zones()[z].id; }
-        if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(np.x, 0.0, np.y); tf.rotation = Quat::from_rotation_y(f.x.atan2(f.y)); }
+        // nos degraus o corpo acompanha a altura do piso
+        if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(np.x, ramp_h(np.x, np.y), np.y); tf.rotation = Quat::from_rotation_y(f.x.atan2(f.y)); }
     }
 }
 

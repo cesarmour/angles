@@ -13,6 +13,8 @@ pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
     Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
+    /// Espera um invasor começar a sair do vão de chegada de uma passagem entre andares.
+    WaitClimb,
     /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
     Near(bool, usize, f32),
 }
@@ -178,6 +180,15 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         // inimigos andando com o fuzil, vistos de cima: alerta a área, afasta o operador e fotografa quem vem atrás dele
         "riflewalk" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(120), Tp(2.0, 12.8, 0.0, 0.0), ViewTo(View::Bird), Wait(260), Shot("rw1"), Wait(110), Shot("rw2"),
             Wait(110), Shot("rw3"), Wait(110), Shot("rw4"), Quit],
+        // troca de andar dos invasores: do corredor de cima, fotografa um deles saindo da caixa de escada; depois os degraus do
+        // térreo, a escada de mão do quintal e o alçapão do terraço
+        "climb" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20), Tp(6.0, 0.7, 1.5708, -0.22), Wait(20), Shot("cl-top"), WaitClimb, Wait(8), Shot("cl-a"), Wait(22), Shot("cl-b"), Wait(30), Shot("cl-c"), Wait(40), Shot("cl-d"),
+            Tp(1.7, 0.7, 1.5708, -0.5), Wait(25), Shot("cl-down"), Tp(3.4, 9.9, 1.037, -0.05), Wait(25), Shot("cl-niche"), Tp(1.6, 8.55, 1.5708, 0.1), Wait(25), Shot("cl-up"),
+            Tp(2.6, 15.6, 0.611, 0.1), Wait(25), Shot("cl-ladder"), Tp(3.2, 6.5, 1.5708, -0.1), Wait(25), Shot("cl-terrace"), Quit],
+        // o operador desce a escada andando (do corredor de cima até o térreo) e sobe de volta
+        "stairs" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20), Tp(4.6, 0.7, 1.5708, -0.3), Wait(20), Shot("st-1"), Go(0.5, 0.7, None), Go(0.5, 1.15, None), Wait(70), Snap("desceu"),
+            Tp(0.45, 7.45, 3.1416, -0.35), Wait(20), Shot("st-2"), Go(0.6, 8.5, None), Go(3.0, 8.55, None), Tp(3.4, 9.9, 1.037, -0.05), Wait(20), Shot("st-3"),
+            Tp(2.6, 8.55, 1.5708, 0.0), Go(0.6, 8.55, None), Go(0.6, 7.4, None), Go(1.0, 7.35, None), Wait(70), Snap("subiu"), Tp(0.5, 0.6, -1.5708, 0.25), Wait(20), Shot("st-4"), Quit],
         "alarm" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(120), Tp(2.0, 12.8, 0.0, 0.0), Wait(1500), Snap("alarme"), Shot("alarm"), Quit],
         // granada: parado fora da vista de ameaças alertadas (um tiro avisa o cômodo) até alguém lançar (CQB_NODEATH=1)
         "nade" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(100), Tp(4.6, 7.0, 0.0, 0.0), WaitNade, Wait(60), Shot("nade-air"), Wait(70), Shot("nade-fp"), ViewTo(View::Bird), Wait(25), Shot("nade-top"), Wait(400), Snap("n1"), Shot("nade-after"), Quit],
@@ -391,6 +402,7 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
         Cmd::Auto(on) => { bot.auto_card = on; done = true; }
         // espera uma granada entrar em cena
         Cmd::WaitNade => { done = game.nade.is_some() || bot.n > 4000; }
+        Cmd::WaitClimb => { done = targets.list.iter().any(|t| t.alive && !t.off && t.rise > 0.0) || bot.n > 4000; }
         // fica parado por n quadros; recarrega só quando não há invasor de pé (entre as ondas)
         Cmd::Hold(n) => {
             if !targets.list.iter().any(|t| t.hunter && t.alive && !t.off) && p.mag < p.def().mag && !p.reloading && !p.switching() { c.reload = true; }

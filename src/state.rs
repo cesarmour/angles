@@ -190,7 +190,7 @@ pub struct TargetState {
     /// invasores conhece o caminho alternativo (laje).
     pub hunter: bool, pub pend: f32, pub mind: u8, pub mind_t: f32, pub shield: bool, pub captor: bool, pub alt: bool,
     /// Tempo que resta da subida depois de uma passagem (o invasor sai do vão da escada ou da laje, de baixo para cima).
-    pub rise: f32,
+    pub rise: f32, pub leave: f32, pub via: u8,
 }
 impl TargetState {
     /// Ameaça viva que ainda precisa ser resolvida (quem se rendeu não conta).
@@ -199,7 +199,7 @@ impl TargetState {
     pub fn clear_run(&mut self) {
         self.alive = true; self.fall = 0.0; self.fall_v = 0.0; self.sw = 0.0; self.swv = 0.0; self.landed = false; self.hits = 0; self.seen = false; self.vis = false; self.react = 0.0;
         self.contact = false; self.first_facing = None; self.goal = None; self.wait = 0.0; self.moving = false; self.stuck = 0.0; self.moved = 0; self.move_cd = 0.0;
-        self.alert = 0.0; self.notice = 0.0; self.engaged = false; self.hunter = false; self.pend = 0.0; self.mind = MIND_NONE; self.mind_t = 0.0; self.shield = false; self.captor = false; self.alt = false; self.rise = 0.0;
+        self.alert = 0.0; self.notice = 0.0; self.engaged = false; self.hunter = false; self.pend = 0.0; self.mind = MIND_NONE; self.mind_t = 0.0; self.shield = false; self.captor = false; self.alt = false; self.rise = 0.0; self.leave = 0.0; self.via = 0;
     }
 }
 #[derive(Resource, Default)]

@@ -81,7 +81,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         let mut t = TargetState {
             def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
             fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
-            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false, rise: 0.0,
+            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false, rise: 0.0, leave: 0.0, via: 0,
         };
         place_target(level, &mut t);
         list.push(t);
@@ -491,6 +491,8 @@ pub fn combat(
         if t.def.kind != TKind::Threat || t.def.passive { continue; }
         // rendido, ou de mãos para o alto esperando a hora de sacar: não atira
         if t.mind == MIND_YIELDED || t.mind == MIND_FAKE { t.engaged = false; t.react = 0.0; continue; }
+        // trocando de andar (subindo a escada ou a escada de mão): está com as mãos ocupadas, não atira
+        if t.rise > 0.0 || t.leave > 0.0 { t.engaged = false; t.react = 0.0; continue; }
         // invasor da defesa da casa: mais rápido que qualquer nível de dificuldade
         let (react_t, follow_t) = if defense && t.hunter { (crate::scenario::INV_REACT, crate::scenario::INV_FOLLOW) } else { (react_t, follow_t) };
         // mech: sempre em alerta, gira devagar e o canhão demora a disparar
@@ -631,7 +633,7 @@ pub fn rand01(seed: f32) -> f32 { ((seed.sin() * 43758.547).fract()).abs() }
 /// de mira, impressas pela conversão (tools3d/conv_operator.py, linha "BOCA na mira").
 pub fn enemy_muzzle(x: f32, z: f32, flat: Vec3) -> Vec3 {
     let right = Vec3::new(-flat.z, 0.0, flat.x);
-    Vec3::new(x, 1.38, z) + flat * 0.69 + right * 0.064
+    Vec3::new(x, 1.38 + crate::map::ramp_h(x, z), z) + flat * 0.69 + right * 0.064
 }
 
 /// Cápsula que sai da janela de ejeção do fuzil de uma ameaça (meio metro atrás da boca), para a direita e para cima.
