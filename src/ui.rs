@@ -16,6 +16,8 @@ const BAD: Color = Color::srgb(1.0, 0.353, 0.31);
 const CYAN: Color = Color::srgb(0.376, 0.839, 0.91);
 const PANEL: Color = Color::srgba(0.035, 0.05, 0.055, 0.92);
 const SCREEN: Color = Color::srgba(0.02, 0.03, 0.035, 0.88);
+/// Faixa à direita da tela que o operador 3D ocupa no menu e na avaliação (a imagem dele tem 540 de largura, com folga transparente à esquerda).
+const PORTRAIT_PAD: f32 = 462.0;
 
 #[derive(Resource)]
 pub struct UiFonts { pub bold: Handle<Font>, pub semi: Handle<Font>, pub body: Handle<Font> }
@@ -27,10 +29,10 @@ pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8),
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
-    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText,
+    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound,
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8) }
+pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry }
 #[derive(Event)]
 pub struct ResetGame { pub free: bool, pub mission2: bool }
 
@@ -115,6 +117,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             .with_children(|c| { c.spawn(txt("×", &f.body, 34.0, Color::WHITE)); });
         // munição e postura
         h.spawn(Node { right: Val::Px(16.0), bottom: Val::Px(14.0), flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd, ..abs() }).with_children(|a| {
+            a.spawn((txt("", &f.bold, 15.0, BAD), TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) }, Tag::Wound));
             a.spawn(Node { align_items: AlignItems::FlexEnd, column_gap: Val::Px(6.0), ..default() }).with_children(|r| {
                 r.spawn((txt("8", &f.bold, 58.0, BONE), Tag::AmmoMag));
                 r.spawn((txt("/ 64", &f.semi, 24.0, MUTE), Tag::AmmoRes));
@@ -187,9 +190,9 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         GlobalZIndex(6), bevy::ui::FocusPolicy::Pass, Tag::Portrait));
     commands.spawn(screen(Tag::Menu)).with_children(|s| {
         s.spawn(txt("CLOSE-QUARTERS BATTLE SIMULATOR · TUTORIAL", &f.semi, 14.0, AMBER));
-        s.spawn(txt("POINT OF ", &f.bold, 104.0, BONE)).with_children(|t| { t.spawn((TextSpan::new("ENTRY"), TextFont { font: f.bold.clone(), font_size: 104.0 * FS, ..default() }, TextColor(AMBER))); });
+        s.spawn((txt("POINT OF ", &f.bold, 104.0, BONE), TextLayout::new_with_no_wrap())).with_children(|t| { t.spawn((TextSpan::new("ENTRY"), TextFont { font: f.bold.clone(), font_size: 104.0 * FS, ..default() }, TextColor(AMBER))); });
         s.spawn((txt("A shoot house with armed threats and hostages, and six short lessons on how to enter a room: see first, expose little and fire only at what you have identified.", &f.body, 19.0, BONE), Node { max_width: Val::Px(640.0), ..default() }));
-        s.spawn(Node { column_gap: Val::Px(10.0), ..default() }).with_children(|r| {
+        s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(10.0), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|r| {
             button(r, &f, "START TUTORIAL", Act::Start, true);
             button(r, &f, "MISSION 2 · REVERSE ROUTE", Act::Mission2, false);
             button(r, &f, "FREE RUN", Act::Free, false);
@@ -197,7 +200,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             button(r, &f, "QUIT GAME", Act::Quit, false);
         });
         // escolha do mapa para o percurso livre (o tutorial e a missão 2 usam sempre a casa de treino)
-        s.spawn(Node { column_gap: Val::Px(10.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
+        s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(8.0), flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, ..default() }).with_children(|r| {
             r.spawn(txt("MAP FOR FREE RUN", &f.semi, 13.0, CYAN));
             for (i, m) in MAPS.iter().enumerate() {
                 r.spawn((Button, Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(7.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(CYAN), BackgroundColor(Color::NONE), Act::Map(i as u8)))
@@ -264,19 +267,32 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             });
         });
         s.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), width: Val::Px(820.0), ..default() }, Tag::DbRows));
-        s.spawn(Node { column_gap: Val::Px(10.0), ..default() }).with_children(|r| {
+        s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(10.0), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|r| {
             button(r, &f, "REDO TUTORIAL", Act::Start, true);
             button(r, &f, "MISSION 2", Act::Mission2, false);
             button(r, &f, "FREE RUN", Act::Free, false);
             button(r, &f, "QUIT GAME", Act::Quit, false);
         });
     });
+    // operador abatido (segundo tiro levado): fim da partida, com o motivo e a opção de tentar de novo
+    commands.spawn(screen(Tag::Down)).insert(BackgroundColor(Color::srgba(0.09, 0.012, 0.012, 0.86))).with_children(|s| {
+        s.spawn(txt("SIMULATION OVER", &f.semi, 14.0, BAD));
+        s.spawn(txt("OPERATOR DOWN", &f.bold, 84.0, BONE));
+        s.spawn((txt("", &f.body, 20.0, BONE), Node { max_width: Val::Px(760.0), ..default() }, Tag::DownWhy));
+        s.spawn((txt("", &f.semi, 15.0, MUTE), Node { max_width: Val::Px(760.0), ..default() }, Tag::DownStats));
+        s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(10.0), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|r| {
+            button(r, &f, "TRY AGAIN · ENTER", Act::Retry, true);
+            button(r, &f, "MAIN MENU", Act::Back, false);
+            button(r, &f, "QUIT GAME", Act::Quit, false);
+        });
+        s.spawn((txt("Two hits end the run. A threat turns to face you and fires about a second after it has you in its sights: see it first, show as little of yourself as you can and do not stay in its line of fire.", &f.body, 13.5, MUTE), Node { max_width: Val::Px(760.0), ..default() }));
+    });
     commands.insert_resource(f);
     commands.insert_resource(diagrams);
 }
 
 /// Cliques nos botões e teclas de confirmação/pausa.
-pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>) {
+pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>, mut ck: ResMut<Checkpoint>) {
     // durante a demonstração só existe uma ação: sair dela
     if game.demo { if c.pause || c.confirm { game.demo_end = true; } return; }
     let mut act: Option<Act> = None;
@@ -287,6 +303,7 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
         Mode::Play if c.pause => { game.mode = Mode::Pause; game.ui_dirty = true; return; }
         Mode::Pause if c.pause => act = Some(Act::Resume),
         Mode::Credits if c.pause || c.confirm => act = Some(Act::Back),
+        Mode::Down if c.confirm => act = Some(Act::Retry),
         Mode::Play if c.help && !game.free => { game.mode = Mode::Card; game.ui_dirty = true; return; }
         _ => {}
     }
@@ -308,6 +325,8 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
         Act::Box => { game.hide_box = !game.hide_box; }
         Act::Credits => { game.mode = Mode::Credits; }
         Act::Back => { game.mode = Mode::Menu; }
+        // no tutorial volta ao começo da lição em que o operador caiu; no percurso livre e na missão 2 recomeça a partida
+        Act::Retry => { if !game.free && ck.snap.is_some() { ck.retry = true; } else { reset.write(ResetGame { free: game.free, mission2: game.mission2 }); } }
     }
     game.ui_dirty = true;
 }
@@ -335,7 +354,7 @@ pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: R
             }
         }
         crate::combat::place_target(&level, t);
-        t.alive = true; t.fall = 0.0; t.fall_v = 0.0; t.sw = 0.0; t.swv = 0.0; t.landed = false; t.hits = 0; t.seen = false; t.vis = false; t.react = 0.0; t.contact = false; t.first_facing = None; t.goal = None; t.wait = 0.0; t.moving = false; t.stuck = 0.0; t.moved = 0; t.move_cd = 0.0;
+        t.alive = true; t.fall = 0.0; t.fall_v = 0.0; t.sw = 0.0; t.swv = 0.0; t.landed = false; t.hits = 0; t.seen = false; t.vis = false; t.react = 0.0; t.contact = false; t.first_facing = None; t.goal = None; t.wait = 0.0; t.moving = false; t.stuck = 0.0; t.moved = 0; t.move_cd = 0.0; t.alert = 0.0; t.notice = 0.0; t.engaged = false;
         // na missão 2 o operador começa dentro da Sala C: os alvos dela ficam fora
         t.off = m2 && t.def.zone == "C";
         if t.off { t.alive = false; t.fall = 1.0; t.landed = true; }
@@ -349,7 +368,7 @@ pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: R
     tac.corner_zone = None;
     if let Some(z) = std::env::var("CQB_ZOOM").ok().and_then(|v| v.parse::<f32>().ok()) { game.bird_zoom = z; }
     if free {
-        game.free = true; game.mission2 = m2; game.mode = Mode::Play;
+        game.free = true; game.mission2 = m2; game.mode = Mode::Play; game.ckpt_req = true;
         if m2 {
             p.pos = Vec2::new(19.5, 1.7); p.yaw = std::f32::consts::PI; p.zone = 6; p.eye = Vec3::new(19.5, EYE_STAND, 1.7);
             game.toast("Mission 2: you start in Room C. Clear the house back to the Staging area. Targets in random positions, no hints.", 1, 6.0);
@@ -403,15 +422,21 @@ pub fn update_ui(
         pies.truncate(if bird { 4 } else { 2 });
     }
 
+    // operador 3D à direita do menu e da avaliação: só aparece se sobrar largura para o texto ao lado dele
+    let portrait_menu = uw >= 72.0 + 702.0 + PORTRAIT_PAD;
+    let portrait_db = uw >= 72.0 + 640.0 + PORTRAIT_PAD;
+    let db_w = if portrait_db { (uw - 72.0 - PORTRAIT_PAD).min(820.0) } else { (uw - 112.0).min(820.0) };
     for (e, tag, mut node) in nodes.iter_mut() {
         match *tag {
-            Tag::Hud => show(&mut node, !matches!(game.mode, Mode::Menu | Mode::Debrief | Mode::Credits)),
+            Tag::Hud => show(&mut node, !matches!(game.mode, Mode::Menu | Mode::Debrief | Mode::Credits | Mode::Down)),
             Tag::Credits => show(&mut node, game.mode == Mode::Credits),
-            Tag::Menu => show(&mut node, game.mode == Mode::Menu),
+            // o texto do menu fica à esquerda do operador: a margem direita reserva o espaço dele (e os botões quebram de linha)
+            Tag::Menu => { show(&mut node, game.mode == Mode::Menu); let pr = Val::Px(if portrait_menu { PORTRAIT_PAD } else { 40.0 }); if node.padding.right != pr { node.padding.right = pr; } }
+            Tag::Down => show(&mut node, game.mode == Mode::Down),
             Tag::Card => show(&mut node, game.mode == Mode::Card),
             Tag::Pause => show(&mut node, game.mode == Mode::Pause),
             Tag::Debrief => show(&mut node, game.mode == Mode::Debrief),
-            Tag::Portrait => show(&mut node, matches!(game.mode, Mode::Menu | Mode::Debrief)),
+            Tag::Portrait => show(&mut node, (game.mode == Mode::Menu && portrait_menu) || (game.mode == Mode::Debrief && portrait_db)),
             Tag::TacPanel => show(&mut node, game.tac),
             Tag::MiniFrame | Tag::Legend => show(&mut node, game.tac && !bird),
             Tag::Prompt => show(&mut node, play && game.near_door.is_some()),
@@ -504,6 +529,7 @@ pub fn update_ui(
                     }
                 });
             }
+            Tag::DbRows if game.mode == Mode::Debrief && node.width != Val::Px(db_w) => { node.width = Val::Px(db_w); }
             Tag::DbRows if game.ui_dirty && game.mode == Mode::Debrief => {
                 let s = &game.stats;
                 let th: Vec<_> = targets.list.iter().filter(|t| t.def.kind == TKind::Threat && !t.def.passive && !t.off).collect();
@@ -555,7 +581,11 @@ pub fn update_ui(
         }
     }
     for (tag, mut bg) in bgs.iter_mut() {
-        if *tag == Tag::Dmg { bg.0 = Color::srgba(0.75, 0.06, 0.04, (game.dmg_t / 1.3).clamp(0.0, 1.0) * 0.38); }
+        if *tag == Tag::Dmg {
+            // clarão vermelho a cada tiro levado; na queda do operador a tela inteira avermelha
+            let fall = if game.down_t > 0.0 { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) * 0.55 } else { 0.0 };
+            bg.0 = Color::srgba(0.75, 0.06, 0.04, ((game.dmg_t / 1.3).clamp(0.0, 1.0) * 0.38).max(fall));
+        }
         if *tag == Tag::OddsBar { bg.0 = if game.odds >= 75.0 { GOOD } else if game.odds >= 50.0 { AMBER } else { BAD }; }
     }
     let lesson = &LESSONS[game.lesson.min(5)];
@@ -581,6 +611,15 @@ pub fn update_ui(
             Tag::CardTitle => set(&mut t, &lesson.title.to_uppercase()),
             Tag::CardLead => set(&mut t, lesson.lead),
             Tag::CardPoints => { let s: Vec<String> = lesson.points.iter().map(|x| format!("–  {x}")).collect(); set(&mut t, &s.join("\n\n")); }
+            Tag::Wound => set(&mut t, &if game.wounds > 0 && game.wounds < MAX_WOUNDS && !game.demo && play { format!("HIT {} OF {} · NEXT ONE ENDS THE RUN", game.wounds, MAX_WOUNDS) } else { String::new() }),
+            Tag::DownWhy if game.mode == Mode::Down => set(&mut t, &format!("Second hit (simulated). {}", game.down_why)),
+            Tag::DownStats if game.mode == Mode::Down => {
+                let th: Vec<_> = targets.list.iter().filter(|t| t.def.kind == TKind::Threat && !t.def.passive && !t.off).collect();
+                let dn = th.iter().filter(|t| !t.alive).count();
+                let head = if game.mission2 { "MISSION 2".to_string() } else if game.free { format!("FREE RUN · {}", map().name.to_uppercase()) } else { format!("LESSON {} · {}", game.lesson + 1, lesson.title.to_uppercase()) };
+                let again = if game.free { "TRY AGAIN restarts the run with new random positions." } else { "TRY AGAIN takes you back to the start of this lesson." };
+                set(&mut t, &format!("{}   ·   THREATS DOWN {} OF {}\n{}", head, dn, th.len(), again));
+            }
             Tag::AmmoMag => { set(&mut t, &if p.reloading { "··".to_string() } else { p.mag.to_string() }); col.0 = if p.mag <= 2 && !p.reloading { BAD } else { BONE }; }
             Tag::AmmoRes => set(&mut t, &format!("/ {}", p.reserve)),
             Tag::AmmoMode => set(&mut t, &format!("{} · {}", p.def().hud, if p.switching() { "SWITCHING" } else if p.reloading { if p.reload_empty { "EMERGENCY RELOAD" } else { "TACTICAL RELOAD" } } else if p.mag == 0 { "EMPTY · R" } else { "SEMI-AUTO · 1 2" })),

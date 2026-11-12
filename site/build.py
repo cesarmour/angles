@@ -11,7 +11,7 @@ Change VERSION / SIZE below when a new release goes out.
 import base64, mimetypes, pathlib, re
 
 HERE = pathlib.Path(__file__).parent
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 SIZE = "90 MB"
 REPO = "https://github.com/cesarmour/point-of-entry"
 DOWNLOAD = f"{REPO}/releases/download/v{VERSION}/PointOfEntry-mac.zip"

@@ -7,12 +7,21 @@ use crate::world::*;
 use bevy::pbr::NotShadowCaster;
 use bevy::prelude::*;
 use std::collections::VecDeque;
-use std::f32::consts::{FRAC_PI_2, PI, TAU};
+use std::f32::consts::{FRAC_PI_2, TAU};
 
 pub const BOARD_W: f32 = 0.46;
 pub const BOARD_H: f32 = 0.76;
 pub const BOARD_Y0: f32 = 0.82;
-const REACT: f32 = 1.9;
+/// Tempo com o operador na mira até o primeiro disparo, intervalo entre disparos, velocidade com que a ameaça gira
+/// para o operador (rad/s) e alcance em que ela ouve um tiro.
+const REACT: f32 = 1.0;
+const FOLLOW: f32 = 0.75;
+/// No tutorial a ameaça dá um pouco mais de tempo (ainda vira para o operador e atira): é onde se aprende.
+const REACT_TUT: f32 = 1.3;
+const FOLLOW_TUT: f32 = 0.9;
+const TURN: f32 = 4.4;
+const HEAR: f32 = 16.0;
+const ALERT_SECS: f32 = 14.0;
 
 #[derive(Component)] pub struct TargetPivot(pub usize);
 #[derive(Component)] pub struct Puff { vel: Vec3, life: f32, max: f32, grow: f32, op: f32, grav: f32 }
@@ -68,7 +77,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         let mut t = TargetState {
             def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
             fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
-            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0,
+            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false,
         };
         place_target(level, &mut t);
         list.push(t);
@@ -247,7 +256,7 @@ pub fn combat(
     mut ml: Query<(&mut PointLight, &mut Transform), With<MuzzleLight>>,
     mut pivots: Query<(&mut Transform, &TargetPivot), (Without<DoorLeaf>, Without<MuzzleLight>)>,
     mut doors: Query<(&mut Transform, &DoorLeaf), (Without<TargetPivot>, Without<MuzzleLight>)>,
-    mut vis: Query<&mut Visibility>,
+    (mut vis, mut heard): (Query<&mut Visibility>, Local<Vec<Vec2>>),
 ) {
     let dt = time.delta_secs().min(0.05);
     // clarão de boca
@@ -256,6 +265,13 @@ pub fn combat(
     if let Ok((mut l, _)) = ml.single_mut() { l.intensity = fx.muzzle_i * 900_000.0; }
     if game.mode != Mode::Play { return; }
     let bird = game.view == View::Bird;
+    // operador abatido: cai por um instante e a partida termina
+    if game.down_t > 0.0 {
+        game.down_t -= dt;
+        if game.down_t <= 0.0 { game.down_t = 0.0; game.mode = Mode::Down; if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT ABATIDO licao {} t={:.1}", game.lesson, game.time); } game.toast = None; game.coach = None; game.ui_dirty = true; return; }
+    }
+    let dying = game.down_t > 0.0;
+    let mut fired = false;
 
     /* ---------- portas ---------- */
     let f2 = p.fwd();
@@ -267,7 +283,7 @@ pub fn combat(
         if dist > 1.9 || (dist > 0.6 && dv.dot(f2) / dist < 0.15) { continue; }
         game.near_door = Some(i); break;
     }
-    if c.interact {
+    if c.interact && !dying {
         if let Some(i) = game.near_door {
             level.doors[i].opening = true;
             game.door_side[i] = Some((p.pos.x - level.doors[i].cx).abs() > 0.5);
@@ -286,10 +302,10 @@ pub fn combat(
     for (mut tf, dl) in doors.iter_mut() { tf.rotation = Quat::from_rotation_y(level.doors[dl.0].open * 172f32.to_radians()); }
 
     /* ---------- disparo ---------- */
-    if c.fire && !p.reloading && !p.switching() && p.fire_cool <= 0.0 && (bird || (p.g_block < 0.55 && p.g_lower < 0.5)) {
+    if c.fire && !dying && !p.reloading && !p.switching() && p.fire_cool <= 0.0 && (bird || (p.g_block < 0.55 && p.g_lower < 0.5)) {
         if p.mag == 0 { sfx.write(Sfx::Dry); p.fire_cool = 0.2; }
         else {
-            p.mag -= 1; p.fire_cool = p.def().cool; game.stats.shots += 1; p.shot_n = p.shot_n.wrapping_add(1);
+            p.mag -= 1; fired = true; p.fire_cool = p.def().cool; game.stats.shots += 1; p.shot_n = p.shot_n.wrapping_add(1);
             let q = Quat::from_euler(EulerRot::YXZ, p.yaw + if bird { 0.0 } else { p.recoil.y }, if bird { 0.0 } else { p.pitch + p.recoil.x }, 0.0);
             let (mut dir, right, up) = (q * Vec3::NEG_Z, q * Vec3::X, q * Vec3::Y);
             let spread = ((if p.ads { 0.004 } else { 0.02 }) + p.speed * 0.006 * if p.ads { 0.4 } else { 1.0 } - p.crouch * 0.004f32).max(0.001);
@@ -364,6 +380,14 @@ pub fn combat(
     /* ---------- alvos: queda e reação ---------- */
     let head = p.head_h();
     let mut exposed = false;
+    let noreact = std::env::var("CQB_NOREACT").is_ok();
+    let nodeath = std::env::var("CQB_NODEATH").is_ok();
+    // na demonstração do traçado ideal a ameaça vira e aponta, mas demora a atirar: a demonstração mostra o caminho, não um tiroteio
+    let (react_t, follow_t) = if game.demo { (3.0, 1.5) } else if game.free { (REACT, FOLLOW) } else { (REACT_TUT, FOLLOW_TUT) };
+    let script = std::env::var("CQB_SCRIPT").is_ok();
+    // disparos de ameaças no quadro anterior (as outras ouvem) e os deste quadro; disparos que erraram o operador
+    let mut shots_now: Vec<Vec2> = Vec::new();
+    let mut missed: Vec<(Vec3, Vec3)> = Vec::new();
     for i in 0..targets.list.len() {
         let t = &mut targets.list[i];
         t.swv += (-70.0 * t.sw - 6.0 * t.swv) * dt;
@@ -378,38 +402,92 @@ pub fn combat(
                     t.landed = true;
                 }
             }
+            t.engaged = false;
             continue;
         }
         if t.def.kind != TKind::Threat || t.def.passive { continue; }
-        let dv = p.pos - Vec2::new(t.def.x, t.def.z);
-        let d = dv.length();
-        let mut rate = 0.0;
-        if d < 20.0 && d > 0.01 && dv.dot(t.fwd) / d > 0.15 {
-            if level.los(t.def.x, t.def.z, 1.4, p.pos.x, p.pos.y, head - 0.25) { rate = 1.0; }
-            else if level.los(t.def.x, t.def.z, 1.4, p.eye.x, p.eye.z, p.eye.y) { rate = 0.45; }
+        let tp = Vec2::new(t.def.x, t.def.z);
+        let dv = p.pos - tp;
+        let d = dv.length().max(0.01);
+        let dir = dv / d;
+        // tiro por perto (do operador ou de outra ameaça) põe a ameaça em alerta
+        t.alert = (t.alert - dt).max(0.0);
+        if (fired && d < HEAR) || heard.iter().any(|q| q.distance(tp) < HEAR) { t.alert = ALERT_SECS; }
+        // linha de tiro: para o corpo inteiro, ou só para a cabeça que aparece na quina (mais difícil de ver e de acertar)
+        let (mut rate, mut body) = (0.0, false);
+        if d < 20.0 && !noreact && !dying && game.down_t <= 0.0 {
+            if level.los(t.def.x, t.def.z, 1.4, p.pos.x, p.pos.y, head - 0.25) { rate = 1.0; body = true; }
+            else if level.los(t.def.x, t.def.z, 1.4, p.eye.x, p.eye.z, p.eye.y) { rate = 0.6; }
         }
-        if std::env::var("CQB_NOREACT").is_ok() { rate = 0.0; }
         if rate > 0.0 {
+            if dir.dot(t.fwd) > 0.15 { t.alert = ALERT_SECS; }
+            else if t.alert <= 0.0 && d < 7.0 {
+                // operador chegando por trás ou pelo lado: ela percebe pelo barulho, mais depressa quanto mais perto e mais rápido ele vem
+                t.notice += dt * (0.3 + 0.6 * (p.speed / 2.0).min(1.6)) * if d < 3.0 { 1.6 } else { 1.0 };
+                if t.notice >= 1.0 { t.alert = ALERT_SECS; }
+            }
+        } else { t.notice = (t.notice - dt * 0.25).max(0.0); }
+        t.engaged = rate > 0.0 && t.alert > 0.0;
+        if t.engaged {
             exposed = true;
             if !t.contact { t.contact = true; t.contact_t = game.time; }
-            t.react += dt * rate;
-            if t.react >= REACT {
-                t.react = REACT - 1.4;
-                game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
+            // para de andar e gira o corpo para o operador; só atira depois de estar de frente para ele
+            if t.goal.is_some() { t.goal = None; t.moving = false; t.move_cd = 4.0; }
+            let cur = t.fwd.x.atan2(t.fwd.y);
+            let off = ang_diff(dir.x.atan2(dir.y), cur);
+            let step = off.clamp(-TURN * dt, TURN * dt);
+            t.fwd = Vec2::new((cur + step).sin(), (cur + step).cos());
+            if (off - step).abs() < 0.3 { t.react += dt * rate; }
+            if t.react >= react_t {
+                t.react = react_t - follow_t;
                 let src = Vec3::new(t.def.x + t.fwd.x * 0.25, 1.3, t.def.z + t.fwd.y * 0.25);
-                sfx.write(Sfx::EnemyShot(src)); sfx.write(Sfx::Hurt);
-                // o disparo da ameaça aparece: clarão na boca do fuzil e traço até o operador
-                let to = (Vec3::new(p.eye.x, p.eye.y - 0.3, p.eye.z) - Vec3::new(t.def.x, 1.45, t.def.z)).normalize_or_zero();
-                let mz = Vec3::new(t.def.x, 1.45, t.def.z) + Vec3::new(to.x, 0.0, to.z).normalize_or_zero() * 0.72;
-                game.tracers.push((mz, Vec3::new(p.eye.x, p.eye.y - 0.3, p.eye.z) - to * 0.45, 0.1));
+                sfx.write(Sfx::EnemyShot(src));
+                shots_now.push(tp);
+                // o disparo da ameaça aparece: clarão na boca da arma e traço até o operador (ou rente a ele, se errou)
+                let from = Vec3::new(t.def.x, 1.45, t.def.z);
+                let aim = Vec3::new(p.eye.x, p.eye.y - 0.3, p.eye.z);
+                let to = (aim - from).normalize_or_zero();
+                let mz = from + Vec3::new(to.x, 0.0, to.z).normalize_or_zero() * 0.72;
                 puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
-                let seen_now = t.vis;
-                game.toast(if seen_now { "Hit (simulated). The threat had a clear line of fire for too long: identify and neutralize faster." }
-                    else { "Hit (simulated) by a threat you were not looking at. There was uncleared area with a line of fire to you." }, 2, 6.5);
+                // acerta quase sempre o corpo exposto; bem menos a cabeça na quina, o operador distante ou correndo
+                let mut chance: f32 = if body { 0.85 } else { 0.45 };
+                if d > 9.0 { chance *= 0.8; }
+                if p.speed > 2.8 { chance *= 0.8; }
+                // meio segundo de folga depois de um tiro levado: duas ameaças atirando juntas não abatem o operador de uma vez
+                if game.dmg_t > 0.8 { chance = 0.0; }
+                if rand01(game.time * 53.1 + i as f32 * 9.7 + game.stats.shots as f32) < chance {
+                    game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
+                    sfx.write(Sfx::Hurt);
+                    if script { println!("BOT TIRO levado t={:.1} de {} a {:.1} m corpo={} vista={} contato_ha={:.1}s", game.time, t.def.id, d, body, t.vis, game.time - t.contact_t); }
+                    game.tracers.push((mz, aim - to * 0.45, 0.1));
+                    let why = if t.vis { "The threat had a clear line of fire for too long: identify and neutralize faster." }
+                        else { "You were hit by a threat you were not looking at: there was uncleared area with a line of fire to you." };
+                    if !game.demo { game.wounds += 1; }
+                    if game.wounds >= MAX_WOUNDS && !nodeath {
+                        game.down_t = DOWN_SECS; game.down_why = why.to_string(); game.toast = None;
+                    } else {
+                        let left = MAX_WOUNDS.saturating_sub(game.wounds);
+                        let msg = if game.demo || nodeath { format!("Hit (simulated). {}", why) } else { format!("Hit {} of {} (simulated). {} more and the run is over. {}", game.wounds, MAX_WOUNDS, if left == 1 { "One".to_string() } else { left.to_string() }, why) };
+                        game.toast(&msg, 2, 6.5);
+                    }
+                } else {
+                    // errou: o traço passa ao lado da cabeça e o projétil bate na parede atrás do operador
+                    let side = Vec3::new(-to.z, 0.0, to.x) * if rand01(game.time * 17.9 + i as f32) < 0.5 { -0.32 } else { 0.32 };
+                    let md = (aim + side + Vec3::Y * 0.12 - mz).normalize_or_zero();
+                    missed.push((mz, md));
+                }
             }
-        } else { t.react = (t.react - dt * 0.6).max(0.0); }
+        } else { t.react = (t.react - dt * 0.5).max(0.0); }
         if t.contact && t.first_facing.is_none() && game.time - t.contact_t > 0.35 { t.first_facing = Some(t.seen); }
     }
+    for (mz, md) in missed {
+        let end = raycast(&level, &targets, mz, md).map_or(mz + md * 30.0, |h| h.point);
+        game.tracers.push((mz, end, 0.1));
+        sfx.write(Sfx::Impact(end));
+        puff(&mut commands, &fx, &mut smats, end, -md, 3, Color::srgb(0.22, 0.21, 0.19), 1.4, 0.15);
+        if game.toast.is_none() && !game.demo { game.toast("A threat fired at you and missed. Get out of its line of fire or put it down.", 2, 3.0); }
+    }
+    *heard = shots_now;
     // tempo exposto: enquanto alguma ameaça viva tem linha de tiro para o operador
     if exposed { game.expo_now += dt; game.expo_total += dt; } else { game.expo_now = (game.expo_now - dt * 2.0).max(0.0); }
     for (mut tf, tp) in pivots.iter_mut() {

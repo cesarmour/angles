@@ -7,7 +7,7 @@ use bevy::prelude::*;
 pub struct MapReq(pub Option<usize>);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Mode { Menu, Card, Play, Pause, Debrief, Replay, Credits }
+pub enum Mode { Menu, Card, Play, Pause, Debrief, Replay, Credits, Down }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum View { Fp, Bird }
 
@@ -39,14 +39,21 @@ pub struct Game {
     pub coach: Option<(String, u8, f32)>, pub coach_cd: f32, pub warns: [u32; 6], pub flag_flash: bool,
     /// Cômodos já limpos (um bit por zona), quantos cômodos contam, e o carimbo "ROOM CLEAR" em exibição (texto, tempo restante).
     pub cleared: u32, pub rooms: u32, pub stamp: String, pub stamp_t: f32,
+    /// Tiros levados desde o último ponto de retomada (dois encerram a partida), tempo que resta da queda do operador antes
+    /// da tela "OPERATOR DOWN", o motivo mostrado nela e o pedido de guardar o ponto de retomada da lição que começa.
+    pub wounds: u8, pub down_t: f32, pub down_why: String, pub ckpt_req: bool,
 }
+/// Quantos tiros o operador aguenta: no segundo, a partida acaba.
+pub const MAX_WOUNDS: u8 = 2;
+/// Quanto dura a queda do operador abatido, antes de a tela de fim aparecer.
+pub const DOWN_SECS: f32 = 1.3;
 impl Default for Game {
     fn default() -> Self {
         Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: false, flash: true, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
             flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
             bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
-            kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0 }
+            kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -125,6 +132,9 @@ pub struct TargetState {
     /// Ameaça que troca de posição dentro do cômodo: vaga de destino (índice em `slots()`), espera antes de sair, se está
     /// andando, tempo sem conseguir avançar, quantas vezes já se mudou e intervalo até poder se mudar de novo.
     pub goal: Option<usize>, pub wait: f32, pub moving: bool, pub stuck: f32, pub moved: u8, pub move_cd: f32,
+    /// Em alerta (segundos que restam): já viu o operador ou ouviu tiro, e vira para ele assim que tiver linha de tiro.
+    /// `notice` enche enquanto o operador se aproxima por fora do campo de visão dela (0 a 1: em 1 ela percebe).
+    pub alert: f32, pub notice: f32, pub engaged: bool,
 }
 #[derive(Resource, Default)]
 pub struct Targets { pub list: Vec<TargetState>, pub masks: Vec<Vec<u8>> }

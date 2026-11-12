@@ -131,6 +131,12 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
             Tp(3.0, 15.4, 0.0, 0.0), ViewTo(View::Bird), Wait(60), Go(3.0, 13.2, None), Shot("v2"), Go(3.0, 12.4, None), Shot("v3"), Snap("fim"), Quit],
         // tela de créditos (para conferir se o texto cabe)
         "credits" => vec![Wait(120), Credits, Wait(60), Shot("credits"), Quit],
+        // operador parado na frente de uma ameaça até ser abatido; depois tenta de novo
+        "down" => vec![Wait(60), Start(true), Wait(240), Near(false, 1, 3.0), Wait(150), Snap("d1"), Shot("d1"), Wait(100), Snap("d2"), Shot("d2"), Wait(90), Snap("d3"), Shot("d3"), Wait(120), Snap("d4"), Shot("d4"), Wait(600), Snap("d5"), Shot("d5"), Confirm, Wait(240), Snap("d6"), Shot("d6"), Quit],
+        // operador parado atrás de uma ameaça: ela percebe, vira e atira
+        "back" => vec![Wait(60), Start(true), Wait(240), Near(false, 1, -3.0), Wait(60), Snap("b1"), Shot("b1"), Wait(120), Snap("b2"), Shot("b2"), Wait(90), Snap("b3"), Shot("b3"), Wait(90), Snap("b4"), Shot("b4"), Wait(120), Snap("b5"), Shot("b5"), Quit],
+        // o mesmo no tutorial: abatido na lição 2, volta ao começo dela
+        "down2" => vec![Wait(60), Start(false), Wait(40), Confirm, Wait(80), Near(false, 0, 3.0), Wait(900), Snap("t1"), Shot("t1"), Confirm, Wait(120), Snap("t2"), Shot("t2"), Confirm, Wait(120), Snap("t3"), Shot("t3"), Quit],
         "menu" => vec![Wait(200), Shot("menu1"), Wait(400), Shot("menu2"), Wait(400), Shot("menu3"), Quit],
         "demo" => vec![Wait(60), Start(false), Wait(20), DemoOf(1), WaitDemo, DemoOf(2), WaitDemo, DemoOf(3), WaitDemo, DemoOf(4), WaitDemo, DemoOf(5), WaitDemo, Wait(20), Quit],
         _ => {
@@ -292,8 +298,10 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
             if let Some(t) = targets.list.iter().filter(|t| t.def.kind == want && !t.def.passive && t.alive).nth(n) {
                 let tp = Vec2::new(t.def.x, t.def.z);
                 // recua na direção para onde o alvo olha, até onde houver chão livre
-                let d = level.cast_ray(tp.x, tp.y, t.fwd.x, t.fwd.y, dist + 0.4, 1.0);
-                let pos = tp + t.fwd * (d - 0.4).clamp(0.8, dist);
+                // distância negativa: vai para trás do alvo, em vez de para a frente
+                let (sg, dist) = (dist.signum(), dist.abs());
+                let d = level.cast_ray(tp.x, tp.y, t.fwd.x * sg, t.fwd.y * sg, dist + 0.4, 1.0);
+                let pos = tp + t.fwd * sg * (d - 0.4).clamp(0.8, dist);
                 p.pos = pos; p.vel = Vec2::ZERO; p.yaw = (-(tp.x - pos.x)).atan2(-(tp.y - pos.y)); p.pitch = -0.08;
             }
             done = true;

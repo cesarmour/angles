@@ -184,6 +184,9 @@ pub fn cursor_grab(game: Res<Game>, bot: Res<Bot>, keys: Res<ButtonInput<KeyCode
 
 pub fn update_player(time: Res<Time>, c: Res<Controls>, mut p: ResMut<Player>, mut game: ResMut<Game>, level: Res<Level>, tac: Res<Tac>, targets: Res<Targets>, mut sfx: EventWriter<Sfx>) {
     if game.mode != Mode::Play { p.speed = 0.0; return; }
+    // operador abatido: não responde mais aos comandos
+    let dead = Controls::default();
+    let c: &Controls = if game.down_t > 0.0 { &dead } else { &c };
     let dt = time.delta_secs().min(0.05);
     game.time += dt;
     let bird = game.view == View::Bird;
@@ -322,6 +325,13 @@ pub fn update_cameras(
     if let Ok((mut tf, mut proj, mut cam)) = cams.p0().single_mut() {
         tf.translation = p.eye + Vec3::Y * ((p.bob * 3.9).sin() * 0.012 * bob_amt);
         tf.rotation = rot;
+        // operador abatido: a câmera desaba para o chão e tomba de lado
+        let k = if game.mode == Mode::Down { 1.0 } else if game.down_t > 0.0 { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) } else { 0.0 };
+        if k > 0.0 {
+            let e = k * k * (3.0 - 2.0 * k);
+            tf.translation.y += (0.34 - tf.translation.y) * e;
+            tf.rotation = rot * Quat::from_euler(EulerRot::YXZ, 0.0, 0.25 * e, 1.05 * e);
+        }
         if let Projection::Perspective(pp) = proj.as_mut() { pp.fov = (68.0 + (50.0 - 68.0) * a + p.g_lower * 3.0f32).to_radians(); }
         if cam.is_active == bird { cam.is_active = !bird; }
     }

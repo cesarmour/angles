@@ -33,6 +33,13 @@ fn light_log(g: Res<bevy::pbr::GlobalVisibleClusterableObjects>, spots: Query<(E
     if n != last.0 || v != last.1 { println!("BOT LUZES quadro {} total {} focos {:?}", *frame, n, v); *last = (n, v); }
 }
 
+/// Diagnóstico dos testes automáticos: avisa quando a janela recebe pedido de fechar ou o jogo pede para sair.
+fn exit_log(mut close: EventReader<bevy::window::WindowCloseRequested>, mut exit: EventReader<AppExit>, game: Res<state::Game>) {
+    if std::env::var("CQB_SCRIPT").is_err() { return; }
+    for _ in close.read() { println!("BOT JANELA fechada de fora (modo {:?})", game.mode); }
+    for e in exit.read() { println!("BOT SAIDA pedida pelo jogo {:?} (modo {:?})", e, game.mode); }
+}
+
 fn main() {
     if let Ok(dir) = std::env::var("CQB_DUMP") { art::dump(&dir); return; }
     let mut app = App::new();
@@ -46,9 +53,10 @@ fn main() {
         .init_resource::<state::Controls>()
         .init_resource::<bot::Bot>()
         .init_resource::<lessons::DemoSnap>()
+        .init_resource::<lessons::Checkpoint>()
         .init_resource::<state::MapReq>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window { title: "Point of Entry".into(), resolution: { let r = WindowResolution::new(1440.0, 810.0); match std::env::var("CQB_SCALE").ok().and_then(|s| s.parse::<f32>().ok()) { Some(sc) => r.with_scale_factor_override(sc), None => r } }, present_mode: if std::env::var("CQB_NOVSYNC").is_ok() { PresentMode::AutoNoVsync } else { PresentMode::AutoVsync }, ..default() }),
+            primary_window: Some(Window { title: "Point of Entry".into(), resolution: { let r = WindowResolution::new(world::env_f("CQB_W", 1440.0), world::env_f("CQB_H", 810.0)); match std::env::var("CQB_SCALE").ok().and_then(|s| s.parse::<f32>().ok()) { Some(sc) => r.with_scale_factor_override(sc), None => r } }, present_mode: if std::env::var("CQB_NOVSYNC").is_ok() { PresentMode::AutoNoVsync } else { PresentMode::AutoVsync }, ..default() }),
             ..default()
         }).set(bevy::pbr::PbrPlugin { use_gpu_instance_buffer_builder: std::env::var("CQB_CPUB").is_err(), ..default() }))
         .add_plugins(TemporalAntiAliasPlugin)
@@ -60,7 +68,8 @@ fn main() {
             player::update_player, combat::combat, combat::update_fx, player::update_gun, player::update_cameras,
             tactical::tac_update, lessons::update_lessons, lessons::coach_system, lessons::replay_system, tactical::tac_gizmos, lessons::guide_system, ui::update_ui, audio::play_sfx,
         ).chain())
-        .add_systems(Update, (light_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::gun_anim_setup, player::gun_anim_drive, operator::update_operator, operator::fig_system, operator::body_system, operator::hostage_look))
+        .add_systems(Update, (light_log, exit_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::gun_anim_setup, player::gun_anim_drive, operator::update_operator, operator::fig_system, operator::body_system, operator::hostage_look))
         .add_systems(Update, (operator::room_clear_system, operator::threat_move_system).after(tactical::tac_update).before(ui::update_ui))
+        .add_systems(Update, lessons::checkpoint_system.after(lessons::replay_system).before(ui::update_ui))
         .run();
 }

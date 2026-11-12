@@ -123,6 +123,8 @@ pub fn waypoint(c: &Ctx) -> Option<(Vec2, &'static str)> {
 
 pub fn start_lesson(game: &mut Game, tac: &mut Tac, i: usize) {
     game.lesson = i; game.obj = vec![0; LESSONS[i].objs.len()]; game.lesson_end = 0.0; game.ui_dirty = true; game.track.clear(); game.guide_i = 0; game.coach = None; game.guide_t = TIP_SECS; game.lroute_sum = 0.0; game.lroute_t = 0.0;
+    // cada lição começa inteira (sem tiros levados) e vira o ponto de retomada se o operador for abatido nela
+    game.wounds = 0; game.down_t = 0.0; game.ckpt_req = true;
     tac.corner_zone = LESSONS[i].corners;
     game.mode = Mode::Card;
 }
@@ -544,11 +546,49 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
 
 /* ------------------------------------------------------------------ demonstração ------------------------------------------------------------------ */
 
+#[derive(Clone)]
 struct TSnap { alive: bool, fall: f32, fall_v: f32, hits: u8, seen: bool, vis: bool, react: f32, contact: bool, contact_t: f32, first_facing: Option<bool>, sw: f32, swv: f32, landed: bool, marks: usize }
+#[derive(Clone)]
 pub struct Snap { game: Game, p: Player, seen: Vec<u8>, pie: Vec<[u8; 180]>, pct: [f32; MAX_ZONES], doors: Vec<Door>, solids: Vec<Solid>, corners: Vec<Corner>, targets: Vec<TSnap> }
 /// Estado guardado antes da demonstração, devolvido quando ela termina: a demonstração não conta para a lição.
 #[derive(Resource, Default)]
 pub struct DemoSnap(pub Option<Box<Snap>>);
+/// Ponto de retomada do tutorial: o estado no começo da lição atual. `retry` pede para voltar a ele (botão "TRY AGAIN").
+#[derive(Resource, Default)]
+pub struct Checkpoint { pub snap: Option<Box<Snap>>, pub retry: bool }
+
+fn take_snap(game: &Game, p: &Player, tac: &Tac, level: &Level, targets: &Targets) -> Snap {
+    Snap {
+        game: game.clone(), p: p.clone(), seen: tac.seen.clone(), pie: tac.pie.clone(), pct: tac.pct, doors: level.doors.clone(), solids: level.solids.clone(), corners: level.corners.clone(),
+        targets: targets.list.iter().map(|t| TSnap { alive: t.alive, fall: t.fall, fall_v: t.fall_v, hits: t.hits, seen: t.seen, vis: t.vis, react: t.react, contact: t.contact, contact_t: t.contact_t,
+            first_facing: t.first_facing, sw: t.sw, swv: t.swv, landed: t.landed, marks: t.marks.len() }).collect(),
+    }
+}
+fn put_snap(s: Snap, game: &mut Game, p: &mut Player, tac: &mut Tac, level: &mut Level, targets: &mut Targets, commands: &mut Commands) {
+    *game = s.game; *p = s.p;
+    tac.seen = s.seen; tac.pie = s.pie; tac.pct = s.pct; tac.cur.fill(0);
+    level.doors = s.doors; level.solids = s.solids; level.corners = s.corners;
+    for (t, ts) in targets.list.iter_mut().zip(s.targets) {
+        t.alive = ts.alive; t.fall = ts.fall; t.fall_v = ts.fall_v; t.hits = ts.hits; t.seen = ts.seen; t.vis = ts.vis; t.react = ts.react; t.contact = ts.contact; t.contact_t = ts.contact_t;
+        t.first_facing = ts.first_facing; t.sw = ts.sw; t.swv = ts.swv; t.landed = ts.landed;
+        // a ameaça volta a olhar para onde olhava e esquece o operador
+        t.alert = 0.0; t.notice = 0.0; t.engaged = false; t.goal = None; t.moving = false;
+        crate::combat::place_target(level, t);
+        while t.marks.len() > ts.marks { if let Some(m) = t.marks.pop() { commands.entity(m).despawn(); } }
+    }
+}
+
+/// Guarda o ponto de retomada quando uma lição começa e volta a ele quando o jogador pede para tentar de novo.
+pub fn checkpoint_system(mut game: ResMut<Game>, mut p: ResMut<Player>, mut tac: ResMut<Tac>, mut level: ResMut<Level>, mut targets: ResMut<Targets>, mut ck: ResMut<Checkpoint>, mut commands: Commands) {
+    if game.ckpt_req && !game.demo {
+        game.ckpt_req = false;
+        ck.snap = if game.free { None } else { Some(Box::new(take_snap(&game, &p, &tac, &level, &targets))) };
+    }
+    if ck.retry {
+        ck.retry = false;
+        if let Some(s) = ck.snap.clone() { put_snap(*s, &mut game, &mut p, &mut tac, &mut level, &mut targets, &mut commands); game.ui_dirty = true; }
+    }
+}
 
 /// Modo demonstração: o operador percorre sozinho o traçado ideal da lição, visto de cima e com a visão tática ligada.
 #[allow(clippy::too_many_arguments)]
@@ -557,11 +597,7 @@ pub fn demo_system(time: Res<Time>, mut game: ResMut<Game>, mut p: ResMut<Player
     if game.demo_req {
         game.demo_req = false;
         if ideal(game.lesson).is_empty() || game.demo { return; }
-        snap.0 = Some(Box::new(Snap {
-            game: game.clone(), p: p.clone(), seen: tac.seen.clone(), pie: tac.pie.clone(), pct: tac.pct, doors: level.doors.clone(), solids: level.solids.clone(), corners: level.corners.clone(),
-            targets: targets.list.iter().map(|t| TSnap { alive: t.alive, fall: t.fall, fall_v: t.fall_v, hits: t.hits, seen: t.seen, vis: t.vis, react: t.react, contact: t.contact, contact_t: t.contact_t,
-                first_facing: t.first_facing, sw: t.sw, swv: t.swv, landed: t.landed, marks: t.marks.len() }).collect(),
-        }));
+        snap.0 = Some(Box::new(take_snap(&game, &p, &tac, &level, &targets)));
         p.vel = Vec2::ZERO; p.lean = 0.0; p.crouching = false; p.mag = p.def().mag; p.reloading = false; p.switch_to = None; p.pitch = -0.04;
         game.mode = Mode::Play; game.demo = true; game.demo_end = false; game.demo_idle = 0.0; game.view = View::Bird; game.tac = true; game.toast = None; game.coach = None; game.guide_i = 0; game.ui_dirty = true;
         bot.demo_q = crate::bot::steps_cmds(game.lesson, true).into();
@@ -577,17 +613,7 @@ pub fn demo_system(time: Res<Time>, mut game: ResMut<Game>, mut p: ResMut<Player
     if bot.demo_q.is_empty() { game.demo_idle += time.delta_secs().min(0.05); }
     if !(game.demo_end || game.demo_idle > 2.5 || game.mode != Mode::Play) { return; }
     if bot.active { println!("BOT demo L{}: obj={:?} atingido={} fatias={:?}", game.lesson, game.obj, game.stats.hits_taken, (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>()); }
-    if let Some(s) = snap.0.take() {
-        let s = *s;
-        *game = s.game; *p = s.p;
-        tac.seen = s.seen; tac.pie = s.pie; tac.pct = s.pct; tac.cur.fill(0);
-        level.doors = s.doors; level.solids = s.solids; level.corners = s.corners;
-        for (t, ts) in targets.list.iter_mut().zip(s.targets) {
-            t.alive = ts.alive; t.fall = ts.fall; t.fall_v = ts.fall_v; t.hits = ts.hits; t.seen = ts.seen; t.vis = ts.vis; t.react = ts.react; t.contact = ts.contact; t.contact_t = ts.contact_t;
-            t.first_facing = ts.first_facing; t.sw = ts.sw; t.swv = ts.swv; t.landed = ts.landed;
-            while t.marks.len() > ts.marks { if let Some(m) = t.marks.pop() { commands.entity(m).despawn(); } }
-        }
-    }
+    if let Some(s) = snap.0.take() { put_snap(*s, &mut game, &mut p, &mut tac, &mut level, &mut targets, &mut commands); }
     game.mode = Mode::Card; game.demo = false; game.demo_req = false; game.demo_end = false; game.ui_dirty = true;
     bot.demo_q.clear(); bot.n = 0; bot.hold_ads = false; bot.hold_lean = 0.0; bot.hold_crouch = false;
 }

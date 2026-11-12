@@ -97,6 +97,8 @@ fn add(a: &mut Assets<AudioSource>, s: &[f32], p: f32) -> H { a.add(wav(s, p)) }
 fn pair(a: &mut Assets<AudioSource>, s: &[f32], p: f32) -> Pair { [a.add(wav(s, p)), a.add(wav(&lowpass(s, 520.0), p * 0.6))] }
 
 pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
+    // testes automáticos rodam mudos (CQB_MUTE): o volume geral vai a zero e nenhum som toca
+    if std::env::var("CQB_MUTE").map_or(false, |v| !v.is_empty()) { commands.insert_resource(GlobalVolume::new(Volume::Linear(0.0))); }
     // disparo: gravação de .45 de perto, reforçada no grave e com a cauda do ambiente
     let mut base = pad(&clip!("tiro_1"), 1.5);
     tone(&mut base, 0.0, 0.17, 150.0, 44.0, 0.55, false);

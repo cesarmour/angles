@@ -187,7 +187,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         }
         // ameaça: mira quando tem o operador na linha de tiro e anda quando troca de posição. Refém: baixa os braços quando
         // o cômodo dela está limpo (área já vista e nenhuma ameaça viva lá dentro).
-        let want: u8 = if a.aim.is_some() { if t.react > 0.04 { 1 } else if t.moving && a.walk.is_some() { 2 } else { 0 } } else if a.relax.is_some() {
+        let want: u8 = if a.aim.is_some() { if t.react > 0.04 || t.engaged { 1 } else if t.moving && a.walk.is_some() { 2 } else { 0 } } else if a.relax.is_some() {
             let zi = crate::map::zone_index(t.def.zone);
             (tac.pct.get(zi).map_or(false, |p| *p >= 0.9) && !targets.list.iter().any(|o| o.alive && !o.off && o.def.kind == crate::map::TKind::Threat && o.def.zone == t.def.zone)) as u8
         } else { 0 };
@@ -226,13 +226,11 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
             continue;
         }
         f.fell = false;
+        // a ameaça gira o corpo para onde está olhando (quem decide é o combate: ela vira para o operador antes de atirar)
         let mut want = 0.0;
-        if f.threat && t.react > 0.04 {
-            let dv = p.pos - Vec2::new(t.def.x, t.def.z);
-            want = (dv.x * t.fwd.y - dv.y * t.fwd.x).atan2(dv.dot(t.fwd));
-        }
+        if f.threat { want = crate::map::ang_diff(t.fwd.x.atan2(t.fwd.y), (t.def.fx - t.def.x).atan2(t.def.fz - t.def.z)); }
         let (cur, _, _) = tf.rotation.to_euler(EulerRot::YXZ);
-        tf.rotation = Quat::from_rotation_y(crate::map::damp(cur, want, 7.0, dt));
+        tf.rotation = Quat::from_rotation_y(cur + crate::map::ang_diff(want, cur) * (1.0 - (-16.0 * dt).exp()));
     }
 }
 
@@ -356,7 +354,7 @@ pub fn threat_move_system(time: Res<Time>, game: Res<Game>, level: Res<crate::ma
         for i in 0..n {
             let pick = {
                 let t = &targets.list[i];
-                if !t.alive || t.off || t.def.passive || t.def.kind != TKind::Threat || t.goal.is_some() || t.moved >= 2 || t.move_cd > 0.0 || t.vis || t.react > 0.04 { None }
+                if !t.alive || t.off || t.def.passive || t.def.kind != TKind::Threat || t.goal.is_some() || t.moved >= 2 || t.move_cd > 0.0 || t.vis || t.react > 0.04 || t.engaged { None }
                 else if rnd(now * 71.3 + i as f32 * 13.7) > 0.4 { None }
                 else {
                     let here = Vec2::new(t.def.x, t.def.z);
@@ -376,7 +374,7 @@ pub fn threat_move_system(time: Res<Time>, game: Res<Game>, level: Res<crate::ma
         if t.move_cd > 0.0 { t.move_cd -= dt; }
         let Some(g) = t.goal else { t.moving = false; continue };
         // derrubada, ou já de olho no operador: fica onde está
-        if !t.alive || t.react > 0.25 { t.goal = None; t.moving = false; t.move_cd = 4.0; continue; }
+        if !t.alive || t.react > 0.25 || t.engaged { t.goal = None; t.moving = false; t.move_cd = 4.0; continue; }
         if t.wait > 0.0 { t.wait -= dt; continue; }
         let s = slots()[g];
         let (pos, goal) = (Vec2::new(t.def.x, t.def.z), Vec2::new(s.1, s.2));
