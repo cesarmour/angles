@@ -258,5 +258,35 @@
     "pagina_origem": "https://freesound.org/people/WasabiWielder/sounds/334219/",
     "url_baixada": "https://cdn.freesound.org/previews/334/334219_4290188-hq.mp3",
     "descricao": "Farfalhar de roupas perto do gravador (Zoom Q4). Título original: \"Clothes Rustling 1\". Arquivo é a prévia HQ em mp3 do Freesound."
+  },
+  {
+    "arquivo": "tiro_fuzil_1.mp3",
+    "categoria": "tiro",
+    "duracao_s": 0.63,
+    "licenca": "CC0 1.0",
+    "autor": "qubodup",
+    "pagina_origem": "https://freesound.org/people/qubodup/sounds/854231/",
+    "url_baixada": "https://cdn.freesound.org/previews/854/854231_71257-hq.mp3",
+    "descricao": "Disparo único de fuzil M4A1 em estande. Título original: \"M4A1 Rifle Shot 10\". Arquivo é a prévia HQ em mp3 do Freesound."
+  },
+  {
+    "arquivo": "tiro_fuzil_2.mp3",
+    "categoria": "tiro",
+    "duracao_s": 0.72,
+    "licenca": "CC0 1.0",
+    "autor": "GeneralSigma",
+    "pagina_origem": "https://freesound.org/people/GeneralSigma/sounds/515322/",
+    "url_baixada": "https://cdn.freesound.org/previews/515/515322_11324935-hq.mp3",
+    "descricao": "Disparo único de AR-15, editado a partir de gravação de SuperPhat (freesound 432366). Título original: \"AR15 - Single Shot\"."
+  },
+  {
+    "arquivo": "voz_parado.mp3",
+    "categoria": "voz",
+    "duracao_s": 1.29,
+    "licenca": "CC0 1.0",
+    "autor": "cejordi84",
+    "pagina_origem": "https://freesound.org/people/cejordi84/sounds/217231/",
+    "url_baixada": "https://cdn.freesound.org/previews/217/217231_3270296-hq.mp3",
+    "descricao": "Grito \"Freeze!\" gravado em estúdio. Título original: \"Freeze 2.mp3\"."
   }
 ]

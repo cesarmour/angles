@@ -11,11 +11,11 @@ Change VERSION / SIZE below when a new release goes out.
 import base64, mimetypes, pathlib, re
 
 HERE = pathlib.Path(__file__).parent
-VERSION = "0.4.0"
-SIZE = "77 MB"
+VERSION = "0.5.0"
+SIZE = "90 MB"
 REPO = "https://github.com/cesarmour/point-of-entry"
 DOWNLOAD = f"{REPO}/releases/download/v{VERSION}/PointOfEntry-mac.zip"
-DESCRIPTION = ("Point of Entry is a free CQB teaching simulator for Mac: a shoot house with cardboard targets "
+DESCRIPTION = ("Point of Entry is a free CQB teaching simulator for Mac: a shoot house with armed threats, hostages "
                "and a tactical view that measures slicing the pie in degrees and centimetres.")
 
 

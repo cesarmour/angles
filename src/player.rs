@@ -33,8 +33,6 @@ pub const FLASH_LUMENS: f32 = 700_000.0;
 /// Arquivos de onde vêm os clipes de cada arma, para lê-los pelo nome.
 #[derive(Resource)] pub struct GunGltfs(pub Vec<Handle<Gltf>>);
 #[derive(Component)] pub struct Body;
-/// Perna do operador visto de cima (+1 ou -1): balança no passo.
-#[derive(Component)] pub struct BodyLeg(pub f32);
 #[derive(Component)] pub struct Flashlight;
 #[derive(Component)] pub struct MuzzleLight;
 /// Textura em que a câmera do minimapa desenha; a interface a exibe.
@@ -118,22 +116,15 @@ pub fn setup_player(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mu
     let mz = commands.spawn((Transform::from_translation(WEAPONS[0].muzzle), Muzzle)).id();
     commands.entity(g).add_child(mz);
 
-    /* --- corpo do operador nas vistas de cima: desenho visto de cima (capacete, colete, braços na pistola) e botas que alternam no passo.
-       O corpo não projeta sombra: a sombra de um corpo simplificado deformava no chão e piscava no facho da lanterna.
-       O desenho já traz uma sombra de contato suave. --- */
+    /* --- corpo do operador nas vistas de cima: o mesmo boneco 3D dos demais, de preto, com a pistola; só as câmeras de cima
+       o enxergam (camada L_BODY). No arquivo ele olha para +Z; aqui a frente é -Z. --- */
     let body = commands.spawn((Transform::from_xyz(3.0, 0.0, 15.4), Visibility::default(), Body)).id();
-    let flat_q = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
-    let sprite = |smats: &mut Assets<StandardMaterial>, img: Handle<Image>| smats.add(StandardMaterial { base_color_texture: Some(img), alpha_mode: AlphaMode::Blend, perceptual_roughness: 1.0, reflectance: 0.05, cull_mode: None, ..default() });
-    let op = sprite(&mut smats, images.add(crate::art::svg_image(&crate::art::operator_svg(), crate::art::OP_PX, crate::art::OP_PX, true)));
-    let e = part(&mut commands, body, meshes.add(Rectangle::new(crate::art::OP_M, crate::art::OP_M)), &op, Transform::from_xyz(0.0, 1.8, -crate::art::OP_BACK * 1.18).with_rotation(flat_q).with_scale(Vec3::splat(1.18)));
-    commands.entity(e).insert((RenderLayers::layer(L_BODY), bevy::pbr::NotShadowCaster, bevy::pbr::NotShadowReceiver));
-    let boot_m = sprite(&mut smats, images.add(crate::art::svg_image(&crate::art::boot_svg(), 96, 192, true)));
-    for (side, x, z) in [(1.0f32, -0.13, -0.1), (-1.0, 0.13, 0.09)] {
-        let leg = commands.spawn((Transform::IDENTITY, Visibility::default(), BodyLeg(side))).id();
-        commands.entity(body).add_child(leg);
-        let e = part(&mut commands, leg, meshes.add(Rectangle::new(0.16, 0.32)), &boot_m, Transform::from_xyz(x, 0.14, z - 0.03).with_rotation(flat_q));
-        commands.entity(e).insert((RenderLayers::layer(L_BODY), bevy::pbr::NotShadowCaster, bevy::pbr::NotShadowReceiver));
-    }
+    let fig = commands.spawn((
+        SceneRoot(asset.load(GltfAssetLabel::Scene(0).from_asset("models/player.glb"))),
+        Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)), Visibility::default(),
+        crate::operator::BodyScene(asset.load("models/player.glb")),
+    )).id();
+    commands.entity(body).add_child(fig);
 
     commands.spawn((
         SpotLight { color: Color::srgb(0.95, 0.97, 1.0), intensity: 0.0, range: 40.0, radius: 0.01, shadows_enabled: std::env::var("CQB_SOMBRAS").is_ok(), outer_angle: 0.42, inner_angle: 0.16, shadow_map_near_z: 0.6, shadow_depth_bias: env_f("CQB_FDB", 0.02), shadow_normal_bias: env_f("CQB_FNB", 1.8), ..default() },
@@ -511,10 +502,4 @@ pub fn gun_anim_drive(anims: Res<GunAnims>, p: Res<Player>, game: Res<Game>, mut
         if want == a.idle && a.idle_frozen { x.set_speed(0.0); } else { x.repeat(); }
         st.cur = Some(want); st.once = false;
     }
-}
-
-/// Passada do operador nas vistas de cima: as pernas alternam conforme a distância andada.
-pub fn body_anim(p: Res<Player>, mut legs: Query<(&mut Transform, &BodyLeg)>) {
-    let sw = (p.bob * 3.9).sin() * 0.17 * (p.speed / 1.6).min(1.0);
-    for (mut tf, l) in &mut legs { tf.translation.z = l.0 * sw; }
 }

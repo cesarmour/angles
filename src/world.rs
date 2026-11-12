@@ -139,11 +139,12 @@ pub struct DoorLeaf(pub usize);
 #[derive(Component)]
 pub struct NoShadowScene;
 
-pub fn no_shadow_children(mut commands: Commands, added: Query<Entity, Added<Mesh3d>>, parents: Query<&ChildOf>, marked: Query<(), With<NoShadowScene>>, portrait: Query<(), With<crate::operator::PortraitScene>>) {
+pub fn no_shadow_children(mut commands: Commands, added: Query<Entity, Added<Mesh3d>>, parents: Query<&ChildOf>, marked: Query<(), With<NoShadowScene>>, portrait: Query<(), With<crate::operator::PortraitScene>>, body: Query<(), With<crate::operator::BodyScene>>) {
     for e in &added {
         let mut cur = e;
         for _ in 0..24 {
             if portrait.get(cur).is_ok() { commands.entity(e).insert((NotShadowCaster, RenderLayers::layer(L_PORTRAIT))); break; }
+            if body.get(cur).is_ok() { commands.entity(e).insert((NotShadowCaster, RenderLayers::layer(L_BODY))); break; }
             if marked.get(cur).is_ok() { commands.entity(e).insert((NotShadowCaster, RenderLayers::layer(L_FP))); break; }
             match parents.get(cur) { Ok(p) => cur = p.parent(), Err(_) => break }
         }
@@ -157,7 +158,7 @@ pub fn tame_materials(mut ev: EventReader<AssetEvent<StandardMaterial>>, mut mat
         let Some(path) = asset.get_path(id) else { continue };
         // operador do menu: tecido preto sem o brilho de plástico que a luz de estúdio dava
         let name = path.path().to_string_lossy();
-        if name.contains("operator.glb") || name.contains("threat.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.16; } }
+        if name.contains("operator.glb") || name.contains("threat.glb") || name.contains("player.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.16; } }
         if name.contains("hostage.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.25; } }
         if path.path().to_string_lossy().contains("metal_office_desk") {
             if let Some(m) = mats.get_mut(id) { m.base_color = Color::srgb(0.3, 0.31, 0.32); m.perceptual_roughness = 1.0; m.metallic = 0.0; m.metallic_roughness_texture = None; m.reflectance = 0.15; }

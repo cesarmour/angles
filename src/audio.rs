@@ -89,7 +89,7 @@ type H = Handle<AudioSource>;
 type Pair = [H; 2];
 #[derive(Resource)]
 pub struct Sounds {
-    shot_room: H, shot_corr: H, enemy: Pair, dry: H, click: H, reload: H, steps: Vec<H>, casing: Vec<H>, impact: Vec<Pair>, metal: Pair,
+    shot_room: H, shot_corr: H, rifle_room: H, rifle_corr: H, voice: Vec<H>, enemy: Pair, dry: H, click: H, reload: H, steps: Vec<H>, casing: Vec<H>, impact: Vec<Pair>, metal: Pair,
     paper: Pair, thwack: Pair, fall: Pair, door: Pair, rustle: H, good: H, bad: H, hurt: H, ui: H, n: u32,
 }
 
@@ -103,6 +103,15 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
     let shot_room = reverb(&base, 0.5, 0.85);
     let shot_corr = reverb(&mix(&base, &clip!("tiro_3"), 0.4), 0.8, 1.5);
     let enemy = reverb(&pad(&clip!("tiro_2"), 1.2), 0.7, 1.1);
+    // fuzil: gravação de M4 em estande somada a um AR-15 de perto; estalo mais seco e cauda mais longa que a pistola
+    let mut rbase = pad(&mix(&clip!("tiro_fuzil_1"), &clip!("tiro_fuzil_2"), 0.55), 1.6);
+    tone(&mut rbase, 0.0, 0.12, 190.0, 60.0, 0.4, false);
+    let rifle_room = reverb(&rbase, 0.55, 0.95);
+    let rifle_corr = reverb(&rbase, 0.85, 1.6);
+    // fala: o grito "Freeze!" ao dar de cara com um refém
+    let norm = |x: &[f32], peak: f32| -> Vec<f32> { let m = x.iter().fold(0.0f32, |a, v| a.max(v.abs())).max(1e-6); x.iter().map(|v| v / m * peak).collect() };
+    let fz = clip!("voz_parado");
+    let v_freeze = reverb(&pad(&norm(&fz[((0.42 * SR) as usize).min(fz.len())..], 0.9), 0.4), 0.22, 0.6);
     let steps: Vec<Vec<f32>> = [clip!("passo_0"), clip!("passo_1"), clip!("passo_2"), clip!("passo_3"), clip!("passo_4"), clip!("passo_5")].iter().map(|s| reverb(&pad(s, 0.2), 0.18, 0.5)).collect();
     let casing: Vec<Vec<f32>> = [clip!("capsula_0"), clip!("capsula_1"), clip!("capsula_2"), clip!("capsula_3")].iter().map(|s| reverb(&pad(s, 0.3), 0.25, 0.6)).collect();
     let imp1 = reverb(&pad(&clip!("impacto_1"), 0.5), 0.35, 0.7);
@@ -133,7 +142,8 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
     };
     let ui = { let mut b = buf(0.08); tone(&mut b, 0.0, 0.04, 1400.0, 1400.0, 0.5, false); b };
     let sounds = Sounds {
-        shot_room: add(&mut a, &shot_room, 0.97), shot_corr: add(&mut a, &shot_corr, 0.97), enemy: pair(&mut a, &enemy, 0.95), dry: add(&mut a, &clip!("seco_1"), 0.6), click: add(&mut a, &clip!("interruptor_1"), 0.5),
+        shot_room: add(&mut a, &shot_room, 0.97), shot_corr: add(&mut a, &shot_corr, 0.97), rifle_room: add(&mut a, &rifle_room, 0.97), rifle_corr: add(&mut a, &rifle_corr, 0.97),
+        voice: vec![add(&mut a, &v_freeze, 0.85)], enemy: pair(&mut a, &enemy, 0.95), dry: add(&mut a, &clip!("seco_1"), 0.6), click: add(&mut a, &clip!("interruptor_1"), 0.5),
         reload: add(&mut a, &reload, 0.7), steps: steps.iter().map(|s| add(&mut a, s, 0.7)).collect(), casing: casing.iter().map(|s| add(&mut a, s, 0.45)).collect(),
         impact: vec![pair(&mut a, &imp1, 0.8), pair(&mut a, &imp3, 0.8)], metal: pair(&mut a, &metal, 0.8), paper: pair(&mut a, &paper, 0.7), thwack: pair(&mut a, &thwack, 0.85), fall: pair(&mut a, &fall, 0.85), door: pair(&mut a, &door, 0.85),
         rustle: add(&mut a, &gain(&clip!("roupa_1"), 1.0)[..(0.6 * SR) as usize], 0.35), good: add(&mut a, &good, 0.35), bad: add(&mut a, &bad, 0.3), hurt: add(&mut a, &hurt, 0.6), ui: add(&mut a, &ui, 0.25), n: 0,
@@ -151,6 +161,8 @@ pub fn play_sfx(mut ev: EventReader<Sfx>, mut s: ResMut<Sounds>, mut commands: C
         let hid = |q: Vec3| if level.los(p.eye.x, p.eye.z, p.eye.y, q.x, q.z, q.y.max(0.6)) { 0 } else { 1 };
         let (h, vol, pos): (H, f32, Option<Vec3>) = match *e {
             Sfx::Shot => (if corridor { s.shot_corr.clone() } else { s.shot_room.clone() }, 1.0, None),
+            Sfx::Rifle => (if corridor { s.rifle_corr.clone() } else { s.rifle_room.clone() }, 1.0, None),
+            Sfx::Voice(i) => (s.voice[(i as usize).min(s.voice.len() - 1)].clone(), 0.9, None),
             Sfx::EnemyShot(q) => (s.enemy[hid(q)].clone(), 1.7, Some(q)),
             Sfx::Dry => (s.dry.clone(), 0.8, None),
             Sfx::Click => (s.click.clone(), 0.7, None),

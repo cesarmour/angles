@@ -37,6 +37,8 @@ pub struct Game {
     pub expo_now: f32, pub expo_total: f32,
     /// Aviso de técnica em exibição (texto, tipo 1 = acerto / 2 = correção, tempo restante), intervalo mínimo e contagem por tipo.
     pub coach: Option<(String, u8, f32)>, pub coach_cd: f32, pub warns: [u32; 6], pub flag_flash: bool,
+    /// Cômodos já limpos (um bit por zona), quantos cômodos contam, e o carimbo "ROOM CLEAR" em exibição (texto, tempo restante).
+    pub cleared: u32, pub rooms: u32, pub stamp: String, pub stamp_t: f32,
 }
 impl Default for Game {
     fn default() -> Self {
@@ -44,7 +46,7 @@ impl Default for Game {
             flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
             bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
-            kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false }
+            kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0 }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -120,6 +122,9 @@ pub struct TargetState {
     pub def: TargetDef, pub alive: bool, pub fall: f32, pub hits: u8, pub seen: bool, pub vis: bool, pub react: f32,
     pub contact: bool, pub contact_t: f32, pub first_facing: Option<bool>, pub fwd: Vec2, pub fall_dir: f32, pub fall_max: f32,
     pub pivot: Entity, pub board: Entity, pub mask: usize, pub marks: Vec<Entity>, pub fall_v: f32, pub sw: f32, pub swv: f32, pub landed: bool, pub root: Entity, pub off: bool,
+    /// Ameaça que troca de posição dentro do cômodo: vaga de destino (índice em `slots()`), espera antes de sair, se está
+    /// andando, tempo sem conseguir avançar, quantas vezes já se mudou e intervalo até poder se mudar de novo.
+    pub goal: Option<usize>, pub wait: f32, pub moving: bool, pub stuck: f32, pub moved: u8, pub move_cd: f32,
 }
 #[derive(Resource, Default)]
 pub struct Targets { pub list: Vec<TargetState>, pub masks: Vec<Vec<u8>> }
@@ -130,7 +135,7 @@ impl Targets {
 
 /// Eventos sonoros disparados pela simulação.
 #[derive(Event, Clone, Copy)]
-pub enum Sfx { Shot, EnemyShot(Vec3), Dry, Click, Reload, Step(bool), Impact(Vec3), Metal(Vec3), Paper(Vec3), Thwack(Vec3), Fall(Vec3), Door(Vec3), Casing(Vec3), Good, Bad, Hurt, Ui, Rustle }
+pub enum Sfx { Shot, Rifle, Voice(u8), EnemyShot(Vec3), Dry, Click, Reload, Step(bool), Impact(Vec3), Metal(Vec3), Paper(Vec3), Thwack(Vec3), Fall(Vec3), Door(Vec3), Casing(Vec3), Good, Bad, Hurt, Ui, Rustle }
 
 /// Uma arma de primeira pessoa: modelo, clipes de animação e números de jogo.
 /// Medidas em metros no espaço da câmera (X direita, Y cima, -Z frente), relativas à pose em que o autor do modelo deixou a arma.

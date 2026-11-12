@@ -60,6 +60,7 @@ fn main() {
             player::update_player, combat::combat, combat::update_fx, player::update_gun, player::update_cameras,
             tactical::tac_update, lessons::update_lessons, lessons::coach_system, lessons::replay_system, tactical::tac_gizmos, lessons::guide_system, ui::update_ui, audio::play_sfx,
         ).chain())
-        .add_systems(Update, (light_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::gun_anim_setup, player::gun_anim_drive, player::body_anim, operator::update_operator, operator::fig_system))
+        .add_systems(Update, (light_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::gun_anim_setup, player::gun_anim_drive, operator::update_operator, operator::fig_system, operator::body_system, operator::hostage_look))
+        .add_systems(Update, (operator::room_clear_system, operator::threat_move_system).after(tactical::tac_update).before(ui::update_ui))
         .run();
 }

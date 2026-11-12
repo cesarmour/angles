@@ -14,7 +14,7 @@ const AMBER: Color = Color::srgb(0.949, 0.698, 0.227);
 const GOOD: Color = Color::srgb(0.435, 0.835, 0.557);
 const BAD: Color = Color::srgb(1.0, 0.353, 0.31);
 const CYAN: Color = Color::srgb(0.376, 0.839, 0.91);
-const PANEL: Color = Color::srgba(0.035, 0.05, 0.055, 0.8);
+const PANEL: Color = Color::srgba(0.035, 0.05, 0.055, 0.92);
 const SCREEN: Color = Color::srgba(0.02, 0.03, 0.035, 0.88);
 
 #[derive(Resource)]
@@ -27,7 +27,7 @@ pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8),
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
-    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait,
+    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText,
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8) }
@@ -36,7 +36,7 @@ pub struct ResetGame { pub free: bool, pub mission2: bool }
 
 /// A fonte da interface (Rajdhani) tem letras mais baixas que a anterior: compensa no tamanho.
 const FS: f32 = 1.1;
-const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, CosmoX45, discofield, dslrguide, florianreichelt, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nFIRST-PERSON WEAPONS (CC BY 4.0, sketchfab.com)   Pistol and gloves: \"AnimatedPistol\" by JUST  ·  Rifle: \"SCAR\" by JUST, rifle mesh by DelthorGames\n\nOPERATOR AND THREATS (CC BY 4.0)   \"FSB Operator\" by Mateusz Wolinski (jeandiz), with AKS-74u by N-GONE and clothing pieces by ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess  ·  changed for this game: recoloured, insignia and goggles removed, the threat carries the pistol above, aiming, recoil and falling clips added, mesh and textures reduced\n\nHOSTAGE (CC BY-NC 4.0, non-commercial)   \"Women in jeans\" by aribb  ·  changed for this game: hands-up pose, idle and falling clips, mesh and textures reduced\n\nLEVELS, PRACTICE TARGET, TOP-DOWN OPERATOR ART, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
+const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, cejordi84, CosmoX45, discofield, dslrguide, florianreichelt, GeneralSigma, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, qubodup, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nFIRST-PERSON WEAPONS (CC BY 4.0, sketchfab.com)   Pistol and gloves: \"AnimatedPistol\" by JUST  ·  Rifle: \"SCAR\" by JUST, rifle mesh by DelthorGames\n\nOPERATOR AND THREATS (CC BY 4.0)   \"FSB Operator\" by Mateusz Wolinski (jeandiz), with AKS-74u by N-GONE and clothing pieces by ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess  ·  changed for this game: recoloured, insignia and goggles removed, sunglasses added, the threat carries the pistol above, mesh and textures reduced\n\nHOSTAGE (CC BY-NC 4.0, non-commercial)   \"Women in jeans\" by aribb  ·  changed for this game: hands-up pose, recoloured clothes and hair, mesh and textures reduced\n\nCHARACTER ANIMATION   Adobe Mixamo (mixamo.com), applied to the models above  ·  recoil and hands-up poses made for this project\n\nLEVELS, PRACTICE TARGET, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
 fn txt(s: &str, font: &Handle<Font>, size: f32, color: Color) -> (Text, TextFont, TextColor) {
     (Text::new(s), TextFont { font: font.clone(), font_size: size * FS, ..default() }, TextColor(color))
 }
@@ -142,6 +142,11 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
                 r.spawn(txt("OPEN DOOR", &f.semi, 18.0, BONE));
             });
         });
+        // carimbo de cômodo limpo: grande, no terço de cima da tela, por poucos segundos
+        h.spawn((Node { width: Val::Percent(100.0), top: Val::Percent(27.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::Stamp)).with_children(|c| {
+            c.spawn((Node { padding: UiRect::axes(Val::Px(22.0), Val::Px(6.0)), border: UiRect::all(Val::Px(2.5)), ..default() }, BorderColor(GOOD), BackgroundColor(Color::srgba(0.02, 0.06, 0.04, 0.55))))
+                .with_children(|t| { t.spawn((txt("", &f.bold, 34.0, GOOD), Tag::StampText)); });
+        });
         h.spawn((Node { width: Val::Percent(100.0), top: Val::Percent(17.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::Toast)).with_children(|c| {
             c.spawn((Node { max_width: Val::Px(580.0), padding: UiRect::axes(Val::Px(14.0), Val::Px(9.0)), border: UiRect::top(Val::Px(2.0)), ..default() }, BackgroundColor(PANEL), BorderColor(AMBER)))
                 .with_children(|t| { t.spawn((txt("", &f.body, 15.5, BONE), Tag::ToastText)); });
@@ -178,7 +183,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
 
     /* ---------- telas ---------- */
     // operador 3D à direita no menu e na avaliação (desenhado pela câmera do estúdio, fundo transparente)
-    commands.spawn((ImageNode::new(portrait.0.clone()), Node { position_type: PositionType::Absolute, right: Val::Px(36.0), bottom: Val::Px(0.0), width: Val::Px(530.0), height: Val::Px(795.0), display: Display::None, ..default() },
+    commands.spawn((ImageNode::new(portrait.0.clone()), Node { position_type: PositionType::Absolute, right: Val::Px(10.0), bottom: Val::Px(0.0), width: Val::Px(540.0), height: Val::Px(810.0), display: Display::None, ..default() },
         GlobalZIndex(6), bevy::ui::FocusPolicy::Pass, Tag::Portrait));
     commands.spawn(screen(Tag::Menu)).with_children(|s| {
         s.spawn(txt("CLOSE-QUARTERS BATTLE SIMULATOR · TUTORIAL", &f.semi, 14.0, AMBER));
@@ -330,7 +335,7 @@ pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: R
             }
         }
         crate::combat::place_target(&level, t);
-        t.alive = true; t.fall = 0.0; t.fall_v = 0.0; t.sw = 0.0; t.swv = 0.0; t.landed = false; t.hits = 0; t.seen = false; t.vis = false; t.react = 0.0; t.contact = false; t.first_facing = None;
+        t.alive = true; t.fall = 0.0; t.fall_v = 0.0; t.sw = 0.0; t.swv = 0.0; t.landed = false; t.hits = 0; t.seen = false; t.vis = false; t.react = 0.0; t.contact = false; t.first_facing = None; t.goal = None; t.wait = 0.0; t.moving = false; t.stuck = 0.0; t.moved = 0; t.move_cd = 0.0;
         // na missão 2 o operador começa dentro da Sala C: os alvos dela ficam fora
         t.off = m2 && t.def.zone == "C";
         if t.off { t.alive = false; t.fall = 1.0; t.landed = true; }
@@ -425,6 +430,7 @@ pub fn update_ui(
                 });
             }
             Tag::Toast => show(&mut node, toast_on),
+            Tag::Stamp => show(&mut node, play && game.stamp_t > 0.0),
             Tag::Coach => show(&mut node, play && game.coach.is_some()),
             Tag::DemoBar => show(&mut node, game.demo),
             Tag::LessonBox => show(&mut node, !game.hide_box),
@@ -472,17 +478,24 @@ pub fn update_ui(
                 commands.entity(e).with_children(|l| {
                     let mut line = |l: &mut ChildSpawnerCommands, state: u8, text: &str, live: Option<String>| {
                         let col = match state { 1 => MUTE, 2 => BAD, _ => BONE };
-                        l.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::FlexStart, ..default() }).with_children(|r| {
-                            r.spawn((Node { width: Val::Px(13.0), height: Val::Px(13.0), margin: UiRect::top(Val::Px(3.0)), border: UiRect::all(Val::Px(1.5)), flex_shrink: 0.0, ..default() },
+                        // o espaço entre o quadradinho e o texto é margem do próprio quadradinho: com o contador à direita
+                        // (margem automática), o espaçamento entre colunas da linha sumia e o quadradinho colava no texto
+                        l.spawn(Node { width: Val::Percent(100.0), align_items: AlignItems::FlexStart, ..default() }).with_children(|r| {
+                            r.spawn((Node { width: Val::Px(13.0), height: Val::Px(13.0), margin: UiRect { top: Val::Px(4.0), right: Val::Px(10.0), ..default() }, border: UiRect::all(Val::Px(1.5)), flex_shrink: 0.0, ..default() },
                                 BorderColor(match state { 1 => GOOD, 2 => BAD, _ => MUTE }), BackgroundColor(match state { 1 => GOOD, 2 => BAD, _ => Color::NONE })));
-                            r.spawn((txt(text, &fonts.body, 14.5, col), Node { width: Val::Px(262.0), flex_shrink: 0.0, ..default() }));
-                            if let Some(v) = live { r.spawn((txt(&v, &fonts.semi, 15.0, CYAN), Node { margin: UiRect::left(Val::Auto), ..default() })); }
+                            r.spawn((txt(text, &fonts.body, 14.5, col), Node { flex_grow: 1.0, flex_shrink: 1.0, flex_basis: Val::Px(0.0), ..default() }));
+                            if let Some(v) = live { r.spawn((txt(&v, &fonts.semi, 15.0, CYAN), Node { margin: UiRect::left(Val::Px(10.0)), flex_shrink: 0.0, ..default() })); }
                         });
                     };
                     if game.free {
                         let th: Vec<_> = targets.list.iter().filter(|t| t.def.kind == TKind::Threat && !t.off).collect();
                         let dn = th.iter().filter(|t| !t.alive).count();
-                        line(l, if dn == th.len() { 1 } else { 0 }, "Threats neutralized", Some(format!("{}/{}", dn, th.len())));
+                        line(l, if dn == th.len() { 1 } else { 0 }, "Threats neutralized", Some(format!("{} / {}", dn, th.len())));
+                        // reféns: quantos continuam ilesos (acertar um é o erro mais grave do percurso)
+                        let hs: Vec<_> = targets.list.iter().filter(|t| t.def.kind == TKind::Civil && !t.off).collect();
+                        let safe = hs.iter().filter(|t| t.alive).count();
+                        if !hs.is_empty() { line(l, if safe < hs.len() { 2 } else { 0 }, "Hostages safe", Some(format!("{} / {}", safe, hs.len()))); }
+                        if game.rooms > 0 { let c = game.cleared.count_ones(); line(l, if c >= game.rooms { 1 } else { 0 }, "Rooms clear", Some(format!("{} / {}", c, game.rooms))); }
                     } else {
                         for (i, o) in LESSONS[game.lesson].objs.iter().enumerate() {
                             let st = game.obj.get(i).copied().unwrap_or(0);
@@ -592,6 +605,7 @@ pub fn update_ui(
             }
             Tag::CoachText => if let Some((m, _, _)) = &game.coach { set(&mut t, m); },
             Tag::CoachKick => if let Some((_, k, _)) = &game.coach { set(&mut t, match *k { 1 => "GOOD", 3 => "STEP", 4 => "SCORE", _ => "TECHNIQUE" }); col.0 = match *k { 1 => GOOD, 3 => CYAN, 4 => BONE, _ => AMBER }; },
+            Tag::StampText => set(&mut t, &game.stamp),
             Tag::ToastText => { set(&mut t, &toast_msg); col.0 = match toast_kind { 1 => GOOD, 2 => Color::srgb(1.0, 0.72, 0.68), 3 => AMBER, _ => BONE }; }
             Tag::WpText => if let Some((pos, label)) = wp { set(&mut t, &format!("{}  {} m", label.to_uppercase(), pos.distance(p.pos).round() as i32)); },
             Tag::TacFov => set(&mut t, &format!("{}°", tac.hfov.to_degrees().round() as i32)),

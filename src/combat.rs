@@ -68,6 +68,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         let mut t = TargetState {
             def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
             fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
+            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0,
         };
         place_target(level, &mut t);
         list.push(t);
@@ -356,7 +357,7 @@ pub fn combat(
             p.g_kick = 1.0;
             p.recoil.x += (0.028 + rand01(game.time * 8.9) * 0.01) * p.def().kick;
             p.recoil.y += (rand01(game.time * 12.3) - 0.5) * 0.02 * p.def().kick;
-            sfx.write(Sfx::Shot);
+            sfx.write(if p.weapon == 1 { Sfx::Rifle } else { Sfx::Shot });
         }
     }
 

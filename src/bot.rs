@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize),
+    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits,
     /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
     Near(bool, usize, f32),
 }
@@ -112,12 +112,25 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         "enemy" => vec![Wait(60), Start(true), Wait(120), Near(false, 1, 3.0), Wait(50), Shot("e01"), Wait(130), Shot("e02"), Shot("e03"), Shot("e04"), Shot("e05"), Shot("e06"), Shot("e07"), Shot("e08"), Shot("e09"),
             Near(true, 0, 2.6), Wait(140), Shot("e10"), Snap("fim"), Quit],
         // queda: derruba uma ameaça e um refém de perto e captura a sequência
-        "fall" => vec![Wait(60), Start(true), Wait(120), Near(false, 1, 3.0), Wait(30), Ads(40), Fire, Wait(10), Shot("f1"), Wait(14), Fire, Shot("f2"), Wait(20), Shot("f3"), Wait(60), Shot("f4"), Ads(0),
-            Near(true, 0, 3.0), Wait(60), Fire, Wait(14), Shot("f5"), Wait(30), Shot("f6"), Wait(80), Shot("f7"), ViewTo(View::Bird), Wait(120), Shot("f8"), Snap("fim"), Quit],
+        "fall" => vec![Wait(60), Start(true), Wait(120), Near(false, 1, 3.0), Wait(30), Ads(40), Fire, Wait(10), Shot("f1"), Wait(14), Fire, Shot("f2"), Wait(70), Shot("f3"), Wait(120), Shot("f4"), Wait(240), Ads(0),
+            Near(true, 0, 3.0), Wait(60), Fire, Wait(14), Shot("f5"), Wait(80), Shot("f6"), Wait(140), Shot("f7"), Wait(240), ViewTo(View::Bird), Wait(120), Shot("f8"), Snap("fim"), Quit],
         // quedas sorteadas: derruba quatro ameaças seguidas e mostra cada uma caída
         "falls" => { let mut v = vec![Wait(60), Start(true), Wait(120)];
-            for (i, n) in ["q0", "q1", "q2", "q3"].into_iter().enumerate() { v.extend([Near(false, i, 3.0), Wait(30), Fire, Wait(14), Fire, Wait(150), Shot(n)]); }
+            for (i, n) in ["q0", "q1", "q2", "q3"].into_iter().enumerate() { v.extend([Near(false, i, 3.0), Wait(30), Fire, Wait(14), Fire, Wait(420), Shot(n)]); }
             v.extend([Snap("fim"), Quit]); v },
+        // reféns de perto (cada uma com a sua combinação de cores) e o corpo 3D do jogador na vista de cima
+        "looks" => vec![Wait(60), Start(true), Wait(150), Near(true, 0, 2.6), Wait(90), Shot("k0"), Near(true, 1, 2.6), Wait(90), Shot("k1"), Near(true, 2, 2.6), Wait(90), Shot("k2"), Near(true, 3, 2.6), Wait(90), Shot("k3"),
+            Tp(3.0, 15.4, 0.6, 0.0), ViewTo(View::Bird), Wait(150), Shot("b0"), Ads(100), Shot("b1"), Fire, Wait(4), Shot("b2"), Ads(0), Go(3.0, 13.0, None), Shot("b3"), Quit],
+        // refém baixa os braços quando o cômodo dela fica limpo: antes (ameaças vivas) e depois (todas derrubadas, cômodo visto)
+        "relax" => { let mut v = vec![Wait(60), Start(true), Wait(150), Near(true, 0, 3.0), Wait(60), Spin, Near(true, 0, 3.0), Wait(120), Shot("x0")];
+            for _ in 0..12 { v.extend([Near(false, 0, 2.4), Wait(20), Fire, Wait(16), Fire, Wait(16)]); }
+            v.extend([Near(true, 0, 3.0), Wait(30), Spin, Near(true, 0, 3.0), Wait(200), Shot("x1"), Near(true, 1, 3.0), Wait(30), Spin, Near(true, 1, 3.0), Wait(200), Shot("x2"), Snap("fim"), Quit]); v },
+        // inimigos trocando de posição: um tiro no início e várias capturas de cima; depois o operador andando visto de cima
+        "move" => vec![Wait(60), Start(true), Wait(150), Fire, Wait(60), Snap("apos tiro"), Wait(120), Snap("2 s"), Wait(240), Snap("4 s"),
+            Near(false, 0, 3.4), Wait(10), Shot("v0"), Fire, Wait(200), Near(false, 1, 3.4), Wait(20), Shot("v1"),
+            Tp(3.0, 15.4, 0.0, 0.0), ViewTo(View::Bird), Wait(60), Go(3.0, 13.2, None), Shot("v2"), Go(3.0, 12.4, None), Shot("v3"), Snap("fim"), Quit],
+        // tela de créditos (para conferir se o texto cabe)
+        "credits" => vec![Wait(120), Credits, Wait(60), Shot("credits"), Quit],
         "menu" => vec![Wait(200), Shot("menu1"), Wait(400), Shot("menu2"), Wait(400), Shot("menu3"), Quit],
         "demo" => vec![Wait(60), Start(false), Wait(20), DemoOf(1), WaitDemo, DemoOf(2), WaitDemo, DemoOf(3), WaitDemo, DemoOf(4), WaitDemo, DemoOf(5), WaitDemo, Wait(20), Quit],
         _ => {
@@ -255,7 +268,8 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         Cmd::Snap(name) => {
             let pct: Vec<String> = crate::map::zones().iter().enumerate().map(|(i, z)| format!("{}={}", z.id, (tac.pct[i] * 100.0).round() as i32)).collect();
             let prim = format!("{:?} entr={:?}", (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>(), game.entry_pie.map(|e| e.map(|v| v as i32)));
-            println!("BOT ARMA {name}: arma={} {} carregador={} reserva={} recarregando={} vazia={} troca={:?}", p.weapon, p.def().hud, p.mag, p.reserve, p.reloading, p.reload_empty, p.switch_to);
+println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", targets.list.iter().filter(|t| t.moved > 0).count(), targets.list.iter().filter(|t| t.moving).count(), game.cleared, game.rooms);
+                        println!("BOT ARMA {name}: arma={} {} carregador={} reserva={} recarregando={} vazia={} troca={:?}", p.weapon, p.def().hud, p.mag, p.reserve, p.reloading, p.reload_empty, p.switch_to);
             println!("BOT POS {name}: ({:.2},{:.2}) portas={:?}", p.pos.x, p.pos.y, level.doors.iter().map(|d| (d.open * 100.0).round() as i32).collect::<Vec<_>>());
             println!("BOT PTS {name}: rota={:?} derrubadas={:?} base={:.0} chances={:.0} badges={:#012b} abates={:?}", game.route_score().map(|v| v.round()), game.kill_score().map(|v| v.round()), game.base_score(), game.odds, game.badges, game.kills.iter().map(|k| (k.angle.round() as i32, k.expo_cm.round() as i32, k.pts.round() as i32)).collect::<Vec<_>>());
             println!("BOT ANG {name}: setor={:.0} agora={:?} abertas={:?} foco={:?} lean={:.2} olho=({:.2},{:.2}) ads={:.2} dica={:?} bloq={}", tac.hfov.to_degrees(), tac.pie_now.iter().map(|v| v.map(|(a, b)| (b - a).round() as i32)).collect::<Vec<_>>(), (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>(), tac.pie_active, p.lean, p.eye.x, p.eye.z, p.g_ads, tac.lean_hint.map(|h| (h.0, h.1.round())), p.lean_blocked);
@@ -266,6 +280,7 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         Cmd::Quit => { exit.write(AppExit::Success); done = true; }
         Cmd::Mission2 => { reset.write(ResetGame { free: true, mission2: true }); done = true; }
         Cmd::Pause => { c.pause = true; done = true; }
+        Cmd::Credits => { game.mode = crate::state::Mode::Credits; game.ui_dirty = true; done = true; }
         Cmd::WaitReplay => { done = (game.mode == Mode::Replay && game.replay_t > 3.5) || bot.n > 900; }
         Cmd::Say(m) => { game.coach = Some((m.to_string(), 3, 11.0)); game.ui_dirty = true; done = true; }
         Cmd::OpenDoor(i) => { if level.doors[i].open < 0.5 && !level.doors[i].opening { c.interact = true; } done = true; }

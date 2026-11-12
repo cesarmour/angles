@@ -95,7 +95,7 @@ h2{font-weight:700;font-size:clamp(32px,4.2vw,50px);line-height:1.02;letter-spac
 /* targets strip */
 .targets{display:grid;grid-template-columns:auto minmax(0,1fr);gap:28px 40px;align-items:center;margin-top:56px;padding:28px;background:var(--panel);border:1px solid var(--line)}
 .targets .pair{display:flex;gap:18px;align-items:flex-end}
-.targets img{height:150px;width:auto}
+.targets img{height:190px;width:auto;border:1px solid var(--line)}
 .targets h3{font-size:26px;font-weight:700;line-height:1.1}
 .targets p{color:var(--dim);margin-top:8px;max-width:38em}
 .targets p b{color:var(--text);font-weight:600}
@@ -181,7 +181,7 @@ footer .warn{color:var(--text);font-weight:600}
   .reads dt{font-size:12px;letter-spacing:.05em}
   .reads div{padding:9px 10px}
   .btn{flex:1 1 auto;justify-content:center}
-  .targets img{height:118px}
+  .targets img{height:132px}
 }
 </style>
 <!--BODY-->
@@ -205,7 +205,7 @@ footer .warn{color:var(--text);font-weight:600}
       <p class="kicker">CQB fundamentals · Teaching simulator</p>
       <h1>POINT OF ENTRY</h1>
       <p class="lede">Clear the room before you walk into it.</p>
-      <p class="body">A shoot house with cardboard targets and a tactical view that puts numbers on technique: how many degrees of a doorway you have opened, how much of your body the corner shows, and how long you stood in a line of fire.</p>
+      <p class="body">A shoot house with armed threats, hostages and a tactical view that puts numbers on technique: how many degrees of a doorway you have opened, how much of your body the corner shows, and how long you stood in a line of fire.</p>
       <div class="cta">
         <a class="btn" href="{{download}}">Download for Mac</a>
         <a class="btn ghost" href="{{repo}}">Source on GitHub</a>
@@ -256,12 +256,12 @@ footer .warn{color:var(--text);font-weight:600}
 
     <div class="targets">
       <div class="pair">
-        <img src="{{img:target-threat.png}}" width="230" height="380" alt="Tan cardboard target with A, C and D scoring zones">
-        <img src="{{img:target-noshoot.png}}" width="230" height="380" alt="White cardboard target crossed with a black X">
+        <img src="{{img:threat.jpg}}" width="640" height="640" alt="An armed figure in tan aiming a pistol at the camera, muzzle flash lighting the room">
+        <img src="{{img:hostage.jpg}}" width="640" height="640" alt="An unarmed woman in a green sweater and jeans standing with both hands raised">
       </div>
       <div>
-        <h3>Cardboard, not people</h3>
-        <p><b>Tan is a threat.</b> It drops with two hits, or one in the A zone. <b>White with an X is a no-shoot:</b> hostage, resident, teammate. Hitting one is the most serious error on the course. Both change position on every run, so the route you memorised last time will not save you.</p>
+        <h3>Threats shoot back. Hostages do not.</h3>
+        <p><b>Armed is a threat.</b> Give it a clear line of fire and it raises its pistol, turns to you and fires. It drops with two hits, or one to the head or centre chest. <b>Hands up and unarmed is a hostage.</b> Hitting one is the most serious error on the course. Both change position on every run, so the route you memorised last time will not save you.</p>
       </div>
     </div>
   </div>
@@ -277,7 +277,7 @@ footer .warn{color:var(--text);font-weight:600}
         <li><div><h3><small>Staging area</small>Fundamentals</h3><p>Move, lean, crouch, aim, and read the tactical view before anything can shoot back.</p></div></li>
         <li><div><h3><small>Corridor corner</small>Slicing the pie</h3><p>Go around a corner in an arc, one side step at a time, with the gun already on the new slice.</p></div></li>
         <li><div><h3><small>Room A, centre door</small>Fatal funnel and near corners</h3><p>Clear what you can from outside, cross the doorway without stopping, check the near corners first.</p></div></li>
-        <li><div><h3><small>Room B, corner door</small>Positive identification</h3><p>Tan or white? Confirm what it is and what is behind it before every shot.</p></div></li>
+        <li><div><h3><small>Room B, corner door</small>Positive identification</h3><p>Armed, or hands up? Confirm what it is and what is behind it before every shot.</p></div></li>
         <li><div><h3><small>Corridor 3</small>Closed door and T-junction</h3><p>Open from the jamb, off the line of fire. Slice both sides of the corridor before you step out.</p></div></li>
         <li><div><h3><small>Room C</small>Dead space</h3><p>Tall furniture hides floor you cannot see from the door. While any floor is red, the room is not clear.</p></div></li>
       </ol>
@@ -313,7 +313,7 @@ footer .warn{color:var(--text);font-weight:600}
         <p><b>Slice angle.</b> Degrees between the target and the edge hiding it when it dropped. Engage as soon as the slice shows it.</p>
         <p><b>Body exposed.</b> Width of your torso the target could see.</p>
         <p><b>Time in its line of fire.</b> Seconds between first contact and the hit.</p>
-        <p>Hitting a white target or taking a (simulated) hit costs points.</p>
+        <p>Hitting a hostage or taking a (simulated) hit costs points.</p>
       </div>
     </div>
     <ul class="badges" aria-label="Badges">
@@ -360,6 +360,7 @@ footer .warn{color:var(--text);font-weight:600}
       <div><dt>Crouch</dt><dd><kbd>C</kbd><kbd>Ctrl</kbd></dd></div>
       <div><dt>Fast step</dt><dd><kbd>Shift</kbd></dd></div>
       <div><dt>Reload</dt><dd><kbd>R</kbd></dd></div>
+      <div><dt>Pistol / SCAR rifle</dt><dd><kbd>1</kbd><kbd>2</kbd><kbd>X</kbd></dd></div>
       <div><dt>Open door</dt><dd><kbd>F</kbd></dd></div>
       <div><dt>Flashlight</dt><dd><kbd>L</kbd></dd></div>
       <div><dt>Tactical view</dt><dd><kbd>G</kbd></dd></div>
