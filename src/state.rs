@@ -7,7 +7,8 @@ use bevy::prelude::*;
 pub struct MapReq(pub Option<usize>);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Mode { Menu, Card, Play, Pause, Debrief, Replay, Credits, Down }
+pub enum Mode { Menu, Card, Play, Pause, Debrief, Replay, Credits, Down, Scenarios, Ranking }
+impl Default for Mode { fn default() -> Self { Mode::Menu } }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum View { Fp, Bird }
 
@@ -42,13 +43,39 @@ pub struct Game {
     /// Tiros levados desde o último ponto de retomada (dois encerram a partida), tempo que resta da queda do operador antes
     /// da tela "OPERATOR DOWN", o motivo mostrado nela e o pedido de guardar o ponto de retomada da lição que começa.
     pub wounds: u8, pub down_t: f32, pub down_why: String, pub ckpt_req: bool,
+    /// Cenário em curso (índice em `scenario::SCENARIOS`), relógio dele (contagem regressiva ou espera entre ondas), ajuste de
+    /// pontos (positivo ou negativo), dois contadores de uso livre do cenário, título da tela de fim quando não é "OPERATOR DOWN"
+    /// e se o cenário foi vencido.
+    pub scn: Option<usize>, pub scn_t: f32, pub scn_adj: i32, pub scn_a: u32, pub scn_b: u32, pub down_title: String, pub won: bool,
+    /// Aberturas não fatiadas pelas quais o operador passou direto; ameaças derrubadas de fora do cômodo delas.
+    pub passes: u32, pub outside_kills: u32,
+    /// Portas trancadas (uma por porta com folha) e arrombamento em andamento (porta, progresso de 0 a 1).
+    pub locked: [bool; MAX_DOORS], pub breach: Option<(usize, f32)>,
+    /// Defesa da casa: onda atual (0 = ainda não começou), invasores derrubados no total; escurecimento da tela e pausa ao
+    /// trocar de andar pela escada.
+    pub wave: u32, pub wave_kills: u32, pub fade_t: f32, pub portal_cd: f32,
+    /// Colocação desta partida no ranking (posição, total de partidas na tabela), preenchida ao terminar.
+    pub rank: Option<(usize, usize)>, pub ranked: bool,
+    /// Quanto falta para o canhão do mech disparar (0 = sem mira, 1 = disparo): vira o aviso "CANNON LOCK" na tela.
+    pub lock: f32,
 }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
 static DIFF: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
 pub fn difficulty() -> u8 { DIFF.load(std::sync::atomic::Ordering::Relaxed) }
 pub fn set_difficulty(d: u8) { DIFF.store(d.min(2), std::sync::atomic::Ordering::Relaxed); }
+/// Cenários com alvos que andam ou se rendem pedem bonecos mesmo no nível EASY; `figs_built` diz como os alvos em cena foram montados.
+static FORCE_FIGS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FIGS_BUILT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+pub fn force_figs() -> bool { FORCE_FIGS.load(std::sync::atomic::Ordering::Relaxed) }
+pub fn set_force_figs(on: bool) { FORCE_FIGS.store(on, std::sync::atomic::Ordering::Relaxed); }
+/// Os alvos devem ser bonecos (e não papelão) agora?
+pub fn want_figs() -> bool { difficulty() != 0 || force_figs() }
+pub fn figs_built() -> bool { FIGS_BUILT.load(std::sync::atomic::Ordering::Relaxed) }
+pub fn set_figs_built(on: bool) { FIGS_BUILT.store(on, std::sync::atomic::Ordering::Relaxed); }
 pub const DIFF_NAMES: [&str; 3] = ["EASY", "NORMAL", "HARD"];
+/// Nome do nível gravado numa partida do ranking (3 = fase "very hard", que tem dificuldade própria).
+pub fn diff_label(d: u8) -> &'static str { if d >= 3 { "VERY HARD" } else { DIFF_NAMES[d as usize] } }
 pub const DIFF_NOTES: [&str; 3] = [
     "IPSC cardboard targets, no people. Standing in front of one costs a simulated hit, but never ends the run.",
     "armed threats turn to face you and fire in about a second. Two hits end the run.",
@@ -64,13 +91,23 @@ impl Default for Game {
             flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
             bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
-            kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false }
+            kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
+            scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0 }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
 /// que o alvo via (cm), tempo desde o primeiro contato e pontos (0 a 100).
 #[derive(Clone, Copy, Debug)]
 pub struct Kill { pub angle: f32, pub expo_cm: f32, pub dt: f32, pub pts: f32, pub a_zone: bool }
+
+/// Estados do alvo que pode mudar de ideia (`TargetState::mind`): comum; vai se render quando for visto de perto; rendido (não
+/// atire); de mãos para o alto mas vai sacar; já sacou (ameaça comum).
+pub const MIND_NONE: u8 = 0;
+pub const MIND_WILL_YIELD: u8 = 1;
+pub const MIND_YIELDED: u8 = 2;
+pub const MIND_FAKE: u8 = 3;
+pub const MIND_DREW: u8 = 4;
 pub const TIP_SECS: f32 = 8.0;
 
 impl Game {
@@ -146,6 +183,20 @@ pub struct TargetState {
     /// Em alerta (segundos que restam): já viu o operador ou ouviu tiro, e vira para ele assim que tiver linha de tiro.
     /// `notice` enche enquanto o operador se aproxima por fora do campo de visão dela (0 a 1: em 1 ela percebe).
     pub alert: f32, pub notice: f32, pub engaged: bool,
+    /// Ameaça que caça o operador pela casa (invasor ou ameaça que circula); espera até entrar em cena; estado de quem pode
+    /// mudar de ideia e relógio desse estado; ameaça que usa um refém como escudo; captor do refém a resgatar; metade dos
+    /// invasores conhece o caminho alternativo (laje).
+    pub hunter: bool, pub pend: f32, pub mind: u8, pub mind_t: f32, pub shield: bool, pub captor: bool, pub alt: bool,
+}
+impl TargetState {
+    /// Ameaça viva que ainda precisa ser resolvida (quem se rendeu não conta).
+    pub fn hostile(&self) -> bool { self.alive && !self.off && !self.def.passive && self.def.kind == TKind::Threat && self.mind != MIND_YIELDED }
+    /// Zera o que é próprio de cada partida.
+    pub fn clear_run(&mut self) {
+        self.alive = true; self.fall = 0.0; self.fall_v = 0.0; self.sw = 0.0; self.swv = 0.0; self.landed = false; self.hits = 0; self.seen = false; self.vis = false; self.react = 0.0;
+        self.contact = false; self.first_facing = None; self.goal = None; self.wait = 0.0; self.moving = false; self.stuck = 0.0; self.moved = 0; self.move_cd = 0.0;
+        self.alert = 0.0; self.notice = 0.0; self.engaged = false; self.hunter = false; self.pend = 0.0; self.mind = MIND_NONE; self.mind_t = 0.0; self.shield = false; self.captor = false; self.alt = false;
+    }
 }
 #[derive(Resource, Default)]
 pub struct Targets { pub list: Vec<TargetState>, pub masks: Vec<Vec<u8>> }

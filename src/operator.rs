@@ -314,7 +314,7 @@ pub fn hostage_look(mut commands: Commands, mut mats: ResMut<Assets<StandardMate
 pub fn room_clear_system(time: Res<Time>, mut game: ResMut<Game>, tac: Res<crate::tactical::Tac>, targets: Res<Targets>, mut sfx: EventWriter<Sfx>, mut met: Local<(u32, f32)>) {
     use crate::map::{zone_index, zones, TKind};
     if game.stamp_t > 0.0 { game.stamp_t -= time.delta_secs(); }
-    if game.mode != Mode::Play { return; }
+    if game.mode != Mode::Play || crate::scenario::is(&game, crate::scenario::Kind::Defense) { return; }
     // primeira vez que um refém aparece: o operador grita "Freeze!" (no máximo uma vez a cada 4 s)
     met.1 = (met.1 - time.delta_secs()).max(0.0);
     for (i, t) in targets.list.iter().enumerate().filter(|(_, t)| t.def.kind == TKind::Civil && !t.off) {
@@ -355,7 +355,7 @@ pub fn threat_move_system(time: Res<Time>, game: Res<Game>, level: Res<crate::ma
         for i in 0..n {
             let pick = {
                 let t = &targets.list[i];
-                if !t.alive || t.off || t.def.passive || t.def.kind != TKind::Threat || t.goal.is_some() || t.moved >= 2 || t.move_cd > 0.0 || t.vis || t.react > 0.04 || t.engaged { None }
+                if !t.alive || t.off || t.def.passive || t.def.kind != TKind::Threat || t.hunter || t.mind != MIND_NONE || crate::map::is_mech(&t.def) || t.goal.is_some() || t.moved >= 2 || t.move_cd > 0.0 || t.vis || t.react > 0.04 || t.engaged { None }
                 else if rnd(now * 71.3 + i as f32 * 13.7) > 0.4 { None }
                 else {
                     let here = Vec2::new(t.def.x, t.def.z);
@@ -372,6 +372,8 @@ pub fn threat_move_system(time: Res<Time>, game: Res<Game>, level: Res<crate::ma
     }
     for i in 0..n {
         let t = &mut targets.list[i];
+        // quem caça o operador anda por conta do sistema de cenários
+        if t.hunter { continue; }
         if t.move_cd > 0.0 { t.move_cd -= dt; }
         let Some(g) = t.goal else { t.moving = false; continue };
         // derrubada, ou já de olho no operador: fica onde está
@@ -397,5 +399,60 @@ pub fn threat_move_system(time: Res<Time>, game: Res<Game>, level: Res<crate::ma
         }
         let ry = (t.def.fx - t.def.x).atan2(t.def.fz - t.def.z);
         if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(t.def.x, 0.0, t.def.z); tf.rotation = Quat::from_rotation_y(ry); }
+    }
+}
+
+/// Ossos dos braços de uma ameaça e o nó da pistola, para a pose de rendição (mãos para o alto), feita por código por cima
+/// do clipe em curso. `k` vai de 0 (pose do clipe) a 1 (mãos para o alto).
+#[derive(Component)]
+pub struct HandsRig { bones: [Entity; 6], pistol: Option<Entity>, k: f32 }
+
+/// Acha os ossos dos braços e a pistola de cada ameaça assim que a cena dela termina de carregar.
+pub fn hands_setup(mut commands: Commands, figs: Query<(Entity, &Fig), Without<HandsRig>>, kids: Query<&Children>, names: Query<&Name>) {
+    const BONES: [&str; 6] = ["LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "RightHand"];
+    for (e, f) in &figs {
+        if !f.threat { continue; }
+        let mut found: [Option<Entity>; 6] = [None; 6];
+        let mut pistol = None;
+        let mut stack = vec![e];
+        while let Some(c) = stack.pop() {
+            if let Ok(n) = names.get(c) {
+                let n = n.as_str();
+                if n == "Pistol" { pistol = Some(c); }
+                // nomes no arquivo: "mixamorig:LeftArm_12" (o número muda de osso para osso)
+                if let Some(rest) = n.strip_prefix("mixamorig:") {
+                    let base = rest.rsplit_once('_').map_or(rest, |(a, _)| a);
+                    if let Some(i) = BONES.iter().position(|b| *b == base) { found[i] = Some(c); }
+                }
+            }
+            if let Ok(ch) = kids.get(c) { stack.extend(ch.iter()); }
+        }
+        if found.iter().all(|b| b.is_some()) { commands.entity(e).insert(HandsRig { bones: found.map(|b| b.unwrap()), pistol, k: 0.0 }); }
+    }
+}
+
+/// Mãos para o alto: roda depois da animação e antes da propagação das transformações. Cada osso é girado para apontar
+/// numa direção fixa em relação ao corpo (braço para cima e para fora, antebraço e mão para cima), misturado com a pose do clipe.
+pub fn hands_pose(time: Res<Time>, targets: Res<Targets>, mut figs: Query<(&Fig, &mut HandsRig, &GlobalTransform)>, globals: Query<&GlobalTransform>, parents: Query<&ChildOf>,
+    mut locals: Query<&mut Transform>, mut vis: Query<&mut Visibility>) {
+    let dt = time.delta_secs().min(0.05);
+    for (f, mut rig, fig_g) in &mut figs {
+        let Some(t) = targets.list.get(f.target) else { continue };
+        let up = t.alive && !t.off && (t.mind == MIND_YIELDED || t.mind == MIND_FAKE);
+        rig.k = crate::map::damp(rig.k, if up { 1.0 } else { 0.0 }, if up { 7.0 } else { 9.0 }, dt);
+        // quem se rendeu largou a arma; quem finge está de mãos vazias até sacar
+        if let Some(mut v) = rig.pistol.and_then(|e| vis.get_mut(e).ok()) { let want = if rig.k > 0.5 { Visibility::Hidden } else { Visibility::Inherited }; if *v != want { *v = want; } }
+        if rig.k < 0.002 { continue; }
+        let body = fig_g.compute_transform().rotation;
+        // direções no espaço do boneco (+X = esquerda dele, +Y = cima, +Z = frente)
+        for (i, &b) in rig.bones.iter().enumerate() {
+            let sx = if i < 3 { 1.0 } else { -1.0 };
+            let d = body * match i % 3 { 0 => Vec3::new(sx * 0.66, 0.74, 0.16), 1 => Vec3::new(sx * 0.08, 1.0, 0.14), _ => Vec3::new(sx * 0.02, 1.0, 0.12) }.normalize();
+            let Some(pg) = parents.get(b).ok().and_then(|c| globals.get(c.parent()).ok()).map(|g| g.compute_transform().rotation) else { continue };
+            let Ok(mut tf) = locals.get_mut(b) else { continue };
+            let anim = pg * tf.rotation;
+            let goal = Quat::from_rotation_arc((anim * Vec3::Y).normalize(), d) * anim;
+            tf.rotation = (pg.inverse() * anim.slerp(goal, rig.k)).normalize();
+        }
     }
 }

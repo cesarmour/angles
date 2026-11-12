@@ -68,3 +68,7 @@ Standing idle and aiming with a pistol, walking with a pistol, and four falling 
 
 ## Everything else
 - Level layouts, targets, top-down operator art, icons, diagrams, interface, lesson texts and code were made for this project with Claude Code.
+
+## Walker mech — made for this project
+The walking tank of scenario 9 (`assets/models/walker.glb`) is an original model, built and animated entirely by
+`tools3d/make_mech.py` (Blender, no third-party model involved). It is covered by the same terms as the rest of the project's own work.

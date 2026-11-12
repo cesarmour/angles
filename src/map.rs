@@ -29,7 +29,7 @@ pub enum SolidKind { Wall, Prop, Door }
 pub struct Solid { pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub h: f32, pub on: bool, pub kind: SolidKind }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PropKind { Bench, Crate, Barrel, Sofa, Table, Shelf, Locker, Cover }
+pub enum PropKind { Bench, Crate, Barrel, Sofa, Table, Shelf, Locker, Cover, Bed, Pool }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Prop { pub kind: PropKind, pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub h: f32 }
@@ -100,9 +100,16 @@ pub struct MapDef {
     pub doors: &'static [(&'static str, f32, f32)], pub corners: &'static [(&'static str, f32, f32)],
     /// Onde o operador começa (x, z) e para onde olha (ângulo).
     pub start: (f32, f32, f32),
+    /// Aparece na escolha de mapa do percurso livre; mapa de defesa (ondas de invasores, sem percurso livre);
+    /// passagens entre dois pontos do mapa (escada entre andares desenhados lado a lado).
+    pub pick: bool, pub defense: bool, pub portals: &'static [Portal],
 }
-pub const MAX_ZONES: usize = 8;
-pub const MAX_DOORWAYS: usize = 8;
+/// Passagem: quem pisa no retângulo (x1, z1, x2, z2) sai em (ex, ez) olhando para `yaw`. `player` = o operador também usa
+/// (escada); senão só os invasores (subida pela laje). `alt` = só metade dos invasores conhece este caminho.
+#[derive(Clone, Copy, Debug)]
+pub struct Portal { pub x1: f32, pub z1: f32, pub x2: f32, pub z2: f32, pub ex: f32, pub ez: f32, pub yaw: f32, pub player: bool, pub alt: bool }
+pub const MAX_ZONES: usize = 12;
+pub const MAX_DOORWAYS: usize = 12;
 pub const MAX_DOORS: usize = 4;
 
 static CUR_MAP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -115,6 +122,8 @@ pub fn openings() -> &'static [Opening] { map().openings }
 pub fn lights() -> &'static [LightDef] { map().lights }
 pub fn target_defs() -> &'static [TargetDef] { map().targets }
 pub fn slots() -> &'static [Slot] { map().slots }
+/// O mech do projeto ("Walker"): alvo cujo identificador começa com M. Só entra em cena no cenário dele.
+pub fn is_mech(def: &TargetDef) -> bool { def.id.starts_with('M') }
 pub fn zone_index(id: &str) -> usize { zones().iter().position(|z| z.id == id).unwrap_or(0) }
 pub fn zone_at(x: f32, z: f32) -> Option<usize> { zones().iter().position(|q| x >= q.x1 && x < q.x2 && z >= q.z1 && z < q.z2) }
 
@@ -143,7 +152,7 @@ const fn tg(id: &'static str, kind: TKind, v: u8, x: f32, z: f32, fx: f32, fz: f
 use PropKind::*;
 use TKind::{Civil, Threat};
 
-pub static MAPS: [MapDef; 4] = [
+pub static MAPS: [MapDef; 6] = [
     /* ---------- 0 · casa do tutorial: Preparação → Corredor 1 → quina → Corredor 2 → Sala A → Sala B → Corredor 3 (T) → Sala C ---------- */
     MapDef {
         name: "Training house", blurb: "the tutorial shoot house",
@@ -185,7 +194,7 @@ pub static MAPS: [MapDef; 4] = [
         ],
         doors: &[("D1", 17.0, 6.0), ("D2", 19.0, 4.0)],
         corners: &[("A", 6.5, 6.5), ("A", 13.5, 6.5), ("B", 14.5, 6.5), ("B", 14.5, 11.6), ("C", 20.6, 3.6), ("C", 15.4, 3.6)],
-        start: (3.0, 15.4, 0.0),
+        start: (3.0, 15.4, 0.0), pick: true, defense: false, portals: &[],
     },
     /* ---------- 1 · apartamento: hall → corredor central com três cômodos de um lado e dois do outro ---------- */
     MapDef {
@@ -226,7 +235,7 @@ pub static MAPS: [MapDef; 4] = [
         ],
         doors: &[("D1", 8.4, 6.0), ("D2", 12.4, 8.0)],
         corners: &[],
-        start: (2.0, 12.8, 0.0),
+        start: (2.0, 12.8, 0.0), pick: true, defense: false, portals: &[],
     },
     /* ---------- 2 · escritório: recepção, salão aberto com divisórias baixas, corredor e salas fechadas ---------- */
     MapDef {
@@ -270,7 +279,7 @@ pub static MAPS: [MapDef; 4] = [
         ],
         doors: &[("D1", 3.4, 6.0), ("D2", 10.0, 6.0), ("D3", 16.4, 8.0)],
         corners: &[],
-        start: (2.5, 14.2, 0.0),
+        start: (2.5, 14.2, 0.0), pick: true, defense: false, portals: &[],
     },
     /* ---------- 3 · galpão: doca, salão grande com fileiras de estantes altas (espaço morto), escritório, corredor de fundo e três salas ---------- */
     MapDef {
@@ -296,6 +305,8 @@ pub static MAPS: [MapDef; 4] = [
             tg("T5", Threat, 1, 0.7, 11.3, 3.0, 9.0, "O", false), tg("N2", Civil, 1, 5.3, 6.7, 3.0, 10.0, "O", false),
             tg("T6", Threat, 0, 20.3, 5.0, 10.0, 5.0, "Bk", false), tg("T7", Threat, 1, 0.7, 3.3, 4.5, 3.0, "C", false),
             tg("T8", Threat, 0, 14.4, 3.3, 12.0, 3.5, "P", false), tg("N3", Civil, 0, 11.0, 0.8, 12.0, 3.6, "P", false), tg("T9", Threat, 1, 20.4, 3.3, 18.0, 3.5, "R", false),
+            // o mech patrulha o corredor entre as fileiras de estantes (fora de cena nos outros modos)
+            tg("M1", Threat, 0, 12.8, 10.7, 7.0, 10.7, "W", false),
         ],
         slots: &[
             ("W", 20.3, 17.3, 14.0, 12.0), ("W", 20.3, 6.8, 14.0, 12.0), ("W", 7.0, 7.0, 12.0, 12.0), ("W", 13.0, 10.3, 13.0, 14.0), ("W", 9.5, 10.2, 9.5, 14.0), ("W", 17.0, 10.2, 17.0, 14.0),
@@ -318,7 +329,96 @@ pub static MAPS: [MapDef; 4] = [
         ],
         doors: &[("D1", 2.4, 12.0), ("D2", 4.0, 4.0), ("D3", 17.4, 4.0)],
         corners: &[],
-        start: (3.0, 16.8, 0.0),
+        start: (3.0, 16.8, 0.0), pick: true, defense: false, portals: &[],
+    },
+    /* ---------- 4 · corredor: portas frente a frente dos dois lados e um cruzamento em X ---------- */
+    MapDef {
+        name: "Hallway", blurb: "one long hallway, doors facing each other on both sides and a four-way crossing",
+        zones: &[
+            zn("E", "Entry", 8.0, 14.0, 12.0, 18.0), zn("K", "Hallway", 9.0, 2.0, 11.0, 14.0), zn("L1", "Room 1", 3.0, 9.0, 9.0, 14.0), zn("R1", "Room 2", 11.0, 9.0, 17.0, 14.0),
+            zn("X1", "West passage", 3.0, 7.0, 9.0, 9.0), zn("X2", "East passage", 11.0, 7.0, 17.0, 9.0), zn("L2", "Room 3", 3.0, 2.0, 9.0, 7.0), zn("R2", "Room 4", 11.0, 2.0, 17.0, 7.0),
+        ],
+        doorways: &[dh("K", 9.1, 10.9, 14.0, -1.0, 0), dv("L1", 9.0, 11.0, 12.2, -1.0, 1), dv("R1", 11.0, 11.0, 12.2, 1.0, 2), dv("X1", 9.0, 7.1, 8.9, -1.0, 3), dv("X2", 11.0, 7.1, 8.9, 1.0, 4),
+            dv("L2", 9.0, 4.0, 5.2, -1.0, 5), dv("R2", 11.0, 4.0, 5.2, 1.0, 6)],
+        openings: &[
+            op("Hallway mouth", "K", 9.1, 14.0, 10.9, 14.0, 0.0, -1.0, None), op("Room 1 door", "L1", 9.0, 11.0, 9.0, 12.2, -1.0, 0.0, None), op("Room 2 door", "R1", 11.0, 11.0, 11.0, 12.2, 1.0, 0.0, None),
+            op("West passage", "X1", 9.0, 7.1, 9.0, 8.9, -1.0, 0.0, None), op("East passage", "X2", 11.0, 7.1, 11.0, 8.9, 1.0, 0.0, None),
+            op("Room 3 door", "L2", 9.0, 4.0, 9.0, 5.2, -1.0, 0.0, None), op("Room 4 door", "R2", 11.0, 4.0, 11.0, 5.2, 1.0, 0.0, None),
+        ],
+        lights: &[lt(10.0, 16.0, WARM, 0.9, false), lt(10.0, 12.0, COOL, 0.75, true), lt(10.0, 8.0, COOL, 0.75, true), lt(10.0, 4.0, COOL, 0.75, true), lt(6.0, 11.5, NEUTRAL, 1.0, false),
+            lt(14.0, 11.5, NEUTRAL, 1.0, false), lt(6.0, 4.5, WARM, 0.95, false), lt(14.0, 4.5, NEUTRAL, 1.0, false), lt(5.0, 8.0, COOL, 0.7, false), lt(15.0, 8.0, COOL, 0.7, false)],
+        targets: &[
+            tg("T1", Threat, 1, 10.0, 2.7, 10.0, 13.0, "K", false),
+            tg("T2", Threat, 0, 3.6, 13.3, 8.5, 11.6, "L1", false), tg("T3", Threat, 1, 8.3, 9.6, 5.0, 12.0, "L1", false), tg("N1", Civil, 0, 5.0, 11.0, 8.5, 11.6, "L1", false),
+            tg("T4", Threat, 0, 16.4, 13.3, 11.5, 11.6, "R1", false), tg("N2", Civil, 1, 14.0, 10.5, 11.5, 11.6, "R1", false),
+            tg("T5", Threat, 1, 3.6, 8.0, 9.0, 8.0, "X1", false), tg("T6", Threat, 0, 16.4, 8.0, 11.0, 8.0, "X2", false),
+            tg("T7", Threat, 1, 3.6, 2.6, 8.5, 4.6, "L2", false), tg("T8", Threat, 0, 8.3, 6.4, 5.0, 3.5, "L2", false),
+            tg("T9", Threat, 1, 16.4, 2.6, 11.5, 4.6, "R2", false), tg("N3", Civil, 0, 13.5, 5.5, 11.5, 4.6, "R2", false),
+        ],
+        slots: &[
+            ("K", 10.0, 2.7, 10.0, 13.0), ("K", 9.5, 3.4, 10.0, 13.0), ("K", 10.5, 9.8, 10.0, 13.5),
+            ("L1", 3.6, 13.3, 8.5, 11.6), ("L1", 8.3, 9.6, 5.0, 12.0), ("L1", 3.6, 9.6, 8.0, 11.6), ("L1", 8.3, 13.4, 5.0, 11.0), ("L1", 5.0, 11.0, 8.5, 11.6), ("L1", 6.8, 13.3, 8.5, 11.6),
+            ("R1", 16.4, 13.3, 11.5, 11.6), ("R1", 11.7, 9.6, 14.0, 12.0), ("R1", 16.4, 9.6, 11.5, 11.6), ("R1", 11.7, 13.4, 15.0, 11.0), ("R1", 14.0, 10.5, 11.5, 11.6),
+            ("X1", 3.6, 8.0, 9.0, 8.0), ("X1", 5.2, 7.5, 9.0, 8.0), ("X1", 4.4, 8.5, 9.0, 8.0),
+            ("X2", 16.4, 8.0, 11.0, 8.0), ("X2", 14.8, 8.5, 11.0, 8.0), ("X2", 15.6, 7.5, 11.0, 8.0),
+            ("L2", 3.6, 2.6, 8.5, 4.6), ("L2", 8.3, 6.4, 5.0, 3.5), ("L2", 3.6, 6.4, 8.5, 4.6), ("L2", 8.3, 2.6, 5.0, 5.0), ("L2", 6.0, 2.6, 8.5, 4.6),
+            ("R2", 16.4, 2.6, 11.5, 4.6), ("R2", 11.7, 6.4, 15.0, 3.5), ("R2", 16.4, 6.4, 11.5, 4.6), ("R2", 11.7, 2.6, 15.0, 5.0), ("R2", 13.5, 5.5, 11.5, 4.6),
+        ],
+        walls_h: &[(18.0, 8.0, 12.0, &[]), (14.0, 3.0, 17.0, &[(9.1, 10.9)]), (9.0, 3.0, 9.0, &[]), (9.0, 11.0, 17.0, &[]), (7.0, 3.0, 9.0, &[]), (7.0, 11.0, 17.0, &[]), (2.0, 3.0, 17.0, &[])],
+        walls_v: &[(8.0, 14.0, 18.0, &[]), (12.0, 14.0, 18.0, &[]), (3.0, 2.0, 14.0, &[]), (17.0, 2.0, 14.0, &[]),
+            (9.0, 2.0, 14.0, &[(4.0, 5.2), (7.1, 8.9), (11.0, 12.2)]), (11.0, 2.0, 14.0, &[(4.0, 5.2), (7.1, 8.9), (11.0, 12.2)])],
+        props: &[
+            pr(Cover, 5.4, 11.7, 6.6, 12.25, 1.25), pr(Sofa, 12.6, 13.1, 14.4, 13.86, 0.9), pr(Crate, 6.3, 8.38, 7.54, 8.9, 0.46), pr(Table, 5.0, 4.2, 7.0, 5.15, 0.79),
+            pr(Locker, 16.2, 3.5, 16.87, 5.52, 2.24), pr(Barrel, 13.0, 7.2, 13.52, 7.72, 0.88), pr(Crate, 8.3, 16.6, 8.82, 17.84, 0.46),
+        ],
+        doors: &[],
+        corners: &[],
+        start: (8.6, 15.2, 0.0), pick: true, defense: false, portals: &[],
+    },
+    /* ---------- 5 · casa de dois andares (defesa): andar de cima em z 0..6, térreo em z 6..12 e quintal em z 12..18; a escada liga
+       os dois andares por uma passagem e metade dos invasores sobe pela laje da garagem e entra pela porta-balcão da suíte do meio ---------- */
+    MapDef {
+        name: "Family home", blurb: "two floors drawn side by side: bedrooms upstairs, living area and yard downstairs",
+        zones: &[
+            zn("Hl", "Upstairs hall", 2.0, 0.0, 9.3, 1.4), zn("S1", "Suite 1", 0.0, 1.4, 4.7, 6.0), zn("S2", "Suite 2", 4.7, 1.4, 9.3, 6.0), zn("Ms", "Master suite", 9.3, 0.0, 14.0, 6.0),
+            zn("St", "Stairs", 0.0, 6.0, 1.2, 7.0), zn("Lv", "Living room", 0.0, 7.0, 10.0, 12.0), zn("Gm", "Gourmet area", 10.0, 6.0, 14.0, 12.0), zn("Yd", "Yard", 0.0, 12.0, 14.0, 18.0),
+        ],
+        doorways: &[dh("S1", 3.6, 4.5, 1.4, 1.0, 0), dh("S2", 6.6, 7.5, 1.4, 1.0, 1), dv("Ms", 9.3, 0.2, 1.2, 1.0, 2), dh("Lv", 3.3, 4.4, 12.0, -1.0, 3), dh("Gm", 10.6, 13.4, 12.0, -1.0, 4)],
+        openings: &[
+            op("Suite 1 door", "S1", 3.6, 1.4, 4.5, 1.4, 0.0, 1.0, None), op("Suite 2 door", "S2", 6.6, 1.4, 7.5, 1.4, 0.0, 1.0, None), op("Master suite door", "Ms", 9.3, 0.2, 9.3, 1.2, 1.0, 0.0, None),
+            op("Front door", "Lv", 3.3, 12.0, 4.4, 12.0, 0.0, -1.0, None), op("Gourmet opening", "Gm", 10.6, 12.0, 13.4, 12.0, 0.0, -1.0, None),
+        ],
+        lights: &[lt(4.3, 0.7, WARM, 0.7, false), lt(7.6, 0.7, WARM, 0.7, false), lt(2.6, 3.7, WARM, 0.85, false), lt(6.2, 3.7, WARM, 0.85, false), lt(11.0, 4.1, WARM, 0.9, false), lt(11.6, 1.1, WARM, 0.6, false),
+            lt(3.0, 9.5, NEUTRAL, 0.95, false), lt(7.4, 9.5, NEUTRAL, 0.95, false), lt(12.0, 9.0, NEUTRAL, 0.9, false), lt(3.6, 15.0, COOL, 0.6, false), lt(10.6, 15.0, COOL, 0.6, false)],
+        // dez invasores de reserva, fora de cena até a onda chamá-los
+        targets: &[
+            tg("I1", Threat, 0, 1.0, 17.0, 3.8, 12.0, "Yd", false), tg("I2", Threat, 1, 8.4, 17.0, 12.0, 12.0, "Yd", false), tg("I3", Threat, 0, 2.2, 17.0, 3.8, 12.0, "Yd", false),
+            tg("I4", Threat, 1, 9.5, 17.0, 12.0, 12.0, "Yd", false), tg("I5", Threat, 0, 3.4, 17.0, 3.8, 12.0, "Yd", false), tg("I6", Threat, 1, 8.4, 15.8, 12.0, 12.0, "Yd", false),
+            tg("I7", Threat, 0, 4.6, 17.0, 3.8, 12.0, "Yd", false), tg("I8", Threat, 1, 9.5, 15.8, 12.0, 12.0, "Yd", false), tg("I9", Threat, 0, 5.8, 17.0, 3.8, 12.0, "Yd", false),
+            tg("I10", Threat, 1, 6.6, 15.8, 3.8, 12.0, "Yd", false),
+        ],
+        slots: &[
+            ("Yd", 1.0, 17.0, 3.8, 12.0), ("Yd", 8.4, 17.0, 12.0, 12.0), ("Yd", 2.2, 17.0, 3.8, 12.0), ("Yd", 9.5, 17.0, 12.0, 12.0), ("Yd", 3.4, 17.0, 3.8, 12.0),
+            ("Yd", 8.4, 15.8, 12.0, 12.0), ("Yd", 4.6, 17.0, 3.8, 12.0), ("Yd", 9.5, 15.8, 12.0, 12.0), ("Yd", 5.8, 17.0, 3.8, 12.0), ("Yd", 6.6, 15.8, 3.8, 12.0),
+        ],
+        walls_h: &[(0.0, 0.0, 14.0, &[]), (6.0, 0.0, 14.0, &[]), (1.4, 0.0, 9.3, &[(3.6, 4.5), (6.6, 7.5)]), (2.2, 10.7, 14.0, &[]), (3.7, 7.7, 9.3, &[]), (3.6, 0.0, 1.3, &[]),
+            (7.0, 1.2, 10.0, &[]), (12.0, 0.0, 14.0, &[(3.3, 4.4), (10.6, 13.4)]), (18.0, 0.0, 14.0, &[])],
+        walls_v: &[(0.0, 0.0, 18.0, &[]), (14.0, 0.0, 18.0, &[]), (2.0, 0.0, 1.4, &[]), (4.7, 1.4, 6.0, &[]), (7.7, 1.4, 6.0, &[(2.2, 3.1), (4.4, 5.3)]), (9.3, 0.0, 6.0, &[(0.2, 1.2)]),
+            (10.7, 0.0, 2.2, &[(0.5, 1.5)]), (12.7, 2.2, 6.0, &[(2.9, 3.8)]), (1.3, 3.6, 6.0, &[(4.4, 5.3)]),
+            (1.2, 6.0, 7.0, &[]), (10.0, 6.0, 12.0, &[(7.6, 8.7)]), (7.5, 12.0, 18.0, &[])],
+        props: &[
+            pr(Bed, 2.6, 3.5, 4.2, 5.6, 0.55), pr(Bed, 5.0, 3.6, 6.6, 5.7, 0.55), pr(Bed, 9.6, 3.6, 11.2, 5.7, 0.55), pr(Locker, 0.15, 8.5, 0.82, 10.52, 2.24),
+            pr(Sofa, 0.5, 10.9, 2.3, 11.66, 0.9), pr(Table, 3.8, 8.6, 5.8, 9.55, 0.79), pr(Cover, 6.9, 9.3, 8.9, 9.9, 0.95), pr(Table, 11.0, 9.4, 13.0, 10.35, 0.79),
+            pr(Pool, 10.7, 14.3, 13.3, 17.1, 0.12), pr(Crate, 0.3, 13.2, 0.82, 14.44, 0.46), pr(Barrel, 6.7, 12.5, 7.22, 13.02, 0.88),
+        ],
+        doors: &[],
+        corners: &[],
+        start: (12.1, 5.0, 1.5708), pick: false, defense: true,
+        portals: &[
+            Portal { x1: 0.12, z1: 6.12, x2: 1.08, z2: 6.75, ex: 3.2, ez: 0.7, yaw: -1.5708, player: true, alt: false },
+            Portal { x1: 2.12, z1: 0.12, x2: 2.62, z2: 1.28, ex: 0.6, ez: 7.6, yaw: 3.1416, player: true, alt: false },
+            Portal { x1: 0.3, z1: 12.3, x2: 1.4, z2: 13.0, ex: 7.1, ez: 5.4, yaw: 0.0, player: false, alt: true },
+        ],
     },
 ];
 
@@ -416,12 +516,12 @@ impl Level {
         for z in m.zones {
             let (i, j) = idx((z.x1 + z.x2) / 2.0, (z.z1 + z.z2) / 2.0);
             let near = (-4i32..=4).any(|a| (-4i32..=4).any(|b| { let (x, y) = ((i as i32 + a).clamp(0, w as i32 - 1) as usize, (j as i32 + b).clamp(0, h as i32 - 1) as usize); seen[y * w + x] }));
-            if !near { errs.push(format!("cômodo {} inalcançável", z.id)); }
+            if !near && m.portals.is_empty() { errs.push(format!("cômodo {} inalcançável", z.id)); }
         }
         for (zone, x, z, _, _) in m.slots {
             let (i, j) = idx(*x, *z);
             let near = (-2i32..=2).any(|a| (-2i32..=2).any(|b| { let (xx, yy) = ((i as i32 + a).clamp(0, w as i32 - 1) as usize, (j as i32 + b).clamp(0, h as i32 - 1) as usize); seen[yy * w + xx] }));
-            if !near { errs.push(format!("vaga ({x},{z}) do cômodo {zone} inalcançável")); }
+            if !near && m.portals.is_empty() { errs.push(format!("vaga ({x},{z}) do cômodo {zone} inalcançável")); }
         }
         errs
     }

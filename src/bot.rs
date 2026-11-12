@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8),
+    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv,
     /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
     Near(bool, usize, f32),
 }
@@ -20,7 +20,9 @@ pub enum Cmd {
 #[derive(Resource, Default)]
 pub struct Bot { pub fps: f32, pub auto_card: bool, pub card_n: u32, pub active: bool, pub queue: VecDeque<Cmd>, pub n: u32, pub out: String, pub hold_ads: bool, pub hold_lean: f32, pub hold_crouch: bool,
     /// Fila da demonstração (separada da fila do roteiro de teste), ritmo do passo e contador de quadros da demonstração.
-    pub demo_q: VecDeque<Cmd>, pub pace: f32, pub demo_frames: u32, pub engage_n: u32 }
+    pub demo_q: VecDeque<Cmd>, pub pace: f32, pub demo_frames: u32, pub engage_n: u32,
+    /// Tempo (real) desde que o operador automático começou a encarar uma ameaça e desde o último tiro dele.
+    pub engage_t: f32, pub fire_t: f32 }
 
 /// Converte o traçado ideal de uma lição em comandos. Na demonstração entram também o ponto de partida e as legendas.
 pub fn steps_cmds(l: usize, demo: bool) -> Vec<Cmd> {
@@ -131,6 +133,57 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
             Tp(3.0, 15.4, 0.0, 0.0), ViewTo(View::Bird), Wait(60), Go(3.0, 13.2, None), Shot("v2"), Go(3.0, 12.4, None), Shot("v3"), Snap("fim"), Quit],
         // tela de créditos (para conferir se o texto cabe)
         "credits" => vec![Wait(120), Credits, Wait(60), Shot("credits"), Quit],
+        // cada cenário: cartão de instruções e primeiro quadro da partida; depois as telas de cenários e de ranking
+        // vistas de cima (com CQB_NOFOW=1 CQB_NOREACT=1 CQB_ZOOM=24): refém como escudo, corredor, resgate e casa
+        "tops" => vec![Wait(120),
+            Scn(0), Wait(150), Confirm, Wait(30), Tp(15.0, 6.0, 0.0, 0.0), ViewTo(View::Bird), Wait(90), Shot("top-shield"),
+            Scn(1), Wait(150), Confirm, Wait(30), Tp(10.0, 9.0, 0.0, 0.0), ViewTo(View::Bird), Wait(90), Shot("top-hall"),
+            Scn(6), Wait(150), Confirm, Wait(30), Tp(10.0, 8.0, 0.0, 0.0), ViewTo(View::Bird), Wait(90), Shot("top-rescue"),
+            Scn(7), Wait(150), Confirm, Wait(30), Tp(7.0, 9.0, 0.0, 0.0), ViewTo(View::Bird), Wait(90), Shot("top-home"), Quit],
+        // porta trancada: arromba de frente e depois de lado
+        "lock" => vec![Wait(120), Scn(4), Wait(150), Confirm, Wait(30), Tp(3.95, 7.1, 0.0, 0.0), Wait(30), Shot("lk-prompt"), Interact, Wait(60), Shot("lk-breaching"), Wait(200), Snap("frente"), Shot("lk-open"),
+            Tp(9.3, 7.0, 0.0, 0.0), Wait(20), Interact, Wait(260), Snap("lado"), Quit],
+        // resgate: relógio estourado (rodar com CQB_CLOCK=5) e, na segunda vez, captor derrubado
+        "rescue" => vec![Wait(120), Scn(6), Wait(150), Confirm, Wait(360), Snap("r1"), Shot("rs-play"), Wait(480), Snap("r2"), Shot("rs-lost"), Confirm, Wait(150), Confirm, Wait(30),
+            Who(0, 3.0), Wait(20), Ads(40), Fire, Wait(14), Fire, Wait(14), Fire, Wait(300), Snap("r3"), Shot("rs-won"), Quit],
+        // refém como escudo: de frente para uma ameaça com escudo
+        "shield" => vec![Wait(120), Scn(0), Wait(150), Confirm, Wait(30), Who(1, 3.2), Wait(60), Ads(60), Wait(60), Shot("sh-front"), Quit],
+        // ameaças que circulam: derruba três e espera a que vem por trás (rodar com CQB_NOREACT=1 CQB_HUNTLOG=1)
+        "rear" => vec![Wait(120), Scn(3), Wait(150), Confirm, Wait(30),
+            Near(false, 0, 3.0), Wait(20), Ads(40), Fire, Wait(14), Fire, Wait(14), Fire, Wait(30), Ads(0),
+            Near(false, 0, 3.0), Wait(20), Ads(40), Fire, Wait(14), Fire, Wait(14), Fire, Wait(30), Ads(0),
+            Near(false, 0, 3.0), Wait(20), Ads(40), Fire, Wait(14), Fire, Wait(14), Fire, Wait(30), Ads(0), Snap("3 abatidas"),
+            Wait(1200), Snap("depois"), Shot("rear-1"), Quit],
+        // defesa da casa: operador parado onde começa, sem atirar (rodar com CQB_NODEATH=1 CQB_HUNTLOG=1)
+        "def" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(1500), Snap("onda1"), Shot("def-1"), Wait(600), Snap("fim"), Shot("def-2"), Quit],
+        // alvos que mudam de ideia: uma ameaça que se rende ao ser vista e uma de mãos para o alto que saca (rodar com CQB_NODEATH=1)
+        "mind" => vec![Wait(120), Scn(5), Wait(150), Confirm, Wait(30), Who(3, 3.2), Wait(20), Shot("mi-armed"), Wait(160), Snap("rendeu"), Shot("mi-yielded"),
+            Who(2, 3.2), Wait(60), Shot("mi-fake"), Wait(500), Snap("sacou"), Shot("mi-drew"), Quit],
+        // defesa da casa com o operador automático parado numa posição (CQB_POS) atirando no que aparece (CQB_BOTLAG = quadros até o 1º tiro)
+        "hold" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20), Weapon(1), Wait(260), TpEnv, Ads(20), Auto(true), Hold(26000), Wait(60), Snap("fim"), Shot("hold-end"), Screen(Mode::Ranking), Wait(40), Shot("hold-rank"), Quit],
+        // percurso livre no mapa do corredor (confere que o mapa novo funciona fora do cenário)
+        "hallfree" => vec![Wait(120), Map(4), Wait(120), Start(true), Wait(240), Snap("corredor"), Shot("hallfree"), Quit],
+        // mech: de frente (os tiros batem na placa), depois por trás até derrubar (rodar com CQB_NODEATH=1)
+        "walker" => { let mut v = vec![Wait(120), Scn(8), Wait(150), Shot("wk-card"), Confirm, Wait(30), Weapon(1), Wait(260), Who(5, 4.5), Wait(60), Shot("wk-front"), Ads(20), Fire, Wait(20), Fire, Wait(20), Fire, Wait(60), Snap("frente"), Shot("wk-aim"), Who(5, -3.5), Wait(4)];
+            // por trás: mira no mech a cada tiro (ele anda)
+            for _ in 0..16 { v.extend([Aim(false, 4), Fire, Wait(16)]); }
+            v.extend([Wait(90), Snap("atras"), Shot("wk-fall"), Wait(400), Snap("fim"), Shot("wk-end"), Quit]); v }
+        // fase very hard: parado de frente para o mech até a mira travar e o canhão encerrar a partida
+        "lockon" => vec![Wait(120), Scn(8), Wait(150), Confirm, Wait(30), Who(5, 6.0), Wait(36), Shot("lk-lock"), Wait(30), Shot("lk-lock2"), Wait(300), Snap("fim"), Shot("lk-down"), Quit],
+        // captura limpa do mapa do corredor visto de cima, para a página (CQB_NOFOW=1 CQB_NOREACT=1 CQB_ZOOM=24)
+        "sitehall" => vec![Wait(120), Map(4), Wait(120), Start(true), Wait(30), Tp(10.0, 9.4, 0.0, 0.0), ViewTo(View::Bird), Wait(1300), Shot("site-hall"), Quit],
+        "scns" => vec![Wait(120),
+            Scn(0), Wait(150), Shot("s1-card"), Confirm, Wait(120), Snap("s1"), Shot("s1-play"),
+            Scn(1), Wait(150), Shot("s2-card"), Confirm, Wait(120), Snap("s2"), Shot("s2-play"),
+            Scn(2), Wait(150), Confirm, Wait(120), Snap("s3"), Shot("s3-play"),
+            Scn(3), Wait(150), Confirm, Wait(120), Snap("s4"), Shot("s4-play"),
+            Scn(4), Wait(150), Confirm, Wait(120), Snap("s5"), Shot("s5-play"),
+            Scn(5), Wait(150), Confirm, Wait(120), Snap("s6"), Shot("s6-play"),
+            Scn(6), Wait(150), Confirm, Wait(120), Snap("s7"), Shot("s7-play"),
+            Scn(7), Wait(150), Shot("s8-card"), Confirm, Wait(120), Snap("s8"), Shot("s8-play"), ViewTo(View::Bird), Wait(60), Shot("s8-top"),
+            Screen(Mode::Scenarios), Wait(40), Shot("scn-screen"), Screen(Mode::Ranking), Wait(40), Shot("rank-screen"), Quit],
+        // pausa no meio da partida, volta ao menu e começa outra
+        "pmenu" => vec![Wait(60), Start(true), Wait(240), Tac(true), ViewTo(View::Bird), Go(3.0, 12.0, None), Wait(60), Pause, Wait(40), Shot("pm-pause"), Menu, Wait(90), Snap("menu"), Shot("pm-menu"), Start(true), Wait(200), Snap("de novo"), Shot("pm-again"), Quit],
         // dificuldade: menu, EASY (papelão, tiro só simulado, sem fim de partida) e HARD (tiro mais rápido, operador abatido)
         "diff" => vec![Wait(200), Shot("df-menu"), Diff(0), Wait(90), Shot("df-menu-easy"), Start(true), Wait(240), Near(false, 1, 3.0), Wait(120), Shot("df-easy-threat"), Wait(500), Snap("easy"), Near(true, 0, 2.6), Wait(90), Shot("df-easy-hostage"),
             Diff(2), Wait(30), Start(true), Wait(240), Near(false, 1, 3.0), Wait(100), Shot("df-hard"), Wait(500), Snap("hard"), Shot("df-hard-down"), Quit],
@@ -217,7 +270,16 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
             let dd = Vec2::new(tx, tz).distance(p.pos).max(0.5);
             p.pitch = ((1.18 - p.eye.y) / dd).atan();
             bot.engage_n += 1;
-            if aligned && bot.engage_n % 12 == 3 { c.fire = true; }
+            // CQB_BOTLAG: milissegundos que o operador automático leva para dar o primeiro tiro numa ameaça que apareceu
+            // (imita o tempo de reação de uma pessoa); sem a variável, vale o ritmo antigo, contado em quadros
+            match std::env::var("CQB_BOTLAG").ok().and_then(|v| v.parse::<f32>().ok()) {
+                Some(ms) => {
+                    if bot.engage_n == 1 { bot.engage_t = 0.0; bot.fire_t = 9.0; }
+                    bot.engage_t += rd.min(0.05); bot.fire_t += rd.min(0.05);
+                    if aligned && bot.engage_t >= ms / 1000.0 && bot.fire_t >= 0.13 { c.fire = true; bot.fire_t = 0.0; }
+                }
+                None => if aligned && bot.engage_n % 12 == 3 { c.fire = true; },
+            }
             // no vão de uma porta não se para: continua andando para o próximo ponto enquanto atira
             let in_door = crate::map::doorways().iter().any(|w| p.pos.x >= w.x1 && p.pos.x <= w.x2 && p.pos.y >= w.z1 && p.pos.y <= w.z2);
             if in_door {
@@ -233,7 +295,7 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
     let mut done = false;
     match cmd {
         Cmd::Wait(n) => done = bot.n >= n,
-        Cmd::Start(free) => { reset.write(ResetGame { free, mission2: false }); done = true; }
+        Cmd::Start(free) => { reset.write(ResetGame { free, mission2: false, scn: None }); done = true; }
         Cmd::Confirm => { c.confirm = true; done = true; }
         Cmd::Tp(x, z, yaw, pitch) => { p.pos = Vec2::new(x, z); p.vel = Vec2::ZERO; p.yaw = yaw; p.pitch = pitch; done = true; }
         Cmd::Go(x, z, f) => {
@@ -287,7 +349,7 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
             done = true;
         }
         Cmd::Quit => { exit.write(AppExit::Success); done = true; }
-        Cmd::Mission2 => { reset.write(ResetGame { free: true, mission2: true }); done = true; }
+        Cmd::Mission2 => { reset.write(ResetGame { free: true, mission2: true, scn: None }); done = true; }
         Cmd::Pause => { c.pause = true; done = true; }
         Cmd::Credits => { game.mode = crate::state::Mode::Credits; game.ui_dirty = true; done = true; }
         Cmd::WaitReplay => { done = (game.mode == Mode::Replay && game.replay_t > 3.5) || bot.n > 900; }
@@ -295,6 +357,48 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
         Cmd::OpenDoor(i) => { if level.doors[i].open < 0.5 && !level.doors[i].opening { c.interact = true; } done = true; }
         Cmd::DemoOf(l) => { game.lesson = l; game.obj = vec![0; crate::lessons::LESSONS[l].objs.len()]; game.mode = Mode::Card; game.demo_req = true; game.ui_dirty = true; done = true; }
         Cmd::Map(i) => { mapreq.0 = Some(i); done = true; }
+        // o mesmo que o botão do cenário na tela SCENARIOS
+        Cmd::Scn(i) => {
+            let sc = &crate::scenario::SCENARIOS[i];
+            set_force_figs(sc.figs);
+            if crate::map::map_index() != sc.map || figs_built() != want_figs() { mapreq.0 = Some(sc.map); }
+            reset.write(ResetGame { free: true, mission2: false, scn: Some(i) });
+            done = true;
+        }
+        Cmd::Screen(m) => { game.mode = m; game.ui_dirty = true; done = true; }
+        Cmd::Auto(on) => { bot.auto_card = on; done = true; }
+        // fica parado por n quadros; recarrega só quando não há invasor de pé (entre as ondas)
+        Cmd::Hold(n) => {
+            if !targets.list.iter().any(|t| t.hunter && t.alive && !t.off) && p.mag < p.def().mag && !p.reloading && !p.switching() { c.reload = true; }
+            done = bot.n >= n || game.mode != Mode::Play;
+        }
+        // posição e ponto para onde olhar vindos de CQB_POS="x,z,olhar_x,olhar_z"
+        Cmd::TpEnv => {
+            let v: Vec<f32> = std::env::var("CQB_POS").unwrap_or_default().split(',').filter_map(|s| s.trim().parse().ok()).collect();
+            if v.len() == 4 { p.pos = Vec2::new(v[0], v[1]); p.vel = Vec2::ZERO; p.yaw = (-(v[2] - v[0])).atan2(-(v[3] - v[1])); p.pitch = -0.04; }
+            done = true;
+        }
+        // vai para a frente de um alvo escolhido pelo papel dele no cenário: 0 captor, 1 ameaça com escudo, 2 falso rendido, 3 quem vai se render, 4 caçador
+        Cmd::Who(w, dist) => {
+            let pick = |t: &&TargetState| t.alive && !t.off && t.def.kind == TKind::Threat && match w { 0 => t.captor, 1 => t.shield, 2 => t.mind == MIND_FAKE, 3 => t.mind == MIND_WILL_YIELD, 5 => crate::map::is_mech(&t.def), _ => t.hunter };
+            if let Some(t) = targets.list.iter().find(pick) {
+                let tp = Vec2::new(t.def.x, t.def.z);
+                let (sg, dist) = (dist.signum(), dist.abs());
+                let d = level.cast_ray(tp.x, tp.y, t.fwd.x * sg, t.fwd.y * sg, dist + 0.4, 1.0);
+                let pos = tp + t.fwd * sg * (d - 0.4).clamp(0.8, dist);
+                p.pos = pos; p.vel = Vec2::ZERO; p.yaw = (-(tp.x - pos.x)).atan2(-(tp.y - pos.y)); p.pitch = -0.08;
+                println!("BOT ALVO {} em ({:.1},{:.1}) estado={} operador em ({:.1},{:.1})", t.def.id, tp.x, tp.y, t.mind, pos.x, pos.y);
+            } else { println!("BOT ALVO nenhum com papel {}", w); }
+            done = true;
+        }
+        // vira para o n-ésimo refém (true) ou a n-ésima ameaça (false), sem sair do lugar
+        Cmd::Aim(civil, n) => {
+            let want = if civil { TKind::Civil } else { TKind::Threat };
+            if let Some(t) = targets.list.iter().filter(|t| t.def.kind == want && !t.def.passive && t.alive && !t.off).nth(n) { p.yaw = (-(t.def.x - p.pos.x)).atan2(-(t.def.z - p.pos.y)); p.pitch = -0.05; }
+            done = true;
+        }
+        // o mesmo que o botão RETURN TO MENU
+        Cmd::Menu => { *p = crate::ui::menu_player(p.weapon); game.mode = Mode::Menu; game.view = View::Fp; game.tac = false; game.toast = None; game.coach = None; game.ui_dirty = true; done = true; }
         Cmd::Diff(d) => { let was = difficulty(); set_difficulty(d); if (was == 0) != (d == 0) { mapreq.0 = Some(crate::map::map_index()); } done = true; }
         Cmd::Weapon(i) => { c.weapon = Some(i); done = true; }
         Cmd::Near(civil, n, dist) => {

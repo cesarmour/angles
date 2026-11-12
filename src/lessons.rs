@@ -110,6 +110,8 @@ pub fn fail_msg(l: usize, i: usize) -> Option<&'static str> {
 }
 pub fn waypoint(c: &Ctx) -> Option<(Vec2, &'static str)> {
     let g = c.game;
+    // resgate: o marcador aponta o refém
+    if crate::scenario::is(g, crate::scenario::Kind::Rescue) { return c.targets.list.iter().find(|t| t.captor && t.def.kind == TKind::Civil).map(|t| (Vec2::new(t.def.x, t.def.z), "Hostage")); }
     if g.free { return None; }
     match g.lesson {
         1 if g.obj.first() == Some(&0) => Some((Vec2::new(5.0, 8.2), "Corner")),
@@ -133,7 +135,9 @@ pub fn update_lessons(time: Res<Time>, mut game: ResMut<Game>, mut tac: ResMut<T
     if game.mode != Mode::Play { return; }
     let dt = time.delta_secs().min(0.05);
     if game.free {
-        if !game.debriefed && targets.list.iter().all(|t| t.def.kind != TKind::Threat || !t.alive) {
+        // defesa da casa e resgate terminam pelas regras do próprio cenário
+        if matches!(crate::scenario::kind(&game), Some(crate::scenario::Kind::Defense) | Some(crate::scenario::Kind::Rescue)) { return; }
+        if !game.debriefed && targets.list.iter().all(|t| t.def.kind != TKind::Threat || !t.alive || t.mind == MIND_YIELDED) {
             game.lesson_end += dt;
             if game.lesson_end > 1.5 { game.mode = Mode::Debrief; game.debriefed = true; game.ui_dirty = true; sfx.write(Sfx::Good); }
         }
@@ -413,7 +417,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
     if game.time < st.last_time { *st = CoachState::default(); }
     st.last_time = game.time;
     if let Some(c) = game.coach.as_mut() { c.2 -= dt; if c.2 <= 0.0 { game.coach = None; game.ui_dirty = true; } }
-    if game.demo { return; }
+    if game.demo || crate::scenario::is(&game, crate::scenario::Kind::Defense) { return; }
 
     /* chances de sucesso ao vivo: perfeição do traçado + angulação (nota das derrubadas e exposição do momento) */
     let route_now = if game.free { None } else { guide_dist(&game, p.pos).filter(|_| game.guide_i >= 1).map(|d| (1.0 - (d - 0.2) / 1.0).clamp(0.0, 1.0) * 100.0) };

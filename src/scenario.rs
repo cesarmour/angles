@@ -1,0 +1,708 @@
+//! Cenários (cada um treina uma tática), inimigos que se deslocam pela casa, ondas de invasores e ranking.
+use crate::lessons::LESSONS;
+use crate::map::*;
+use crate::state::*;
+use crate::tactical::Tac;
+use bevy::prelude::*;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kind { Shield, Hallway, Threshold, Rear, Locked, Mind, Rescue, Defense, Walker }
+
+pub struct Scenario {
+    pub name: &'static str, pub kicker: &'static str, pub blurb: &'static str, pub lead: &'static str, pub points: &'static [&'static str],
+    /// Mapa em que roda (índice em `map::MAPS`) e se exige bonecos mesmo no nível EASY (alvo de papelão não anda nem se rende).
+    pub map: usize, pub kind: Kind, pub figs: bool,
+}
+
+pub const SCENARIOS: [Scenario; 9] = [
+    Scenario { name: "Hostage shield", kicker: "SCENARIO 1 · PRECISION SHOT", map: 0, kind: Kind::Shield, figs: false,
+        blurb: "three threats stand behind a hostage: open the angle before you fire",
+        lead: "Three of the threats in this house are holding a hostage in front of them. From the door you see a sliver of the threat and a lot of hostage.",
+        points: &["Do not take the tight shot. Step sideways until the threat's head or chest is clear of the hostage, then fire.",
+            "The threat still fires over her shoulder: change the angle from behind the door frame, not from the middle of the room.",
+            "Hitting a hostage costs 20 points. A clean run drops all three shielded threats with every hostage unharmed."] },
+    Scenario { name: "Opposing doors", kicker: "SCENARIO 2 · HALLWAY AND CROSSING", map: 4, kind: Kind::Hallway, figs: false,
+        blurb: "doors on both sides and a four-way crossing: never walk past an opening you have not sliced",
+        lead: "One hallway, four rooms facing each other in pairs and a crossing with a passage on each side.",
+        points: &["Every opening you walk past without slicing it is a line of fire into your side or your back. It costs 4 points each time.",
+            "Opposing doors: slice the first from the far wall, then cross and slice the second. You cannot watch both at once, so decide the order before you move.",
+            "At the crossing, clear one arm from the corner before you show yourself to the other."] },
+    Scenario { name: "Threshold", kicker: "SCENARIO 3 · CLEAR FROM THE DOOR", map: 1, kind: Kind::Threshold, figs: false,
+        blurb: "small rooms: clear them from the door and step in only for what you cannot see",
+        lead: "Five small rooms. In a room this size, most of the work is done from outside.",
+        points: &["Slice the whole doorway from the hallway. Threats you drop from outside the room never get a clean look at you.",
+            "Step in only for the corner you could not see, and only after everything visible is clear.",
+            "Entering a room with a threat still standing in it and less than 70% of it seen costs 6 points."] },
+    Scenario { name: "Rear security", kicker: "SCENARIO 4 · THREATS ON THE MOVE", map: 3, kind: Kind::Rear, figs: true,
+        blurb: "two threats move through the building and can come out of areas you already cleared",
+        lead: "Most threats hold their rooms. Two of them do not: once the shooting starts they move through the building looking for you.",
+        points: &["A cleared room does not stay cleared. Check behind you before you stop at a door, and again after every engagement.",
+            "Do not park with your back to a long open space. Put a wall behind you when you slice.",
+            "The run scores how many of the two roaming threats you saw before they saw you."] },
+    Scenario { name: "Locked door", kicker: "SCENARIO 5 · NOISY BREACH", map: 2, kind: Kind::Locked, figs: false,
+        blurb: "every door is locked: breaching takes time and tells everyone inside where you are",
+        lead: "The three closed doors on this floor are locked. F starts a breach: it takes a second and a half and it is loud.",
+        points: &["The noise alerts every threat in earshot, and the ones in that room turn to face the door before it opens.",
+            "Breach from the side of the frame, never from the middle of the doorway. A breach from in front of the door costs 5 points.",
+            "After the door gives, do not rush the gap: slice it like any other opening, from the wall."] },
+    Scenario { name: "Second look", kicker: "SCENARIO 6 · TARGETS THAT CHANGE", map: 1, kind: Kind::Mind, figs: true,
+        blurb: "some armed people give up, and some who gave up change their mind",
+        lead: "Not everyone in this apartment will act the way they looked a second ago.",
+        points: &["Some armed threats drop the gun and raise their hands when you challenge them. From then on they are no-shoot: hitting one costs 20 points.",
+            "Some people standing with their hands up are waiting for you to look away. Keep them covered: if one draws, it is a threat again.",
+            "Identification is for the moment you press the trigger, not for the first glance."] },
+    Scenario { name: "Hostage rescue", kicker: "SCENARIO 7 · AGAINST THE CLOCK", map: 2, kind: Kind::Rescue, figs: false,
+        blurb: "one hostage, one captor and a clock: go straight to the problem",
+        lead: "A hostage is being held at the far end of the floor and time is running out. A marker and a knocking sound show the direction.",
+        points: &["You do not have time to clear every room. Pass the ones that are not on your way, and accept the risk you can measure.",
+            "The rest of the technique still applies at each opening you do cross: slice, then move.",
+            "The run ends when the captor is down. If the clock runs out, the hostage is lost."] },
+    Scenario { name: "Home defense", kicker: "SCENARIO 8 · STRONG POINT", map: 5, kind: Kind::Defense, figs: true,
+        blurb: "hold your own house against waves of intruders: 2, then 4, 6, 8 and 10",
+        lead: "Intruders come in waves from the yard: two, then four, then six, eight and ten. They fire in under half a second and hit 95% of their shots. You will not win a gunfight in the open.",
+        points: &["Do not go looking for them. Pick a strong point: one way in, a wall at your back and a long line of sight to the opening they must come through.",
+            "They use the stairs, and half of them climb in through the middle suite, so the upstairs hall is reached from two sides. A room with a single door is not.",
+            "Aim at the opening before they reach it and fire as each one appears. Reload between waves, never during one. The stairs are in the top-left corner of each floor."] },
+    Scenario { name: "Walker", kicker: "SCENARIO 9 · VERY HARD · ARMOUR AND FLANK", map: 3, kind: Kind::Walker, figs: true,
+        blurb: "very hard: a walking tank with an infantry escort; one hit from its cannon ends the run",
+        lead: "A walking tank patrols the lane between the shelving rows, and four armed threats hold the floor around it. This stage has its own difficulty, above HARD, whatever is selected on the menu.",
+        points: &["The cannon needs one second on you. A red CANNON LOCK warning counts it: get a shelf between you and the walker before it reaches 100%. One hit ends the run.",
+            "Rounds from the front bounce off. It takes twelve from the side or the rear: break its line of sight, move, and empty the magazine while it is still turning.",
+            "The escort fires in under a second and hits 95% of its shots. Deal with the men first, from cover, and never with the walker's cannon coming round to you."] },
+];
+/// Quantos tiros pelos lados ou por trás derrubam o mech, e os dois pontos entre os quais ele patrulha (no galpão).
+pub const MECH_HP: u8 = 12;
+/// Tempo com o operador na mira até o canhão disparar, e velocidades de giro (rad/s) e de marcha (m/s) do mech.
+pub const MECH_LOCK: f32 = 1.0;
+pub const MECH_TURN: f32 = 1.9;
+const MECH_SPEED: f32 = 1.5;
+const MECH_POSTS: [Vec2; 2] = [Vec2::new(7.6, 10.7), Vec2::new(18.4, 10.7)];
+pub const WAVES: u32 = 5;
+/// Invasores da defesa da casa: tempo com o operador na mira até o primeiro tiro, intervalo entre tiros, acerto e passo.
+pub const INV_REACT: f32 = 0.42;
+pub const INV_FOLLOW: f32 = 0.26;
+pub const INV_HIT: f32 = 0.95;
+const INV_SPEED: f32 = 2.5;
+const ROAM_SPEED: f32 = 1.6;
+
+/// Tempo do resgate, conforme a dificuldade (CQB_CLOCK troca o valor nos testes).
+fn clock() -> f32 { crate::world::env_f("CQB_CLOCK", [90.0, 60.0, 45.0][difficulty() as usize]) }
+pub fn kind(game: &Game) -> Option<Kind> { game.scn.map(|i| SCENARIOS[i].kind) }
+pub fn is(game: &Game, k: Kind) -> bool { kind(game) == Some(k) }
+/// Quantos invasores a defesa da casa tem no total (2 + 4 + ... ).
+pub fn invaders_total() -> u32 { (1..=WAVES).map(|w| w * 2).sum() }
+
+fn blocked(level: &Level, q: Vec2, r: f32) -> bool {
+    level.solids.iter().any(|s| s.on && q.x > s.x1 - r && q.x < s.x2 + r && q.y > s.z1 - r && q.y < s.z2 + r)
+}
+
+/// Monta o cenário logo depois da partida ser zerada (alvos já sorteados nas vagas do mapa).
+pub fn setup(i: usize, game: &mut Game, p: &mut Player, level: &Level, targets: &mut Targets, rnd: &mut dyn FnMut() -> u32) {
+    let sc = &SCENARIOS[i];
+    game.scn = Some(i); game.mode = Mode::Card;
+    let n = targets.list.len();
+    let threats: Vec<usize> = (0..n).filter(|&k| { let t = &targets.list[k]; t.def.kind == TKind::Threat && !t.def.passive && !t.off }).collect();
+    let hostages: Vec<usize> = (0..n).filter(|&k| targets.list[k].def.kind == TKind::Civil && !targets.list[k].off).collect();
+    match sc.kind {
+        Kind::Shield => {
+            // cada refém vai para a frente de uma ameaça (de preferência do mesmo cômodo), um pouco para o lado: da porta
+            // aparece só uma fatia da ameaça
+            let mut used: Vec<usize> = Vec::new();
+            for &h in &hostages {
+                let zone = targets.list[h].def.zone;
+                let mut cands: Vec<usize> = threats.iter().copied().filter(|c| !used.contains(c)).collect();
+                cands.sort_by_key(|c| (targets.list[*c].def.zone != zone) as u8);
+                'pick: for c in cands {
+                    let (tp, f, tz) = { let t = &targets.list[c]; (Vec2::new(t.def.x, t.def.z), t.fwd, t.def.zone) };
+                    for side in [0.15f32, -0.15] {
+                        let q = tp + f * 0.5 + f.perp() * side;
+                        if blocked(level, q, 0.26) || zone_at(q.x, q.y) != Some(zone_index(tz)) { continue; }
+                        let hd = &mut targets.list[h];
+                        hd.def.x = q.x; hd.def.z = q.y; hd.def.fx = q.x + f.x * 3.0; hd.def.fz = q.y + f.y * 3.0; hd.def.zone = tz;
+                        crate::combat::place_target(level, hd);
+                        targets.list[c].shield = true;
+                        used.push(c);
+                        break 'pick;
+                    }
+                }
+            }
+            game.scn_a = used.len() as u32;
+            for &c in &threats { targets.list[c].moved = 2; }
+        }
+        Kind::Locked => { for d in 0..level.doors.len().min(MAX_DOORS) { game.locked[d] = true; } }
+        Kind::Mind => {
+            // duas ameaças vão se render quando forem vistas de perto; duas já estão de mãos para o alto, mas vão sacar
+            let mut pool = threats.clone();
+            for k in (1..pool.len()).rev() { let j = (rnd() as usize) % (k + 1); pool.swap(k, j); }
+            for (k, &c) in pool.iter().take(4).enumerate() {
+                let t = &mut targets.list[c];
+                t.mind = if k < 2 { MIND_WILL_YIELD } else { MIND_FAKE };
+                t.mind_t = 0.0; t.moved = 2;
+            }
+            game.scn_a = pool.len().min(2) as u32; game.scn_b = pool.len().saturating_sub(2).min(2) as u32;
+        }
+        Kind::Rescue => {
+            // o refém mais distante do ponto de partida é o que precisa ser resgatado; uma ameaça vira a captora dele
+            let st = Vec2::new(map().start.0, map().start.1);
+            if let Some(&h) = hostages.iter().max_by(|a, b| { let d = |k: usize| Vec2::new(targets.list[k].def.x, targets.list[k].def.z).distance(st); d(**a).partial_cmp(&d(**b)).unwrap() }) {
+                let (hp, f, hz) = { let t = &targets.list[h]; (Vec2::new(t.def.x, t.def.z), t.fwd, t.def.zone) };
+                let mut cands = threats.clone();
+                cands.sort_by(|a, b| {
+                    let key = |k: usize| { let t = &targets.list[k]; ((t.def.zone != hz) as u8 as f32) * 100.0 + Vec2::new(t.def.x, t.def.z).distance(hp) };
+                    key(*a).partial_cmp(&key(*b)).unwrap()
+                });
+                if let Some(&c) = cands.first() {
+                    for (side, back) in [(0.75f32, 0.1f32), (-0.75, 0.1), (0.0, -0.8), (0.9, -0.5), (-0.9, -0.5)] {
+                        let q = hp + f.perp() * side + f * back;
+                        if blocked(level, q, 0.28) || zone_at(q.x, q.y) != Some(zone_index(hz)) { continue; }
+                        let t = &mut targets.list[c];
+                        t.def.x = q.x; t.def.z = q.y; t.def.fx = q.x + f.x * 3.0; t.def.fz = q.y + f.y * 3.0; t.def.zone = hz;
+                        crate::combat::place_target(level, t);
+                        break;
+                    }
+                    targets.list[c].captor = true; targets.list[c].moved = 2;
+                }
+                targets.list[h].captor = true;
+            }
+            game.scn_t = clock();
+        }
+        Kind::Defense => {
+            // os dez invasores ficam fora de cena até a primeira onda; munição reforçada para aguentar os trinta
+            for &c in &threats { let t = &mut targets.list[c]; t.off = true; t.alive = false; t.fall = 1.0; t.landed = true; }
+            for a in p.ammo.iter_mut() { a.1 *= 2; }
+            p.reserve *= 2;
+            // CQB_WAVE (testes): começa direto numa onda mais adiantada
+            game.wave = (crate::world::env_f("CQB_WAVE", 1.0) as u32).max(1) - 1; game.scn_t = 6.0;
+        }
+        Kind::Rear => { for &c in &threats { targets.list[c].moved = 2; } }
+        Kind::Walker => {
+            // só o mech fica em cena
+            for k in 0..n {
+                let t = &mut targets.list[k];
+                if is_mech(&t.def) { t.off = false; t.alive = true; t.alert = 9999.0; t.moved = 2; }
+                // a escolta são as ameaças do salão do galpão; o resto da casa e os reféns ficam fora
+                else if t.def.kind == TKind::Threat && !t.def.passive && t.def.zone == "W" {}
+                else if !t.def.passive || t.def.kind == TKind::Civil { t.off = true; t.alive = false; t.fall = 1.0; t.landed = true; }
+            }
+        }
+        Kind::Hallway | Kind::Threshold => {}
+    }
+}
+
+/* ------------------------------------------------------------------ deslocamento pela casa ------------------------------------------------------------------ */
+
+const NC: f32 = 0.25;
+const NW: usize = 88;
+const NH: usize = 76;
+fn ncell(q: Vec2) -> Option<usize> {
+    let (i, j) = (((q.x - MAP_X1) / NC).floor() as i32, ((q.y - MAP_Z1) / NC).floor() as i32);
+    if i < 0 || j < 0 || i >= NW as i32 || j >= NH as i32 { None } else { Some(j as usize * NW + i as usize) }
+}
+fn ncenter(k: usize) -> Vec2 { Vec2::new(MAP_X1 + ((k % NW) as f32 + 0.5) * NC, MAP_Z1 + ((k / NW) as f32 + 0.5) * NC) }
+
+/// Grade de caminhada do mapa atual e distância a pé de cada casa até o operador (com e sem o caminho alternativo).
+#[derive(Resource, Default)]
+pub struct Nav { built: Option<(usize, usize)>, walk: Vec<bool>, dist: [Vec<u32>; 2], t: f32 }
+impl Nav {
+    fn build(&mut self, level: &Level) {
+        // portas com folha não contam como parede: quem caça o operador abre a porta
+        let hit = |q: Vec2| level.solids.iter().any(|s| s.on && s.kind != SolidKind::Door && q.x > s.x1 - 0.27 && q.x < s.x2 + 0.27 && q.y > s.z1 - 0.27 && q.y < s.z2 + 0.27);
+        self.walk = (0..NW * NH).map(|k| { let c = ncenter(k); zone_at(c.x, c.y).is_some() && !hit(c) }).collect();
+        self.built = Some((map_index(), level.solids.len()));
+        self.t = 0.0;
+    }
+    fn flow(&mut self, from: Vec2) {
+        for alt in 0..2 {
+            let mut d = vec![u32::MAX; NW * NH];
+            let Some(start) = ncell(from) else { self.dist[alt] = d; continue };
+            let mut heap = BinaryHeap::new();
+            d[start] = 0; heap.push(Reverse((0u32, start)));
+            // passagens: quem está no retângulo de entrada chega à saída quase de graça
+            let ports: Vec<(usize, &Portal)> = map().portals.iter().filter(|q| alt == 1 || !q.alt).filter_map(|q| ncell(Vec2::new(q.ex, q.ez)).map(|c| (c, q))).collect();
+            while let Some(Reverse((dk, k))) = heap.pop() {
+                if dk > d[k] { continue; }
+                let (i, j) = ((k % NW) as i32, (k / NW) as i32);
+                for (di, dj, cost) in [(1i32, 0i32, 10u32), (-1, 0, 10), (0, 1, 10), (0, -1, 10), (1, 1, 14), (1, -1, 14), (-1, 1, 14), (-1, -1, 14)] {
+                    let (ni, nj) = (i + di, j + dj);
+                    if ni < 0 || nj < 0 || ni >= NW as i32 || nj >= NH as i32 { continue; }
+                    let nk = nj as usize * NW + ni as usize;
+                    if !self.walk[nk] { continue; }
+                    // na diagonal, não corta quina
+                    if di != 0 && dj != 0 && (!self.walk[j as usize * NW + ni as usize] || !self.walk[nj as usize * NW + i as usize]) { continue; }
+                    if dk + cost < d[nk] { d[nk] = dk + cost; heap.push(Reverse((dk + cost, nk))); }
+                }
+                for (ec, q) in &ports {
+                    if *ec != k { continue; }
+                    let (i0, i1, j0, j1) = (((q.x1 - MAP_X1) / NC).floor() as usize, ((q.x2 - MAP_X1) / NC).floor() as usize, ((q.z1 - MAP_Z1) / NC).floor() as usize, ((q.z2 - MAP_Z1) / NC).floor() as usize);
+                    for jj in j0..=j1.min(NH - 1) { for ii in i0..=i1.min(NW - 1) {
+                        let nk = jj * NW + ii;
+                        // só as casas com o centro dentro do retângulo: é lá que a passagem funciona de fato
+                        let cc = ncenter(nk);
+                        if cc.x <= q.x1 || cc.x >= q.x2 || cc.y <= q.z1 || cc.y >= q.z2 { continue; }
+                        if self.walk[nk] && dk + 6 < d[nk] { d[nk] = dk + 6; heap.push(Reverse((dk + 6, nk))); }
+                    } }
+                }
+            }
+            self.dist[alt] = d;
+        }
+    }
+    /// Distância a pé (em metros) de um ponto até o operador.
+    pub fn walk_dist(&self, q: Vec2) -> Option<f32> { ncell(q).and_then(|k| self.dist[0].get(k).copied()).filter(|d| *d != u32::MAX).map(|d| d as f32 * NC / 10.0) }
+}
+
+#[derive(Default)]
+pub struct ScnState {
+    patrol: usize, patrol_wait: f32,
+    last_time: f32, sides: Vec<i8>, hint_cd: f32, entered: [bool; MAX_DOORWAYS], knock: f32, roamers: u32, wave_done: u32, pass_cd: f32, voice_cd: f32, last_pos: Vec2,
+}
+
+/// Regras de cada cenário, passagens entre andares, ondas de invasores e deslocamento de quem caça o operador.
+#[allow(clippy::too_many_arguments)]
+pub fn scenario_system(
+    time: Res<Time>, mut game: ResMut<Game>, mut p: ResMut<Player>, mut level: ResMut<Level>, mut targets: ResMut<Targets>, tac: Res<Tac>, mut nav: ResMut<Nav>,
+    mut sfx: EventWriter<Sfx>, mut commands: Commands, mut roots: Query<&mut Transform, Without<crate::operator::Fig>>, mut st: Local<ScnState>,
+) {
+    let dt = time.delta_secs().min(0.05);
+    if game.fade_t > 0.0 { game.fade_t = (game.fade_t - dt).max(0.0); }
+    if game.mode != Mode::Play || game.demo { return; }
+    if game.time < st.last_time { *st = ScnState::default(); }
+    st.last_time = game.time;
+    st.hint_cd = (st.hint_cd - dt).max(0.0); st.pass_cd = (st.pass_cd - dt).max(0.0); st.voice_cd = (st.voice_cd - dt).max(0.0);
+    let k = kind(&game);
+    let dying = game.down_t > 0.0;
+    let rnd = |s: f32| (s.sin() * 43758.547).fract().abs();
+
+    /* ---------- passagens entre andares (escada) ---------- */
+    game.portal_cd = (game.portal_cd - dt).max(0.0);
+    if game.portal_cd <= 0.0 && !dying {
+        if let Some(q) = map().portals.iter().find(|q| q.player && p.pos.x > q.x1 && p.pos.x < q.x2 && p.pos.y > q.z1 && p.pos.y < q.z2) {
+            p.pos = Vec2::new(q.ex, q.ez); p.vel = Vec2::ZERO; p.yaw = q.yaw; p.eye = Vec3::new(q.ex, p.eye.y, q.ez);
+            game.portal_cd = 1.2; game.fade_t = 0.45;
+            sfx.write(Sfx::Step(true));
+        }
+    }
+
+    /* ---------- refém na linha de tiro: dica para abrir o ângulo ---------- */
+    if p.ads && st.hint_cd <= 0.0 {
+        let (eye, f) = (p.eye2(), p.fwd());
+        let aimed = targets.list.iter().filter(|t| t.hostile() && t.vis).any(|t| {
+            let v = Vec2::new(t.def.x, t.def.z) - eye;
+            let d = v.length().max(0.01);
+            v.dot(f) / d > 0.995 && targets.list.iter().any(|c| c.alive && !c.off && c.def.kind == TKind::Civil && { let w = Vec2::new(c.def.x, c.def.z) - eye; let along = w.dot(v / d); along > 0.0 && along < d + 0.4 && w.perp_dot(v / d).abs() < 0.3 })
+        });
+        if aimed {
+            st.hint_cd = 7.0;
+            game.coach = Some(("Hostage in your line of fire. Step sideways until the threat's head or chest is clear of her.".to_string(), 2, 4.5));
+            game.ui_dirty = true;
+        }
+    }
+
+    /* ---------- abertura não fatiada deixada para trás (percurso livre e cenários, fora da defesa) ---------- */
+    if game.free && k != Some(Kind::Defense) {
+        if st.sides.len() != openings().len() { st.sides = vec![0; openings().len()]; }
+        // salto de posição (escada, retomada): esquece de que lado de cada abertura o operador estava
+        if p.pos.distance(st.last_pos) > 0.6 { st.sides.fill(0); }
+        st.last_pos = p.pos;
+        for (i, o) in openings().iter().enumerate() {
+            let zi = zone_index(o.zone);
+            let rel = p.pos - o.mid();
+            let (out, along, half) = (-rel.dot(o.n), rel.dot(o.w()), o.a.distance(o.b) / 2.0);
+            // só conta quem passa pelo lado de fora, rente ao vão, e atravessa a largura inteira dele
+            if !(0.15..2.6).contains(&out) || p.zone == zi { st.sides[i] = 0; continue; }
+            let side: i8 = if along < -half - 0.1 { -1 } else if along > half + 0.1 { 1 } else { 0 };
+            if side == 0 { continue; }
+            if st.sides[i] != 0 && st.sides[i] != side {
+                let hot = targets.list.iter().any(|t| t.hostile() && zone_index(t.def.zone) == zi);
+                let pie = tac.pie_deg(i);
+                if (hot || tac.pct[zi] < 0.6) && pie < 50.0 && o.door.map_or(true, |d| level.doors[d].open > 0.5) {
+                    game.passes += 1; game.scn_adj -= 4;
+                    if st.pass_cd <= 0.0 {
+                        st.pass_cd = 4.0;
+                        game.coach = Some((format!("You walked past the {} with only {}° of it cleared. Slice an opening before you cross it.", o.name.to_lowercase(), pie.round() as i32), 2, 5.0));
+                        sfx.write(Sfx::Bad); game.ui_dirty = true;
+                    }
+                }
+            }
+            st.sides[i] = side;
+        }
+    }
+
+    match k {
+        /* ---------- limpar da soleira: entrar com ameaça de pé lá dentro e pouco cômodo visto ---------- */
+        Some(Kind::Threshold) => {
+            for (dw, w) in doorways().iter().enumerate() {
+                if st.entered[dw] { continue; }
+                if let Some(seen) = game.entry[dw] {
+                    st.entered[dw] = true;
+                    let zi = zone_index(w.zone);
+                    if seen < 0.7 && targets.list.iter().any(|t| t.hostile() && zone_index(t.def.zone) == zi) {
+                        game.scn_adj -= 6; game.scn_a += 1;
+                        game.coach = Some((format!("You entered the {} with {}% of it seen and a threat still standing inside. Clear from the door first.", zones()[zi].name.to_lowercase(), (seen * 100.0).round() as i32), 2, 5.0));
+                        sfx.write(Sfx::Bad); game.ui_dirty = true;
+                    }
+                }
+            }
+        }
+        /* ---------- resgate contra o relógio ---------- */
+        Some(Kind::Rescue) if !dying => {
+            let hostage = targets.list.iter().position(|t| t.captor && t.def.kind == TKind::Civil);
+            let captor = targets.list.iter().position(|t| t.captor && t.def.kind == TKind::Threat);
+            if let (Some(h), Some(c)) = (hostage, captor) {
+                let hp = Vec3::new(targets.list[h].def.x, 1.0, targets.list[h].def.z);
+                if !targets.list[c].alive && targets.list[h].alive {
+                    if !game.won { game.won = true; game.scn_adj += (game.scn_t / clock() * 20.0).round() as i32; sfx.write(Sfx::Good); game.toast("Captor down. Hostage safe.", 1, 2.0); }
+                    game.lesson_end += dt;
+                    if game.lesson_end > 1.4 { game.mode = Mode::Debrief; game.debriefed = true; game.ui_dirty = true; }
+                } else if !targets.list[h].alive {
+                    game.down_title = "HOSTAGE LOST".into(); game.down_why = "The hostage you came for was hit. Identify before every shot, most of all in the last room.".into();
+                    game.mode = Mode::Down; game.ui_dirty = true;
+                } else {
+                    game.scn_t -= dt;
+                    // batidas vindas do cômodo do refém, para dar a direção
+                    st.knock -= dt;
+                    if st.knock <= 0.0 { st.knock = 3.5; sfx.write(Sfx::Metal(hp)); }
+                    if game.scn_t <= 0.0 {
+                        let t = &mut targets.list[h];
+                        t.alive = false; t.fall_v = 1.0;
+                        sfx.write(Sfx::EnemyShot(hp)); sfx.write(Sfx::Bad);
+                        game.down_title = "HOSTAGE LOST".into(); game.down_why = "The clock ran out before you reached the captor. Go straight to the problem: pass the rooms that are not on your way.".into();
+                        game.mode = Mode::Down; game.ui_dirty = true;
+                    }
+                }
+            }
+        }
+        /* ---------- alvos que mudam de ideia ---------- */
+        Some(Kind::Mind) => {
+            let eye = p.eye2();
+            for i in 0..targets.list.len() {
+                let t = &mut targets.list[i];
+                if !t.alive || t.off { continue; }
+                let d = Vec2::new(t.def.x, t.def.z).distance(eye);
+                match t.mind {
+                    MIND_WILL_YIELD if t.vis && d < 9.0 => {
+                        if t.mind_t == 0.0 && st.voice_cd <= 0.0 { st.voice_cd = 3.0; sfx.write(Sfx::Voice(0)); }
+                        t.mind_t += dt;
+                        if t.mind_t > 0.5 {
+                            t.mind = MIND_YIELDED; t.engaged = false; t.react = 0.0; t.alert = 0.0;
+                            game.coach = Some(("It dropped the gun and raised its hands. It is no-shoot now: keep it covered and move on.".to_string(), 1, 4.5));
+                            game.ui_dirty = true;
+                        }
+                    }
+                    MIND_FAKE => {
+                        // saca depois de um tempo sendo vigiado, ou logo que o operador desvia o olhar
+                        let seen_enough = t.mind_t > 0.3;
+                        if t.vis && d < 10.0 { t.mind_t += dt; t.notice = 0.0; } else if seen_enough { t.notice += dt; }
+                        let limit = 1.8 + rnd(i as f32 * 12.7 + game.seed as f32) * 1.6;
+                        if t.mind_t > limit || (seen_enough && t.notice > 0.45) {
+                            t.mind = MIND_DREW; t.alert = 30.0; t.react = 0.25; t.notice = 1.0;
+                            sfx.write(Sfx::Rustle);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        /* ---------- ameaças que circulam e aparecem por trás ---------- */
+        Some(Kind::Rear) => {
+            let want = if game.stats.threats_down >= 6 { 2 } else if game.stats.threats_down >= 3 { 1 } else { 0 };
+            if st.roamers < want {
+                // uma ameaça ainda não vista sai do cômodo dela e reaparece numa área já limpa, longe e fora da vista do operador
+                let pick = (0..targets.list.len()).filter(|&i| { let t = &targets.list[i]; t.hostile() && !t.hunter && !t.seen && !t.vis && !t.engaged })
+                    .max_by(|a, b| { let d = |i: usize| Vec2::new(targets.list[i].def.x, targets.list[i].def.z).distance(p.pos); d(*a).partial_cmp(&d(*b)).unwrap() });
+                let mut spots: Vec<Vec2> = vec![Vec2::new(map().start.0, map().start.1)];
+                for s in slots() { if game.cleared & (1 << zone_index(s.0)) != 0 { spots.push(Vec2::new(s.1, s.2)); } }
+                let spot = spots.into_iter().filter(|q| q.distance(p.pos) > 7.0 && !level.los(q.x, q.y, 1.5, p.eye.x, p.eye.z, p.eye.y) && !blocked(&level, *q, 0.28)
+                        && !targets.list.iter().any(|t| t.alive && !t.off && Vec2::new(t.def.x, t.def.z).distance(*q) < 0.7))
+                    .max_by(|a, b| a.distance(p.pos).partial_cmp(&b.distance(p.pos)).unwrap());
+                if let (Some(i), Some(q)) = (pick, spot) {
+                    let t = &mut targets.list[i];
+                    let f = (p.pos - q).normalize_or_zero();
+                    t.def.x = q.x; t.def.z = q.y; t.def.fx = q.x + f.x; t.def.fz = q.y + f.y;
+                    if let Some(z) = zone_at(q.x, q.y) { t.def.zone = zones()[z].id; }
+                    crate::combat::place_target(&level, t);
+                    t.hunter = true; t.alert = 600.0; t.goal = None;
+                    if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(q.x, 0.0, q.y); tf.rotation = Quat::from_rotation_y(f.x.atan2(f.y)); }
+                    st.roamers += 1;
+                    if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT RONDA {} saiu para ({:.1},{:.1}), a {:.1} m do operador", targets.list[i].def.id, q.x, q.y, q.distance(p.pos)); }
+                }
+            }
+        }
+        /* ---------- mech: patrulha de um ponto ao outro enquanto não tem o operador na mira ---------- */
+        Some(Kind::Walker) => {
+            // o mech tem corpo: o operador não entra nele (sem isso, o focinho e o canhão atravessavam a câmera e pareciam
+            // estar na mão do operador), nem de pé nem depois de derrubado
+            if let Some((mp, mf)) = targets.list.iter().find(|t| is_mech(&t.def) && !t.off).map(|t| (Vec2::new(t.def.x, t.def.z), t.fwd)) {
+                // três círculos ao longo do corpo: cauda, meio e focinho (o focinho chega a 1,2 m do centro)
+                for (along, r) in [(0.0f32, 0.85f32), (0.8, 0.7), (-0.75, 0.6)] {
+                    let c = mp + mf * along;
+                    let v = p.pos - c;
+                    let (d, min) = (v.length(), r + PLAYER_R);
+                    if d < min {
+                        let out = if d > 0.01 { v / d } else { -mf };
+                        let mut np = c + out * min;
+                        level.resolve_circle(&mut np, PLAYER_R);
+                        let shift = np - p.pos;
+                        p.pos = np; p.eye.x += shift.x; p.eye.z += shift.y;
+                    }
+                }
+            }
+            if let Some(t) = targets.list.iter_mut().find(|t| is_mech(&t.def) && t.alive && !t.off) {
+                if t.engaged { t.moving = false; }
+                else {
+                    let pos = Vec2::new(t.def.x, t.def.z);
+                    let goal = MECH_POSTS[st.patrol % 2];
+                    let v = goal - pos;
+                    t.moving = false;
+                    if v.length() < 0.15 { st.patrol_wait += dt; if st.patrol_wait > 1.5 { st.patrol_wait = 0.0; st.patrol += 1; } }
+                    else {
+                        // vira para onde vai, devagar, e só anda quando está de frente
+                        let dir = v.normalize();
+                        let cur = t.fwd.x.atan2(t.fwd.y);
+                        let off = ang_diff(dir.x.atan2(dir.y), cur);
+                        let a = cur + off.clamp(-MECH_TURN * dt, MECH_TURN * dt);
+                        t.fwd = Vec2::new(a.sin(), a.cos());
+                        let mut np = pos;
+                        if off.abs() < 0.35 { np = pos + dir * (MECH_SPEED * dt).min(v.length()); t.moving = true; }
+                        t.def.x = np.x; t.def.z = np.y; t.def.fx = np.x + t.fwd.x; t.def.fz = np.y + t.fwd.y;
+                        if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(np.x, 0.0, np.y); tf.rotation = Quat::from_rotation_y(t.fwd.x.atan2(t.fwd.y)); }
+                    }
+                }
+            }
+        }
+        /* ---------- defesa da casa: ondas ---------- */
+        Some(Kind::Defense) if !dying => {
+            let n = targets.list.len();
+            // quem está esperando a vez entra em cena
+            for i in 0..n {
+                let t = &mut targets.list[i];
+                if t.pend > 0.0 {
+                    t.pend -= dt;
+                    if t.pend <= 0.0 {
+                        t.off = false; t.alive = true; t.fall = 0.0; t.landed = false;
+                        commands.entity(t.root).insert(Visibility::Inherited);
+                        if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(t.def.x, 0.0, t.def.z); tf.rotation = Quat::from_rotation_y((t.def.fx - t.def.x).atan2(t.def.fz - t.def.z)); }
+                    }
+                }
+            }
+            let busy = targets.list.iter().any(|t| t.pend > 0.0 || (t.hunter && t.alive && !t.off));
+            if !busy {
+                if game.wave > 0 && st.wave_done != game.wave {
+                    st.wave_done = game.wave;
+                    game.scn_t = 6.0;
+                    // entre uma onda e outra o operador se recompõe: os dois tiros voltam a valer por onda
+                    game.wounds = 0;
+                    sfx.write(Sfx::Good);
+                    if game.wave >= WAVES { game.won = true; game.toast("Last wave down. The house held.", 1, 3.0); }
+                    else { let msg = format!("Wave {} down. Next wave: {} intruders. Reload now.", game.wave, (game.wave + 1) * 2); game.toast(&msg, 1, 4.5); }
+                    game.ui_dirty = true;
+                }
+                if game.won {
+                    game.lesson_end += dt;
+                    if game.lesson_end > 2.0 { game.mode = Mode::Debrief; game.debriefed = true; game.ui_dirty = true; }
+                } else {
+                    game.scn_t -= dt;
+                    if game.scn_t <= 0.0 {
+                        game.wave += 1;
+                        let count = ((game.wave * 2) as usize).min(n);
+                        let pool: Vec<usize> = (0..n).filter(|&i| targets.list[i].def.kind == TKind::Threat).take(count).collect();
+                        for (slot, &i) in pool.iter().enumerate() {
+                            let t = &mut targets.list[i];
+                            t.def = target_defs()[i];
+                            t.clear_run();
+                            crate::combat::place_target(&level, t);
+                            // fora de cena até a vez dele: entram um a um, com 0,8 s de intervalo
+                            t.off = true; t.alive = false; t.fall = 1.0; t.landed = true;
+                            // alguns dos que entram pela garagem conhecem a subida pela laje
+                            t.hunter = true; t.alt = slot >= 2 && slot % 2 == 0 && slot < 8; t.alert = 9999.0; t.pend = 0.05 + slot as f32 * 0.8;
+                            for m in t.marks.drain(..) { commands.entity(m).despawn(); }
+                            commands.entity(t.root).insert(Visibility::Hidden);
+                        }
+                        if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT ONDA {} com {} invasores t={:.1} derrubados={}", game.wave, count, game.time, game.stats.threats_down); }
+                        let msg = format!("Wave {} of {}: {} intruders in the yard.", game.wave, WAVES, count);
+                        game.toast(&msg, 2, 3.5);
+                        sfx.write(Sfx::Bad); game.ui_dirty = true;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    /* ---------- quem caça o operador anda até ele ---------- */
+    if !targets.list.iter().any(|t| t.hunter && t.alive && !t.off) { return; }
+    if nav.built != Some((map_index(), level.solids.len())) { nav.build(&level); }
+    nav.t -= dt;
+    if nav.t <= 0.0 {
+        nav.t = 0.3; nav.flow(p.pos);
+        if std::env::var("CQB_HUNTLOG").is_ok() { let v: Vec<String> = targets.list.iter().filter(|t| t.hunter && t.alive && !t.off).map(|t| format!("{}({:.1},{:.1}){}", t.def.id, t.def.x, t.def.z, if t.engaged { "!" } else { "" })).collect(); println!("BOT CACA t={:.1} op=({:.1},{:.1}) {}", game.time, p.pos.x, p.pos.y, v.join(" ")); }
+    }
+    let speed = if k == Some(Kind::Defense) { INV_SPEED } else { ROAM_SPEED };
+    let others: Vec<(usize, Vec2)> = targets.list.iter().enumerate().filter(|(_, t)| t.hunter && t.alive && !t.off).map(|(i, t)| (i, Vec2::new(t.def.x, t.def.z))).collect();
+    for i in 0..targets.list.len() {
+        let t = &mut targets.list[i];
+        if !t.hunter || !t.alive || t.off { continue; }
+        t.alert = t.alert.max(60.0);
+        // de frente para o operador e com linha de tiro: para e atira (quem decide é o combate)
+        if t.engaged { t.moving = false; continue; }
+        let pos = Vec2::new(t.def.x, t.def.z);
+        let d = &nav.dist[t.alt as usize];
+        // passagem (escada ou laje): sai do outro lado se por lá o caminho for mais curto
+        // (vale o centro da casa da grade em que ele está: é assim que a distância foi calculada)
+        let pc = ncell(pos).map_or(pos, ncenter);
+        if let Some(q) = map().portals.iter().find(|q| (t.alt || !q.alt) && pc.x > q.x1 && pc.x < q.x2 && pc.y > q.z1 && pc.y < q.z2) {
+            let (here, there) = (ncell(pos).map_or(u32::MAX, |c| d[c]), ncell(Vec2::new(q.ex, q.ez)).map_or(u32::MAX, |c| d[c]));
+            if there < here {
+                t.def.x = q.ex; t.def.z = q.ez;
+                if let Some(z) = zone_at(q.ex, q.ez) { t.def.zone = zones()[z].id; }
+                if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(q.ex, 0.0, q.ez); }
+                continue;
+            }
+        }
+        // segue a descida da distância por algumas casas e anda na direção desse ponto
+        let mut goal = p.pos;
+        if let Some(mut c) = ncell(pos) {
+            if d.get(c).copied().unwrap_or(u32::MAX) == u32::MAX {
+                // fora da grade de caminhada (encostado num móvel): vai para a casa livre mais próxima
+                let mut best: Option<(f32, usize)> = None;
+                for dj in -3i32..=3 { for di in -3i32..=3 {
+                    let (ni, nj) = ((c % NW) as i32 + di, (c / NW) as i32 + dj);
+                    if ni < 0 || nj < 0 || ni >= NW as i32 || nj >= NH as i32 { continue; }
+                    let nk = nj as usize * NW + ni as usize;
+                    if d[nk] != u32::MAX { let dd = ncenter(nk).distance(pos); if best.map_or(true, |b| dd < b.0) { best = Some((dd, nk)); } }
+                } }
+                if let Some((_, nk)) = best { goal = ncenter(nk); }
+            } else {
+                for step in 0..4 {
+                    let (ci, cj) = ((c % NW) as i32, (c / NW) as i32);
+                    let mut best = (d[c], c);
+                    for (di, dj) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+                        let (ni, nj) = (ci + di, cj + dj);
+                        if ni < 0 || nj < 0 || ni >= NW as i32 || nj >= NH as i32 { continue; }
+                        let nk = nj as usize * NW + ni as usize;
+                        if di != 0 && dj != 0 && (d[cj as usize * NW + ni as usize] == u32::MAX || d[nj as usize * NW + ci as usize] == u32::MAX) { continue; }
+                        if d[nk] < best.0 { best = (d[nk], nk); }
+                    }
+                    if best.1 == c { break; }
+                    // só olha mais longe enquanto o caminho até lá estiver livre
+                    let q = ncenter(best.1);
+                    if step > 0 {
+                        // a linha reta até lá precisa passar só por casas livres (senão o corpo esbarra em quina)
+                        let v = q - pos;
+                        let n = (v.length() / 0.1).ceil().max(1.0) as usize;
+                        if (1..=n).any(|s| ncell(pos + v * (s as f32 / n as f32)).map_or(true, |cc| d[cc] == u32::MAX)) { break; }
+                    }
+                    c = best.1; goal = q;
+                    if d[c] == 0 { goal = p.pos; break; }
+                }
+            }
+        }
+        let v = goal - pos;
+        let len = v.length();
+        if std::env::var("CQB_HUNTLOG").map_or(false, |v| v == "2") && (game.time * 4.0).fract() < 0.04 { println!("BOT PASSO {} pos=({:.2},{:.2}) casa_d={:?} alvo=({:.2},{:.2}) alt={}", t.def.id, pos.x, pos.y, ncell(pos).map(|c| d[c]), goal.x, goal.y, t.alt); }
+        if len < 0.05 { t.moving = false; continue; }
+        let dir = v / len;
+        let mut np = pos + dir * (speed * dt).min(len);
+        // não anda por dentro de outro invasor
+        for (j, q) in &others { if *j != i { let w = np - *q; let l = w.length(); if l < 0.5 && l > 0.001 { np += w / l * (0.5 - l) * 0.5; } } }
+        level.resolve_circle(&mut np, 0.28);
+        // porta fechada no caminho: abre
+        for dr in level.doors.iter_mut() { if !dr.opening && Vec2::new(dr.cx, dr.cz).distance(np) < 1.3 { dr.opening = true; sfx.write(Sfx::Door(Vec3::new(dr.cx, 1.0, dr.cz))); } }
+        let mv = np - pos;
+        let face = if mv.length() > 0.004 { mv.normalize() } else { dir };
+        let f = Vec2::new(crate::map::damp(t.fwd.x, face.x, 12.0, dt), crate::map::damp(t.fwd.y, face.y, 12.0, dt)).normalize_or_zero();
+        t.def.x = np.x; t.def.z = np.y; t.def.fx = np.x + f.x; t.def.fz = np.y + f.y; t.fwd = f; t.moving = true;
+        if let Some(z) = zone_at(np.x, np.y) { t.def.zone = zones()[z].id; }
+        if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(np.x, 0.0, np.y); tf.rotation = Quat::from_rotation_y(f.x.atan2(f.y)); }
+    }
+}
+
+/* ------------------------------------------------------------------ pontuação e ranking ------------------------------------------------------------------ */
+
+/// Nota final da partida (0 a 100). Nos cenários entra o ajuste próprio de cada um; na defesa da casa valem os invasores derrubados.
+pub fn final_score(game: &Game, targets: &Targets) -> i32 {
+    if is(game, Kind::Defense) { return ((game.stats.threats_down * 100) as f32 / invaders_total() as f32).round().min(100.0) as i32; }
+    let s = &game.stats;
+    let left = if is(game, Kind::Rescue) { 0 } else { targets.list.iter().filter(|t| t.def.kind == TKind::Threat && !t.def.passive && !t.off && t.hostile()).count() as i32 };
+    (game.base_score().round() as i32 - s.civ_hit as i32 * 20 - s.hits_taken as i32 * 10 - s.failed as i32 * 5 - left * 8 + game.scn_adj).clamp(0, 100)
+}
+
+/// Tabela do ranking em que a partida entra.
+pub fn board(game: &Game) -> String {
+    match game.scn { Some(i) => SCENARIOS[i].name.to_string(), None if game.mission2 => "Mission 2".to_string(), None if game.free => format!("Free run · {}", map().name), None => "Tutorial".to_string() }
+}
+
+#[derive(Clone, Debug)]
+pub struct RankRow { pub board: String, pub score: i32, pub time: f32, pub diff: u8, pub ts: u64 }
+/// Ranking guardado em disco (uma linha por partida terminada): mais pontos primeiro; no empate, menos tempo.
+#[derive(Resource, Default)]
+pub struct Ranking { pub rows: Vec<RankRow>, path: Option<std::path::PathBuf> }
+impl Ranking {
+    pub fn load() -> Self {
+        // nos testes automáticos o ranking do jogador não é tocado, a não ser que CQB_RANK aponte um arquivo
+        let path = match std::env::var("CQB_RANK") {
+            Ok(f) => Some(std::path::PathBuf::from(f)),
+            Err(_) if std::env::var("CQB_SCRIPT").is_ok() => None,
+            Err(_) => std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Point of Entry/ranking.tsv")),
+        };
+        let mut rows = Vec::new();
+        if let Some(text) = path.as_ref().and_then(|f| std::fs::read_to_string(f).ok()) {
+            for l in text.lines() {
+                let c: Vec<&str> = l.split('\t').collect();
+                if c.len() < 5 { continue; }
+                if let (Ok(score), Ok(time), Ok(diff), Ok(ts)) = (c[1].parse(), c[2].parse(), c[3].parse(), c[4].parse()) { rows.push(RankRow { board: c[0].to_string(), score, time, diff, ts }); }
+            }
+        }
+        Ranking { rows, path }
+    }
+    fn order(a: &RankRow, b: &RankRow) -> std::cmp::Ordering { b.score.cmp(&a.score).then(a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal)).then(a.ts.cmp(&b.ts)) }
+    /// As melhores partidas de uma tabela.
+    pub fn top(&self, board: &str, n: usize) -> Vec<&RankRow> {
+        let mut v: Vec<&RankRow> = self.rows.iter().filter(|r| r.board == board).collect();
+        v.sort_by(|a, b| Self::order(a, b));
+        v.truncate(n);
+        v
+    }
+    pub fn boards(&self) -> Vec<String> {
+        let mut v: Vec<String> = Vec::new();
+        for r in &self.rows { if !v.contains(&r.board) { v.push(r.board.clone()); } }
+        v
+    }
+    /// Registra uma partida e devolve a colocação dela (1 = melhor) e o total de partidas na tabela.
+    pub fn add(&mut self, board: &str, score: i32, time: f32, diff: u8) -> (usize, usize) {
+        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let row = RankRow { board: board.to_string(), score, time, diff, ts };
+        let better = self.rows.iter().filter(|r| r.board == board && Self::order(r, &row) == std::cmp::Ordering::Less).count();
+        self.rows.push(row);
+        if let Some(f) = &self.path {
+            if let Some(dir) = f.parent() { let _ = std::fs::create_dir_all(dir); }
+            let text: String = self.rows.iter().map(|r| format!("{}\t{}\t{:.1}\t{}\t{}\n", r.board, r.score, r.time, r.diff, r.ts)).collect();
+            let _ = std::fs::write(f, text);
+        }
+        (better + 1, self.rows.iter().filter(|r| r.board == board).count())
+    }
+}
+/// Nível em que a partida foi jogada (a fase do mech tem o dela: 3 = very hard).
+pub fn run_diff(game: &Game) -> u8 { if is(game, Kind::Walker) { 3 } else { difficulty() } }
+pub fn fmt_time(t: f32) -> String { format!("{}:{:02}", (t / 60.0) as i32, (t % 60.0) as i32) }
+
+/// Ao chegar à avaliação (ou ao cair na defesa da casa, onde vale quantos invasores foram derrubados), a partida entra no ranking.
+pub fn rank_system(mut game: ResMut<Game>, targets: Res<Targets>, mut rk: ResMut<Ranking>) {
+    if game.ranked || game.demo { return; }
+    let done = game.mode == Mode::Debrief || (game.mode == Mode::Down && is(&game, Kind::Defense));
+    if !done { return; }
+    game.ranked = true;
+    let (score, b) = (final_score(&game, &targets), board(&game));
+    game.rank = Some(rk.add(&b, score, game.time, run_diff(&game)));
+    game.ui_dirty = true;
+    if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT RANKING {}: {} pts em {} -> {:?}", b, score, fmt_time(game.time), game.rank); }
+}
+
+/// Texto do cartão de instruções: do cenário, se houver um em curso, ou da lição.
+pub fn card(game: &Game) -> (&'static str, String, &'static str, &'static [&'static str]) {
+    match game.scn {
+        Some(i) => { let s = &SCENARIOS[i]; (s.kicker, s.name.to_uppercase(), s.lead, s.points) }
+        None => { let l = &LESSONS[game.lesson.min(5)]; (l.kicker, l.title.to_uppercase(), l.lead, l.points) }
+    }
+}

@@ -40,11 +40,13 @@ pub struct Fx {
 #[derive(Resource, Clone)]
 pub struct TargetArt { pub frame: Handle<Mesh>, pub board: Handle<Mesh>, pub shoot: Handle<StandardMaterial>, pub no_shoot: Handle<StandardMaterial>, pub wood: Handle<StandardMaterial>,
     /// Bonecos 3D (cena e arquivo, de onde saem os clipes): refém de roupa clara com as mãos para o alto e ameaça armada de cáqui.
-    pub hostage: Handle<Scene>, pub hostage_file: Handle<Gltf>, pub threat: Handle<Scene>, pub threat_file: Handle<Gltf> }
+    pub hostage: Handle<Scene>, pub hostage_file: Handle<Gltf>, pub threat: Handle<Scene>, pub threat_file: Handle<Gltf>,
+    /// Mech original do projeto (tools3d/make_mech.py).
+    pub mech: Handle<Scene>, pub mech_file: Handle<Gltf> }
 
 /// O alvo é um boneco 3D? Reféns e ameaças são; o alvo fixo de treino da primeira lição continua de papelão.
 /// No nível EASY todos os alvos são de papelão.
-pub fn is_fig(def: &TargetDef) -> bool { difficulty() != 0 && (def.kind == TKind::Civil || !def.passive) }
+pub fn is_fig(def: &TargetDef) -> bool { is_mech(def) || (want_figs() && (def.kind == TKind::Civil || !def.passive)) }
 /// Zona atingida num boneco em pé, pela distância ao eixo do corpo e pela altura: 3 = cabeça ou centro do peito (equivale à zona A),
 /// 2 = tronco (C), 1 = braços e pernas (D), 0 = fora.
 pub fn fig_zone(lx: f32, y: f32) -> u8 {
@@ -57,6 +59,7 @@ pub fn fig_zone(lx: f32, y: f32) -> u8 {
 /// Cria os alvos do mapa atual: ameaças e reféns são bonecos 3D; o alvo de treino é papelão tipo IPSC grampeado em dois sarrafos.
 pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) -> Vec<TargetState> {
     let mut list = Vec::new();
+    set_figs_built(want_figs());
     for (i, def) in target_defs().iter().enumerate() {
         let ry = (def.fx - def.x).atan2(def.fz - def.z);
         let fwd = Vec2::new(ry.sin(), ry.cos());
@@ -70,7 +73,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
             // o alvo é o boneco; papelão e sarrafos ficam ocultos (o papelão continua existindo só para a lógica de marcas)
             commands.entity(fr).insert(Visibility::Hidden);
             commands.entity(bd).insert(Visibility::Hidden);
-            let (scene, file) = if civil { (art.hostage.clone(), art.hostage_file.clone()) } else { (art.threat.clone(), art.threat_file.clone()) };
+            let (scene, file) = if is_mech(def) { (art.mech.clone(), art.mech_file.clone()) } else if civil { (art.hostage.clone(), art.hostage_file.clone()) } else { (art.threat.clone(), art.threat_file.clone()) };
             let h = commands.spawn((SceneRoot(scene), Transform::IDENTITY, Visibility::default(), crate::operator::Fig { target: i, file, threat: !civil, fell: false })).id();
             commands.entity(pivot).add_child(h);
         }
@@ -78,7 +81,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         let mut t = TargetState {
             def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
             fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
-            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false,
+            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false,
         };
         place_target(level, &mut t);
         list.push(t);
@@ -96,7 +99,8 @@ pub fn setup_targets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, m
     let (shoot, no_shoot) = (mk(&mut images, &mut smats, false), mk(&mut images, &mut smats, true));
     let art = TargetArt { frame, board, shoot, no_shoot, wood: mats.wood.clone(),
         hostage: asset.load(GltfAssetLabel::Scene(0).from_asset("models/hostage.glb")), hostage_file: asset.load("models/hostage.glb"),
-        threat: asset.load(GltfAssetLabel::Scene(0).from_asset("models/threat.glb")), threat_file: asset.load("models/threat.glb") };
+        threat: asset.load(GltfAssetLabel::Scene(0).from_asset("models/threat.glb")), threat_file: asset.load("models/threat.glb"),
+        mech: asset.load(GltfAssetLabel::Scene(0).from_asset("models/walker.glb")), mech_file: asset.load("models/walker.glb") };
     let list = spawn_targets(&mut commands, &art, &level);
     commands.insert_resource(Targets { list, masks: Vec::new() });
     commands.insert_resource(art);
@@ -183,7 +187,9 @@ fn raycast(level: &Level, targets: &Targets, o: Vec3, d: Vec3) -> Option<Hit> {
             if t <= 0.0 { continue; }
             let q = o + d * t;
             let lx = ((q.x - base.x) * hn.y - (q.z - base.z) * hn.x).abs();
-            let zone = fig_zone(lx, q.y);
+            // o mech é mais largo e mais alto que uma pessoa
+            // o mech é mais largo e mais alto que uma pessoa, e comprido: visto de lado, a área de acerto cobre do focinho à cauda
+            let zone = if is_mech(&tg.def) { if lx <= 0.45 + 0.6 * (1.0 - hn.dot(tg.fwd).abs()) && (0.05..=2.0).contains(&q.y) { 2 } else { 0 } } else { fig_zone(lx, q.y) };
             if zone != 0 { consider(Hit { t, point: q, normal: n, target: Some((i, zone)), through: Vec::new(), metal: false }); }
             continue;
         }
@@ -273,6 +279,8 @@ pub fn combat(
     }
     let dying = game.down_t > 0.0;
     let mut fired = false;
+    // porta arrombada neste quadro: o barulho alerta quem está por perto, e quem tem a porta à vista vira para ela
+    let mut breached: Option<Vec2> = None;
 
     /* ---------- portas ---------- */
     let f2 = p.fwd();
@@ -286,9 +294,37 @@ pub fn combat(
     }
     if c.interact && !dying {
         if let Some(i) = game.near_door {
-            level.doors[i].opening = true;
-            game.door_side[i] = Some((p.pos.x - level.doors[i].cx).abs() > 0.5);
-            sfx.write(Sfx::Door(Vec3::new(level.doors[i].cx, 1.0, level.doors[i].cz)));
+            if game.locked.get(i).copied().unwrap_or(false) {
+                // trancada: F começa o arrombamento (leva um segundo e meio e faz barulho)
+                if game.breach.is_none() { game.breach = Some((i, 0.0)); sfx.write(Sfx::Thwack(Vec3::new(level.doors[i].cx, 1.0, level.doors[i].cz))); }
+            } else {
+                level.doors[i].opening = true;
+                game.door_side[i] = Some((p.pos.x - level.doors[i].cx).abs() > 0.5);
+                sfx.write(Sfx::Door(Vec3::new(level.doors[i].cx, 1.0, level.doors[i].cz)));
+            }
+        }
+    }
+    if let Some((i, prog)) = game.breach {
+        let dc = Vec2::new(level.doors[i].cx, level.doors[i].cz);
+        if dying || dc.distance(p.pos) > 2.2 { game.breach = None; }
+        else {
+            let np = prog + dt / 1.5;
+            // três golpes na porta antes de ela ceder
+            if (prog * 3.0).floor() != (np * 3.0).floor() && np < 1.0 { sfx.write(Sfx::Thwack(Vec3::new(dc.x, 1.0, dc.y))); }
+            if np >= 1.0 {
+                game.breach = None; game.locked[i] = false;
+                level.doors[i].opening = true; level.doors[i].t = 0.55;
+                let side = (p.pos.x - dc.x).abs() > 0.5;
+                game.door_side[i] = Some(side);
+                sfx.write(Sfx::Door(Vec3::new(dc.x, 1.0, dc.y))); sfx.write(Sfx::Metal(Vec3::new(dc.x, 1.0, dc.y)));
+                breached = Some(dc);
+                if side { game.scn_a += 1; } else {
+                    game.scn_adj -= 5;
+                    game.coach = Some(("Breached from in front of the door. Stand beside the frame: everyone inside is now aiming at that gap.".to_string(), 2, 5.0));
+                    game.ui_dirty = true;
+                }
+                game.scn_b += 1;
+            } else { game.breach = Some((i, np)); }
         }
     }
     for i in 0..level.doors.len() {
@@ -325,14 +361,28 @@ pub fn combat(
                     let t = &mut targets.list[ti];
                     paper_mark(&mut commands, &fx, t, h.point, game.time);
                     t.swv -= 2.6 * t.fall_dir.signum().abs();
-                    if t.def.kind == TKind::Civil {
+                    if t.def.kind == TKind::Civil || t.mind == MIND_YIELDED || t.mind == MIND_FAKE {
+                        let gave_up = t.def.kind != TKind::Civil;
                         t.alive = false; t.fall_v = 1.0; game.stats.civ_hit += 1; sfx.write(Sfx::Bad);
-                        if game.free { game.toast("You hit a hostage. Look for the weapon before firing.", 2, 5.0); }
+                        if gave_up { game.toast("You shot a person with empty hands raised. Identification is for the moment of the shot.", 2, 5.5); }
+                        else if game.free { game.toast("You hit a hostage. Look for the weapon before firing.", 2, 5.0); }
                     } else {
                         let one_shot = t.hits == 0 && zone == 3;
-                        t.hits += if zone == 3 { 2 } else { 1 };
-                        if t.hits >= 2 {
+                        let mech = is_mech(&t.def);
+                        // mech: a placa da frente para tudo; só conta tiro pelos lados e por trás, e são precisos vários
+                        let frontal = mech && (p.pos - Vec2::new(t.def.x, t.def.z)).normalize_or_zero().dot(t.fwd) > 0.3;
+                        if frontal {
+                            game.hit_t = 0.0; game.scn_a += 1;
+                            sparks(&mut commands, &fx, &mut smats, h.point, -dir, game.time);
+                            sfx.write(Sfx::Metal(h.point));
+                            if game.scn_a == 1 || game.scn_a % 6 == 0 { game.coach = Some(("Rounds bounce off the front plate. Break its line of sight, move, and hit it from the side or the back: it turns slowly.".to_string(), 2, 5.0)); game.ui_dirty = true; }
+                        }
+                        t.hits += if frontal { 0 } else if mech { 1 } else if zone == 3 { 2 } else { 1 };
+                        if mech && !frontal { game.ui_dirty = true; }
+                        if t.hits >= if mech { crate::scenario::MECH_HP } else { 2 } {
                             t.alive = false; t.fall_v = 1.0; game.stats.threats_down += 1;
+                            if p.zone != zone_index(t.def.zone) { game.outside_kills += 1; }
+                            if t.hunter && t.first_facing != Some(false) && crate::scenario::is(&game, crate::scenario::Kind::Rear) { game.scn_b += 1; }
                             if !t.def.passive && !game.demo {
                                 let k = crate::lessons::kill_metrics(&level, &p, t, game.time, one_shot);
                                 game.coach = Some((format!("Threat down · slice angle {}° · body exposed {} cm · {:.1} s in its line of fire · {} pts", k.angle.round() as i32, k.expo_cm.round() as i32, k.dt, k.pts.round() as i32), 4, 5.0));
@@ -381,14 +431,18 @@ pub fn combat(
     /* ---------- alvos: queda e reação ---------- */
     let head = p.head_h();
     let mut exposed = false;
+    game.lock = 0.0;
+    // fase "very hard" (mech com escolta): dificuldade própria, acima do HARD
+    let very_hard = crate::scenario::is(&game, crate::scenario::Kind::Walker);
     let noreact = std::env::var("CQB_NOREACT").is_ok();
     let nodeath = std::env::var("CQB_NODEATH").is_ok();
     // na demonstração do traçado ideal a ameaça vira e aponta, mas demora a atirar: a demonstração mostra o caminho, não um tiroteio
     // EASY: alvo de papelão parado, que só "acerta" (simulado) quem fica uns dois segundos na frente dele, como no começo do projeto.
     // HARD: 50% mais rápido que o normal.
     let diff = difficulty();
-    let easy = diff == 0;
-    let quick = if diff == 2 { 1.5 } else { 1.0 };
+    let easy = diff == 0 && !force_figs();
+    let quick = if diff == 2 || very_hard { 1.5 } else { 1.0 };
+    let defense = map().defense;
     let (react_t, follow_t) = if game.demo { (3.0, 1.5) } else if easy { (1.9, 1.4) } else if game.free { (REACT / quick, FOLLOW / quick) } else { (REACT_TUT / quick, FOLLOW_TUT / quick) };
     let script = std::env::var("CQB_SCRIPT").is_ok();
     // disparos de ameaças no quadro anterior (as outras ouvem) e os deste quadro; disparos que erraram o operador
@@ -412,12 +466,23 @@ pub fn combat(
             continue;
         }
         if t.def.kind != TKind::Threat || t.def.passive { continue; }
+        // rendido, ou de mãos para o alto esperando a hora de sacar: não atira
+        if t.mind == MIND_YIELDED || t.mind == MIND_FAKE { t.engaged = false; t.react = 0.0; continue; }
+        // invasor da defesa da casa: mais rápido que qualquer nível de dificuldade
+        let (react_t, follow_t) = if defense && t.hunter { (crate::scenario::INV_REACT, crate::scenario::INV_FOLLOW) } else { (react_t, follow_t) };
+        // mech: sempre em alerta, gira devagar e o canhão demora a disparar
+        let mech = is_mech(&t.def);
+        let (react_t, follow_t, turn) = if mech { (crate::scenario::MECH_LOCK, 0.9, crate::scenario::MECH_TURN) } else { (react_t, follow_t, TURN) };
+        if mech { t.alert = ALERT_SECS; }
         let tp = Vec2::new(t.def.x, t.def.z);
         let dv = p.pos - tp;
         let d = dv.length().max(0.01);
         let dir = dv / d;
         // tiro por perto (do operador ou de outra ameaça) põe a ameaça em alerta
         t.alert = (t.alert - dt).max(0.0);
+        if let Some(dc) = breached {
+            if dc.distance(tp) < HEAR { t.alert = ALERT_SECS; if !easy && level.los(t.def.x, t.def.z, 1.4, dc.x, dc.y, 1.0) { let f = (dc - tp).normalize_or_zero(); if f != Vec2::ZERO { t.fwd = f; } } }
+        }
         if !easy && ((fired && d < HEAR) || heard.iter().any(|q| q.distance(tp) < HEAR)) { t.alert = ALERT_SECS; }
         // linha de tiro: para o corpo inteiro, ou só para a cabeça que aparece na quina (mais difícil de ver e de acertar)
         let (mut rate, mut body) = (0.0, false);
@@ -443,9 +508,10 @@ pub fn combat(
             if t.goal.is_some() { t.goal = None; t.moving = false; t.move_cd = 4.0; }
             let cur = t.fwd.x.atan2(t.fwd.y);
             let off = ang_diff(dir.x.atan2(dir.y), cur);
-            let step = off.clamp(-TURN * dt, TURN * dt);
+            let step = off.clamp(-turn * dt, turn * dt);
             t.fwd = Vec2::new((cur + step).sin(), (cur + step).cos());
             if easy { t.fwd = Vec2::new(cur.sin(), cur.cos()); t.react += dt * rate; } else if (off - step).abs() < 0.3 { t.react += dt * rate; }
+            if mech { game.lock = game.lock.max((t.react / react_t).clamp(0.0, 1.0)); }
             if t.react >= react_t {
                 t.react = react_t - follow_t;
                 if easy {
@@ -472,9 +538,11 @@ pub fn combat(
                 if d > 9.0 { chance *= 0.8; }
                 if p.speed > 2.8 { chance *= 0.8; }
                 // HARD: 95% de acerto, sem desconto
-                if diff == 2 { chance = 0.95; }
+                if diff == 2 || very_hard { chance = 0.95; }
+                if defense && t.hunter { chance = crate::scenario::INV_HIT; }
+                if mech { chance = 0.95; }
                 // meio segundo de folga depois de um tiro levado: duas ameaças atirando juntas não abatem o operador de uma vez
-                if game.dmg_t > if diff == 2 { 0.95 } else { 0.8 } { chance = 0.0; }
+                if game.dmg_t > if diff == 2 || defense { 0.95 } else { 0.8 } { chance = 0.0; }
                 if rand01(game.time * 53.1 + i as f32 * 9.7 + game.stats.shots as f32) < chance {
                     game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
                     sfx.write(Sfx::Hurt);
@@ -482,7 +550,9 @@ pub fn combat(
                     game.tracers.push((mz, aim - to * 0.45, 0.1));
                     let why = if t.vis { "The threat had a clear line of fire for too long: identify and neutralize faster." }
                         else { "You were hit by a threat you were not looking at: there was uncleared area with a line of fire to you." };
-                    if !game.demo { game.wounds += 1; }
+                    // o canhão do mech não fere: encerra a partida
+                    let why = if mech { "The walker's cannon had you in its sights for a full second. Break its line of sight before the lock completes." } else { why };
+                    if !game.demo { game.wounds += if mech { MAX_WOUNDS } else { 1 }; }
                     if game.wounds >= MAX_WOUNDS && !nodeath {
                         game.down_t = DOWN_SECS; game.down_why = why.to_string(); game.toast = None;
                     } else {

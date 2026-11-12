@@ -326,7 +326,7 @@ pub fn update_cameras(
         tf.translation = p.eye + Vec3::Y * ((p.bob * 3.9).sin() * 0.012 * bob_amt);
         tf.rotation = rot;
         // operador abatido: a câmera desaba para o chão e tomba de lado
-        let k = if game.mode == Mode::Down { 1.0 } else if game.down_t > 0.0 { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) } else { 0.0 };
+        let k = if game.mode == Mode::Down { if game.down_title.is_empty() { 1.0 } else { 0.0 } } else if game.down_t > 0.0 { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) } else { 0.0 };
         if k > 0.0 {
             let e = k * k * (3.0 - 2.0 * k);
             tf.translation.y += (0.34 - tf.translation.y) * e;

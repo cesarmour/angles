@@ -171,36 +171,35 @@ def posed_verts(o):
     return w
 
 if MODE in ('operator', 'player', 'threat'):
-    # óculos escuros de armação grossa (referência do dono do projeto): armação preta em volta de cada lente, lentes quase
-    # quadradas de cantos arredondados com reflexo bronze, frente quase reta, hastes largas com um detalhe prateado.
+    # óculos balísticos envolventes (referência do dono do projeto): duas lentes escuras e brilhantes que acompanham a curva
+    # do rosto até as têmporas, barra fina por cima, sem aro embaixo, ponte estreita no nariz e hastes finas.
     # No operador do jogador e nas ameaças (os olhos do modelo nunca ficaram bons).
     ev = posed_verts(by_material('eyes'))
     ex = (min(v.x for v in ev) + max(v.x for v in ev)) / 2; ez = sum(v.z for v in ev) / len(ev); efront = min(v.y for v in ev)
-    lens_m2 = mat('shades_lens', (0.05, 0.034, 0.014), 0.06, 0.92)
-    frame_m2 = mat('shades_frame', (0.010, 0.010, 0.012), 0.42)
-    logo_m2 = mat('shades_logo', (0.75, 0.75, 0.78), 0.3, 1.0)
-    RB = 0.16                                             # frente quase reta: arco de raio grande
-    yf = efront - 0.013                                   # plano da frente dos óculos, 13 mm à frente dos olhos
-    yc, zc_ = yf + RB, ez + 0.002
-    SQ = (6.0, 0.86)                                      # contorno quase quadrado, borda de cima reta
+    lens_m2 = mat('shades_lens', (0.010, 0.011, 0.013), 0.12, 0.25)   # escura, com brilho discreto (muito metálica virava espelho claro sob a luz do menu)
+    frame_m2 = mat('shades_frame', (0.010, 0.010, 0.012), 0.45)
+    RB = 0.090                                            # raio da curva: acompanha o rosto
+    yf = efront - 0.012                                   # ponto mais à frente dos óculos, 12 mm à frente dos olhos
+    yc, zc_ = yf + RB, ez + 0.001
+    WR = (2.4, 0.78)                                      # lente em gota: borda de cima quase reta, de baixo arredondada
+    END = 54.0                                            # até onde a lente dá a volta (graus a partir da frente)
+    from math import sin as _sin, cos as _cos
     parts = []
     for s in (1.0, -1.0):
-        a0, a1 = (1.8, 20.6) if s > 0 else (-20.6, -1.8)
-        parts.append(arc_band('shades_rim', ex, yc, RB, zc_, 0.038, 0.005, a0, a1, frame_m2, lens=True, shape=SQ))
-        b0, b1 = (3.2, 19.2) if s > 0 else (-19.2, -3.2)
-        parts.append(arc_band('shades_lens', ex, yc, RB + 0.0042, zc_ - 0.0005, 0.030, 0.002, b0, b1, lens_m2, lens=True, shape=SQ))
-        # haste: da dobradiça para trás, por dentro do capacete, com a plaquinha prateada perto da frente
-        hx = ex + s * (RB * 0.3518 - 0.001)               # x da ponta da armação (sen 20,6° = 0,3518)
-        hyy = yc - RB * 0.9361                            # y da ponta da armação (cos 20,6° = 0,9361)
-        parts.append(box('shades_arm', (hx + s * 0.001, hyy + 0.056, zc_ + 0.010), (0.0034, 0.112, 0.010), frame_m2))
-        parts.append(box('shades_logo', (hx + s * 0.0030, hyy + 0.020, zc_ + 0.010), (0.0012, 0.012, 0.004), logo_m2))
-    parts.append(arc_band('shades_bridge', ex, yc, RB, zc_ + 0.009, 0.011, 0.005, -2.2, 2.2, frame_m2))
+        b0, b1 = (3.6, END) if s > 0 else (-END, -3.6)
+        parts.append(arc_band('shades_lens', ex, yc, RB, zc_ - 0.002, 0.036, 0.0022, b0, b1, lens_m2, lens=True, shape=WR))
+        # haste fina: da ponta da lente para trás, por dentro do capacete
+        hx = ex + s * RB * _sin(radians(END)); hyy = yc - RB * _cos(radians(END))
+        parts.append(box('shades_arm', (hx + s * 0.0005, hyy + 0.047, zc_ + 0.011), (0.0030, 0.094, 0.0065), frame_m2))
+    # barra de cima (segura as duas lentes) e ponte do nariz
+    parts.append(arc_band('shades_rim', ex, yc, RB + 0.0004, zc_ + 0.0135, 0.0055, 0.0042, -END - 1.0, END + 1.0, frame_m2))
+    parts.append(arc_band('shades_bridge', ex, yc, RB + 0.0002, zc_ + 0.006, 0.012, 0.0036, -3.8, 3.8, frame_m2))
     # leve inclinação para baixo, em torno do centro da frente
     piv = Vector((ex, yf, zc_))
     for ob in parts:
         ob.matrix_world = Matrix.Translation(piv) @ Matrix.Rotation(radians(-6), 4, 'X') @ Matrix.Translation(-piv) @ ob.matrix_world
     on_head(parts)
-    print("OCULOS armação grossa em z=%.3f" % ez)
+    print("OCULOS envolventes em z=%.3f" % ez)
 
 if HOSTAGE or MAIN:
     # as peças de roupa usam todas o mesmo material; aqui a calça (e, no visual alternativo, a jaqueta) ganham material

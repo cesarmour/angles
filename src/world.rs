@@ -160,6 +160,7 @@ pub fn tame_materials(mut ev: EventReader<AssetEvent<StandardMaterial>>, mut mat
         let name = path.path().to_string_lossy();
         if name.contains("operator.glb") || name.contains("threat.glb") || name.contains("player.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.16; } }
         if name.contains("hostage.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.25; } }
+        if name.contains("walker.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.2; } }
         if path.path().to_string_lossy().contains("metal_office_desk") {
             if let Some(m) = mats.get_mut(id) { m.base_color = Color::srgb(0.3, 0.31, 0.32); m.perceptual_roughness = 1.0; m.metallic = 0.0; m.metallic_roughness_texture = None; m.reflectance = 0.15; }
         }
@@ -273,6 +274,18 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
                 model(&mut *commands, "cardboard_box_01", Vec3::new(p.x1 + 1.5, 1.0, mz), 0.2, Vec3::splat(0.9), Vec3::ZERO);
             }
             PropKind::Locker => model(&mut *commands, "vintage_cabinet_01", c, hp2, Vec3::ONE, Vec3::new(0.0, 0.0, 0.055)),
+            // cama: estrado de madeira, colchão claro e travesseiro (peças com folga entre si, para as faces não coincidirem)
+            PropKind::Bed => {
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1, 0.0, p.z1, p.x2, 0.3, p.z2), b3(p.x1, 0.3, p.z1, p.x2, 0.92, p.z1 + 0.07)], 0.8, &m.wood);
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.04, 0.3, p.z1 + 0.09, p.x2 - 0.04, p.h, p.z2 - 0.04)], 0.6, &m.fabric);
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.2, p.h, p.z1 + 0.16, p.x2 - 0.2, p.h + 0.1, p.z1 + 0.56)], 0.5, &m.cloth);
+            }
+            // piscina: borda baixa e água (bloqueia a passagem, não a visão)
+            PropKind::Pool => {
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1, 0.0, p.z1, p.x2, p.h, p.z1 + 0.18), b3(p.x1, 0.0, p.z2 - 0.18, p.x2, p.h, p.z2), b3(p.x1, 0.0, p.z1 + 0.19, p.x1 + 0.18, p.h, p.z2 - 0.19), b3(p.x2 - 0.18, 0.0, p.z1 + 0.19, p.x2, p.h, p.z2 - 0.19)], 0.6, &m.wall_hi);
+                let water = mats.add(StandardMaterial { base_color: Color::srgb(0.08, 0.32, 0.46), perceptual_roughness: 0.12, reflectance: 0.6, ..default() });
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.19, 0.0, p.z1 + 0.19, p.x2 - 0.19, p.h - 0.05, p.z2 - 0.19)], 1.0, &water);
+            }
             PropKind::Cover => {
                 // nenhuma face de uma peça coincide com a de outra (faces no mesmo plano piscam): as chapas param
                 // embaixo da tampa, a tampa sobra 12 mm para fora e os pés ficam 10 mm para fora das chapas
