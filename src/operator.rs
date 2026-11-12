@@ -319,7 +319,7 @@ pub fn room_clear_system(time: Res<Time>, mut game: ResMut<Game>, tac: Res<crate
     met.1 = (met.1 - time.delta_secs()).max(0.0);
     for (i, t) in targets.list.iter().enumerate().filter(|(_, t)| t.def.kind == TKind::Civil && !t.off) {
         let bit = 1u32 << (i as u32 % 32);
-        if !t.seen { met.0 &= !bit; } else if met.0 & bit == 0 { met.0 |= bit; if met.1 <= 0.0 && t.alive { sfx.write(Sfx::Voice(0)); met.1 = 4.0; } }
+        if !t.seen { met.0 &= !bit; } else if met.0 & bit == 0 { met.0 |= bit; if met.1 <= 0.0 && t.alive && difficulty() != 0 { sfx.write(Sfx::Voice(0)); met.1 = 4.0; } }
     }
     let mut used = 0u32;
     for t in targets.list.iter().filter(|t| !t.off && !t.def.passive) { used |= 1 << zone_index(t.def.zone); }
@@ -348,7 +348,8 @@ pub fn threat_move_system(time: Res<Time>, game: Res<Game>, level: Res<crate::ma
     let now = time.elapsed_secs();
     let rnd = |s: f32| (s.sin() * 43758.547).fract().abs();
     let n = targets.list.len();
-    if shot && game.free && std::env::var("CQB_NOMOVE").is_err() {
+    // alvo de papelão (nível EASY) não muda de lugar
+    if shot && game.free && difficulty() != 0 && std::env::var("CQB_NOMOVE").is_err() {
         let mut taken: Vec<Vec2> = targets.list.iter().filter(|t| t.alive && !t.off).map(|t| Vec2::new(t.def.x, t.def.z)).collect();
         for t in targets.list.iter() { if let Some(g) = t.goal { taken.push(Vec2::new(slots()[g].1, slots()[g].2)); } }
         for i in 0..n {

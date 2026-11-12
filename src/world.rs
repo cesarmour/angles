@@ -188,7 +188,13 @@ pub fn map_switch(
     mut p: ResMut<crate::state::Player>, old: Query<Entity, With<MapEntity>>,
 ) {
     let Some(i) = req.0.take() else { return };
-    if i == map_index() || i >= MAPS.len() { return; }
+    if i >= MAPS.len() { return; }
+    // mesmo mapa: só os alvos são refeitos (troca de dificuldade: bonecos ou papelão)
+    if i == map_index() {
+        for t in targets.list.drain(..) { for mk in t.marks { commands.entity(mk).try_despawn(); } commands.entity(t.root).try_despawn(); }
+        targets.list = crate::combat::spawn_targets(&mut commands, &art, &level);
+        return;
+    }
     set_map(i);
     *level = Level::new();
     for e in &old { commands.entity(e).try_despawn(); }

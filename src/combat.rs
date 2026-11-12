@@ -43,7 +43,8 @@ pub struct TargetArt { pub frame: Handle<Mesh>, pub board: Handle<Mesh>, pub sho
     pub hostage: Handle<Scene>, pub hostage_file: Handle<Gltf>, pub threat: Handle<Scene>, pub threat_file: Handle<Gltf> }
 
 /// O alvo é um boneco 3D? Reféns e ameaças são; o alvo fixo de treino da primeira lição continua de papelão.
-pub fn is_fig(def: &TargetDef) -> bool { def.kind == TKind::Civil || !def.passive }
+/// No nível EASY todos os alvos são de papelão.
+pub fn is_fig(def: &TargetDef) -> bool { difficulty() != 0 && (def.kind == TKind::Civil || !def.passive) }
 /// Zona atingida num boneco em pé, pela distância ao eixo do corpo e pela altura: 3 = cabeça ou centro do peito (equivale à zona A),
 /// 2 = tronco (C), 1 = braços e pernas (D), 0 = fora.
 pub fn fig_zone(lx: f32, y: f32) -> u8 {
@@ -383,7 +384,12 @@ pub fn combat(
     let noreact = std::env::var("CQB_NOREACT").is_ok();
     let nodeath = std::env::var("CQB_NODEATH").is_ok();
     // na demonstração do traçado ideal a ameaça vira e aponta, mas demora a atirar: a demonstração mostra o caminho, não um tiroteio
-    let (react_t, follow_t) = if game.demo { (3.0, 1.5) } else if game.free { (REACT, FOLLOW) } else { (REACT_TUT, FOLLOW_TUT) };
+    // EASY: alvo de papelão parado, que só "acerta" (simulado) quem fica uns dois segundos na frente dele, como no começo do projeto.
+    // HARD: 50% mais rápido que o normal.
+    let diff = difficulty();
+    let easy = diff == 0;
+    let quick = if diff == 2 { 1.5 } else { 1.0 };
+    let (react_t, follow_t) = if game.demo { (3.0, 1.5) } else if easy { (1.9, 1.4) } else if game.free { (REACT / quick, FOLLOW / quick) } else { (REACT_TUT / quick, FOLLOW_TUT / quick) };
     let script = std::env::var("CQB_SCRIPT").is_ok();
     // disparos de ameaças no quadro anterior (as outras ouvem) e os deste quadro; disparos que erraram o operador
     let mut shots_now: Vec<Vec2> = Vec::new();
@@ -412,7 +418,7 @@ pub fn combat(
         let dir = dv / d;
         // tiro por perto (do operador ou de outra ameaça) põe a ameaça em alerta
         t.alert = (t.alert - dt).max(0.0);
-        if (fired && d < HEAR) || heard.iter().any(|q| q.distance(tp) < HEAR) { t.alert = ALERT_SECS; }
+        if !easy && ((fired && d < HEAR) || heard.iter().any(|q| q.distance(tp) < HEAR)) { t.alert = ALERT_SECS; }
         // linha de tiro: para o corpo inteiro, ou só para a cabeça que aparece na quina (mais difícil de ver e de acertar)
         let (mut rate, mut body) = (0.0, false);
         if d < 20.0 && !noreact && !dying && game.down_t <= 0.0 {
@@ -427,7 +433,9 @@ pub fn combat(
                 if t.notice >= 1.0 { t.alert = ALERT_SECS; }
             }
         } else { t.notice = (t.notice - dt * 0.25).max(0.0); }
-        t.engaged = rate > 0.0 && t.alert > 0.0;
+        // papelão não gira nem ouve: só conta quem está na frente dele
+        if easy { t.alert = 0.0; t.notice = 0.0; }
+        t.engaged = rate > 0.0 && if easy { dir.dot(t.fwd) > 0.15 } else { t.alert > 0.0 };
         if t.engaged {
             exposed = true;
             if !t.contact { t.contact = true; t.contact_t = game.time; }
@@ -437,9 +445,19 @@ pub fn combat(
             let off = ang_diff(dir.x.atan2(dir.y), cur);
             let step = off.clamp(-TURN * dt, TURN * dt);
             t.fwd = Vec2::new((cur + step).sin(), (cur + step).cos());
-            if (off - step).abs() < 0.3 { t.react += dt * rate; }
+            if easy { t.fwd = Vec2::new(cur.sin(), cur.cos()); t.react += dt * rate; } else if (off - step).abs() < 0.3 { t.react += dt * rate; }
             if t.react >= react_t {
                 t.react = react_t - follow_t;
+                if easy {
+                    // papelão não atira: o tiro levado é só anotado (clarão vermelho, som e aviso), sem disparo na tela
+                    game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
+                    sfx.write(Sfx::Hurt);
+                    if script { println!("BOT TIRO simulado t={:.1} de {} a {:.1} m contato_ha={:.1}s", game.time, t.def.id, d, game.time - t.contact_t); }
+                    game.toast(if t.vis { "Hit (simulated). The threat had a clear line of fire for too long: identify and neutralize faster." }
+                        else { "Hit (simulated) by a threat you were not looking at. There was uncleared area with a line of fire to you." }, 2, 6.5);
+                    if t.contact && t.first_facing.is_none() && game.time - t.contact_t > 0.35 { t.first_facing = Some(t.seen); }
+                    continue;
+                }
                 let src = Vec3::new(t.def.x + t.fwd.x * 0.25, 1.3, t.def.z + t.fwd.y * 0.25);
                 sfx.write(Sfx::EnemyShot(src));
                 shots_now.push(tp);
@@ -453,8 +471,10 @@ pub fn combat(
                 let mut chance: f32 = if body { 0.85 } else { 0.45 };
                 if d > 9.0 { chance *= 0.8; }
                 if p.speed > 2.8 { chance *= 0.8; }
+                // HARD: 95% de acerto, sem desconto
+                if diff == 2 { chance = 0.95; }
                 // meio segundo de folga depois de um tiro levado: duas ameaças atirando juntas não abatem o operador de uma vez
-                if game.dmg_t > 0.8 { chance = 0.0; }
+                if game.dmg_t > if diff == 2 { 0.95 } else { 0.8 } { chance = 0.0; }
                 if rand01(game.time * 53.1 + i as f32 * 9.7 + game.stats.shots as f32) < chance {
                     game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
                     sfx.write(Sfx::Hurt);

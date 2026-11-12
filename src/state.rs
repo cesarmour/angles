@@ -43,6 +43,17 @@ pub struct Game {
     /// da tela "OPERATOR DOWN", o motivo mostrado nela e o pedido de guardar o ponto de retomada da lição que começa.
     pub wounds: u8, pub down_t: f32, pub down_why: String, pub ckpt_req: bool,
 }
+/// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
+/// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
+static DIFF: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
+pub fn difficulty() -> u8 { DIFF.load(std::sync::atomic::Ordering::Relaxed) }
+pub fn set_difficulty(d: u8) { DIFF.store(d.min(2), std::sync::atomic::Ordering::Relaxed); }
+pub const DIFF_NAMES: [&str; 3] = ["EASY", "NORMAL", "HARD"];
+pub const DIFF_NOTES: [&str; 3] = [
+    "IPSC cardboard targets, no people. Standing in front of one costs a simulated hit, but never ends the run.",
+    "armed threats turn to face you and fire in about a second. Two hits end the run.",
+    "threats fire 50% faster and hit 95% of their shots. Two hits end the run.",
+];
 /// Quantos tiros o operador aguenta: no segundo, a partida acaba.
 pub const MAX_WOUNDS: u8 = 2;
 /// Quanto dura a queda do operador abatido, antes de a tela de fim aparecer.

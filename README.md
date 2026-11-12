@@ -21,6 +21,7 @@ T ideal route (always / tip / off) · O hide the lesson box · H review the less
     ./run.sh run 2      # runs the six lessons along the ideal route and prints the state of each one
     ./run.sh demo       # runs the five lesson demos
     ./run.sh guns       # the two weapons: ready, aiming, firing, switching and reloading
+    ./run.sh diff       # difficulty: menu, EASY (cardboard targets) and HARD (operator down); CQB_DIFF=0|1|2 sets it for any script
     ./run.sh down       # stand in front of a threat until the operator is down, then try again; `back` starts behind it, `down2` does it in the tutorial
     ./run.sh enemy      # a threat raising its pistol and firing; `host` walks up to hostages and threats; `falls` drops four threats
     ./run.sh shots      # captures screens into shots/

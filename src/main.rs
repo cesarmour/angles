@@ -42,6 +42,8 @@ fn exit_log(mut close: EventReader<bevy::window::WindowCloseRequested>, mut exit
 
 fn main() {
     if let Ok(dir) = std::env::var("CQB_DUMP") { art::dump(&dir); return; }
+    // dificuldade inicial nos testes automáticos: CQB_DIFF=0 (easy), 1 (normal) ou 2 (hard)
+    if let Some(d) = std::env::var("CQB_DIFF").ok().and_then(|v| v.parse::<u8>().ok()) { state::set_difficulty(d); }
     let mut app = App::new();
     if std::env::var("CQB_SSR").is_ok() { app.insert_resource(bevy::pbr::DefaultOpaqueRendererMethod::deferred()); }
     app

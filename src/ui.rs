@@ -29,10 +29,10 @@ pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8),
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
-    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound,
+    Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound, DiffBtn(u8),
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry }
+pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry, Diff(u8) }
 #[derive(Event)]
 pub struct ResetGame { pub free: bool, pub mission2: bool }
 
@@ -201,13 +201,21 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         });
         // escolha do mapa para o percurso livre (o tutorial e a missão 2 usam sempre a casa de treino)
         s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(8.0), flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, ..default() }).with_children(|r| {
-            r.spawn(txt("MAP FOR FREE RUN", &f.semi, 13.0, CYAN));
+            r.spawn((txt("MAP FOR FREE RUN", &f.semi, 13.0, CYAN), Node { min_width: Val::Px(118.0), ..default() }));
             for (i, m) in MAPS.iter().enumerate() {
                 r.spawn((Button, Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(7.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(CYAN), BackgroundColor(Color::NONE), Act::Map(i as u8)))
                     .with_children(|b| { b.spawn((txt(&format!("{} · {}", i + 1, m.name.to_uppercase()), &f.bold, 16.0, BONE), Tag::MapBtn(i as u8))); });
             }
         });
-        s.spawn((txt("", &f.body, 13.0, MUTE), Tag::MapNote));
+        // dificuldade: vale para o tutorial, a missão 2 e o percurso livre
+        s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(8.0), flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, ..default() }).with_children(|r| {
+            r.spawn((txt("DIFFICULTY", &f.semi, 13.0, CYAN), Node { min_width: Val::Px(118.0), ..default() }));
+            for (i, name) in DIFF_NAMES.iter().enumerate() {
+                r.spawn((Button, Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(7.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(CYAN), BackgroundColor(Color::NONE), Act::Diff(i as u8)))
+                    .with_children(|b| { b.spawn((txt(name, &f.bold, 16.0, BONE), Tag::DiffBtn(i as u8))); });
+            }
+        });
+        s.spawn((txt("", &f.body, 13.0, MUTE), Node { max_width: Val::Px(700.0), ..default() }, Tag::MapNote));
         s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), margin: UiRect::top(Val::Px(10.0)), ..default() }).with_children(|l| {
             for (i, (a, b)) in [("FUNDAMENTALS", "movement, aiming, leaning, crouching and the two views"), ("SLICING THE PIE", "going around a corner in an arc"), ("FATAL FUNNEL", "centre door and near corners"),
                 ("POSITIVE ID", "armed is a threat, hands up and unarmed is a hostage"), ("CLOSED DOOR AND T", "open from the side, clear both sides"), ("DEAD SPACE", "what tall furniture hides")].iter().enumerate() {
@@ -318,6 +326,8 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
         Act::Restart => { reset.write(ResetGame { free: game.free, mission2: game.mission2 }); }
         Act::Mission2 => { if map_index() != 0 { mapreq.0 = Some(0); } reset.write(ResetGame { free: true, mission2: true }); }
         Act::Map(i) => { mapreq.0 = Some(i as usize); }
+        // entrar ou sair do EASY troca bonecos por papelão (ou o contrário): os alvos do mapa atual são refeitos
+        Act::Diff(i) => { let was = difficulty(); set_difficulty(i); if (was == 0) != (i == 0) { mapreq.0 = Some(map_index()); } }
         Act::Quit => { exit.write(AppExit::Success); }
         Act::Demo => { game.demo_req = true; }
         Act::Flash => { game.flash = !game.flash; game.flag_flash = true; }
@@ -454,7 +464,8 @@ pub fn update_ui(
                     }
                 });
             }
-            Tag::Toast => show(&mut node, toast_on),
+            // em janela estreita o aviso fica entre a caixa da lição (à esquerda) e o painel tático (à direita), sem cobrir nenhum dos dois
+            Tag::Toast => { show(&mut node, toast_on); let (l, r) = if uw < 1336.0 { (Val::Px(408.0), Val::Px(348.0)) } else { (Val::Px(0.0), Val::Px(0.0)) }; if node.padding.left != l { node.padding.left = l; node.padding.right = r; } }
             Tag::Stamp => show(&mut node, play && game.stamp_t > 0.0),
             Tag::Coach => show(&mut node, play && game.coach.is_some()),
             Tag::DemoBar => show(&mut node, game.demo),
@@ -602,9 +613,10 @@ pub fn update_ui(
     };
     for (tag, mut t, mut col) in texts.iter_mut() {
         match *tag {
-            Tag::LessonKick => set(&mut t, &if game.mission2 { "MISSION 2 · REVERSE ROUTE".to_string() } else if game.free { format!("FREE RUN · {}", map().name.to_uppercase()) } else { lesson.kicker.to_string() }),
+            Tag::LessonKick => { let k = if game.mission2 { "MISSION 2 · REVERSE ROUTE".to_string() } else if game.free { format!("FREE RUN · {}", map().name.to_uppercase()) } else { lesson.kicker.to_string() }; set(&mut t, &if difficulty() == 1 { k } else { format!("{} · {}", k, DIFF_NAMES[difficulty() as usize]) }); }
             Tag::MapBtn(i) => { col.0 = if i as usize == map_index() { AMBER } else { BONE }; }
-            Tag::MapNote if game.mode == Mode::Menu => set(&mut t, &format!("Selected: {} — {}. Enemy and hostage positions are random on every run.", map().name, map().blurb)),
+            Tag::DiffBtn(i) => { col.0 = if i == difficulty() { AMBER } else { BONE }; }
+            Tag::MapNote if game.mode == Mode::Menu => set(&mut t, &format!("Map: {} — {}. Enemy and hostage positions are random on every run.\n{}: {}", map().name, map().blurb, { let n = DIFF_NAMES[difficulty() as usize]; format!("{}{}", &n[..1], n[1..].to_lowercase()) }, DIFF_NOTES[difficulty() as usize])),
             Tag::LessonTitle => set(&mut t, if game.mission2 { "FROM ROOM C TO STAGING" } else if game.free { "CLEAR EVERY ROOM" } else { lesson.title }),
             Tag::ReplayTitle => set(&mut t, &format!("ENTRY REPLAY · {}", lesson.title.to_uppercase())),
             Tag::CardKick => set(&mut t, lesson.kicker),
@@ -673,7 +685,7 @@ pub fn update_ui(
                 } else if k == 6 { set(&mut t, &format!("{}°", tac.hfov.to_degrees().round() as i32)); col.0 = CYAN; }
             }
             Tag::DbGrade if game.mode == Mode::Debrief => { let (_, (g, c)) = score_grade(); set(&mut t, g); col.0 = c; }
-            Tag::DbScore if game.mode == Mode::Debrief => { let (sc, _) = score_grade(); set(&mut t, &format!("{} POINTS", sc)); }
+            Tag::DbScore if game.mode == Mode::Debrief => { let (sc, _) = score_grade(); set(&mut t, &format!("{} POINTS  ·  {}", sc, DIFF_NAMES[difficulty() as usize])); }
             _ => {}
         }
     }

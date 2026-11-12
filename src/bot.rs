@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits,
+    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8),
     /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
     Near(bool, usize, f32),
 }
@@ -131,6 +131,9 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
             Tp(3.0, 15.4, 0.0, 0.0), ViewTo(View::Bird), Wait(60), Go(3.0, 13.2, None), Shot("v2"), Go(3.0, 12.4, None), Shot("v3"), Snap("fim"), Quit],
         // tela de créditos (para conferir se o texto cabe)
         "credits" => vec![Wait(120), Credits, Wait(60), Shot("credits"), Quit],
+        // dificuldade: menu, EASY (papelão, tiro só simulado, sem fim de partida) e HARD (tiro mais rápido, operador abatido)
+        "diff" => vec![Wait(200), Shot("df-menu"), Diff(0), Wait(90), Shot("df-menu-easy"), Start(true), Wait(240), Near(false, 1, 3.0), Wait(120), Shot("df-easy-threat"), Wait(500), Snap("easy"), Near(true, 0, 2.6), Wait(90), Shot("df-easy-hostage"),
+            Diff(2), Wait(30), Start(true), Wait(240), Near(false, 1, 3.0), Wait(100), Shot("df-hard"), Wait(500), Snap("hard"), Shot("df-hard-down"), Quit],
         // operador parado na frente de uma ameaça até ser abatido; depois tenta de novo
         "down" => vec![Wait(60), Start(true), Wait(240), Near(false, 1, 3.0), Wait(150), Snap("d1"), Shot("d1"), Wait(100), Snap("d2"), Shot("d2"), Wait(90), Snap("d3"), Shot("d3"), Wait(120), Snap("d4"), Shot("d4"), Wait(600), Snap("d5"), Shot("d5"), Confirm, Wait(240), Snap("d6"), Shot("d6"), Quit],
         // operador parado atrás de uma ameaça: ela percebe, vira e atira
@@ -292,6 +295,7 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
         Cmd::OpenDoor(i) => { if level.doors[i].open < 0.5 && !level.doors[i].opening { c.interact = true; } done = true; }
         Cmd::DemoOf(l) => { game.lesson = l; game.obj = vec![0; crate::lessons::LESSONS[l].objs.len()]; game.mode = Mode::Card; game.demo_req = true; game.ui_dirty = true; done = true; }
         Cmd::Map(i) => { mapreq.0 = Some(i); done = true; }
+        Cmd::Diff(d) => { let was = difficulty(); set_difficulty(d); if (was == 0) != (d == 0) { mapreq.0 = Some(crate::map::map_index()); } done = true; }
         Cmd::Weapon(i) => { c.weapon = Some(i); done = true; }
         Cmd::Near(civil, n, dist) => {
             let want = if civil { TKind::Civil } else { TKind::Threat };
