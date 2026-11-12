@@ -64,7 +64,7 @@ A teaching tool for close-quarters battle fundamentals. Real technique is learne
 The pistol was matched to its Sketchfab page by triangle count (25,216) and clip names. Conversion scripts are in `tools3d/`.
 
 ## Character animation — Adobe Mixamo (https://www.mixamo.com)
-Standing idle and aiming with a pistol, walking with a pistol, and four falling animations come from Mixamo and were retargeted onto the operator, threat and hostage skeletons with `tools3d/mixamo_lib.py`. Mixamo animations are royalty free for use inside a project; the standalone animation files are not redistributed here. To rebuild the models, download them with a free Adobe account into `3dmodels/mixamo/` (file names listed at the top of `tools3d/mixamo_lib.py`); that folder is not in the repository.
+Standing idle, aiming and walking with a pistol (the player's body) and with a rifle (armed threats), and four falling animations come from Mixamo and were retargeted onto the operator, threat and hostage skeletons with `tools3d/mixamo_lib.py`. Mixamo animations are royalty free for use inside a project; the standalone animation files are not redistributed here. To rebuild the models, download them with a free Adobe account into `3dmodels/mixamo/` (file names listed at the top of `tools3d/mixamo_lib.py`); that folder is not in the repository.
 
 ## Everything else
 - Level layouts, targets, top-down operator art, icons, diagrams, interface, lesson texts and code were made for this project with Claude Code.

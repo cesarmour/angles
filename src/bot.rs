@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv,
+    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
     /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
     Near(bool, usize, f32),
 }
@@ -22,7 +22,9 @@ pub struct Bot { pub fps: f32, pub auto_card: bool, pub card_n: u32, pub active:
     /// Fila da demonstração (separada da fila do roteiro de teste), ritmo do passo e contador de quadros da demonstração.
     pub demo_q: VecDeque<Cmd>, pub pace: f32, pub demo_frames: u32, pub engage_n: u32,
     /// Tempo (real) desde que o operador automático começou a encarar uma ameaça e desde o último tiro dele.
-    pub engage_t: f32, pub fire_t: f32 }
+    pub engage_t: f32, pub fire_t: f32,
+    /// Posição de guarda (e para onde olhar), caminho de fuga de granada (CQB_FLEE) e quantos pontos dele já foram alcançados.
+    pub home: Option<(Vec2, Vec2)>, pub flee: Vec<Vec2>, pub flee_i: usize }
 
 /// Converte o traçado ideal de uma lição em comandos. Na demonstração entram também o ponto de partida e as legendas.
 pub fn steps_cmds(l: usize, demo: bool) -> Vec<Cmd> {
@@ -172,6 +174,13 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         "lockon" => vec![Wait(120), Scn(8), Wait(150), Confirm, Wait(30), Who(5, 6.0), Wait(36), Shot("lk-lock"), Wait(30), Shot("lk-lock2"), Wait(300), Snap("fim"), Shot("lk-down"), Quit],
         // captura limpa do mapa do corredor visto de cima, para a página (CQB_NOFOW=1 CQB_NOREACT=1 CQB_ZOOM=24)
         "sitehall" => vec![Wait(120), Map(4), Wait(120), Start(true), Wait(30), Tp(10.0, 9.4, 0.0, 0.0), ViewTo(View::Bird), Wait(1300), Shot("site-hall"), Quit],
+        // alerta de área no percurso livre: visto por uma ameaça, as do cômodo saem atrás do operador (CQB_NODEATH=1 CQB_HUNTLOG=1)
+        // inimigos andando com o fuzil, vistos de cima: alerta a área, afasta o operador e fotografa quem vem atrás dele
+        "riflewalk" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(120), Tp(2.0, 12.8, 0.0, 0.0), ViewTo(View::Bird), Wait(260), Shot("rw1"), Wait(110), Shot("rw2"),
+            Wait(110), Shot("rw3"), Wait(110), Shot("rw4"), Quit],
+        "alarm" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(120), Tp(2.0, 12.8, 0.0, 0.0), Wait(1500), Snap("alarme"), Shot("alarm"), Quit],
+        // granada: parado fora da vista de ameaças alertadas (um tiro avisa o cômodo) até alguém lançar (CQB_NODEATH=1)
+        "nade" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(100), Tp(4.6, 7.0, 0.0, 0.0), WaitNade, Wait(60), Shot("nade-air"), Wait(70), Shot("nade-fp"), ViewTo(View::Bird), Wait(25), Shot("nade-top"), Wait(400), Snap("n1"), Shot("nade-after"), Quit],
         "scns" => vec![Wait(120),
             Scn(0), Wait(150), Shot("s1-card"), Confirm, Wait(120), Snap("s1"), Shot("s1-play"),
             Scn(1), Wait(150), Shot("s2-card"), Confirm, Wait(120), Snap("s2"), Shot("s2-play"),
@@ -252,6 +261,19 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         let shot = matches!(bot.queue.front(), Some(Cmd::Shot(_)) | Some(Cmd::WaitReplay));
         if !shot { if bot.card_n > if game.mode == Mode::Replay { 150 } else { 25 } { c.confirm = true; bot.card_n = 0; } return; }
     } else { bot.card_n = 0; }
+    // Granada por perto: o operador automático de guarda larga tudo e corre pelo caminho de fuga (CQB_FLEE="x,z;x,z;..."),
+    // fica lá até ela estourar e depois volta pelo mesmo caminho
+    if game.mode == Mode::Play && bot.home.is_some() && !bot.flee.is_empty() {
+        let danger = game.nade.map_or(false, |(g, _)| g.distance(p.pos) < 6.5) || (game.nade.is_some() && bot.flee_i > 0);
+        if danger {
+            if bot.flee_i < bot.flee.len() {
+                let wp = bot.flee[bot.flee_i];
+                if p.pos.distance(wp) < 0.3 { bot.flee_i += 1; } else { c.world_move = Some((wp - p.pos).normalize()); c.fast = true; c.ads = false; }
+                return;
+            }
+            // já no abrigo: continua atirando no que aparecer enquanto espera o estouro
+        }
+    }
     // Ameaça à vista tem prioridade sobre o roteiro: como as posições são sorteadas, o operador automático (teste e
     // demonstração) para e neutraliza o que aparecer no setor, desde que não haja um refém na linha de tiro.
     if game.mode == Mode::Play && (demo || bot.auto_card) {
@@ -367,15 +389,30 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
         }
         Cmd::Screen(m) => { game.mode = m; game.ui_dirty = true; done = true; }
         Cmd::Auto(on) => { bot.auto_card = on; done = true; }
+        // espera uma granada entrar em cena
+        Cmd::WaitNade => { done = game.nade.is_some() || bot.n > 4000; }
         // fica parado por n quadros; recarrega só quando não há invasor de pé (entre as ondas)
         Cmd::Hold(n) => {
             if !targets.list.iter().any(|t| t.hunter && t.alive && !t.off) && p.mag < p.def().mag && !p.reloading && !p.switching() { c.reload = true; }
+            // depois de fugir de uma granada, volta para a posição de guarda pelo mesmo caminho
+            if let (Some((home, look)), true) = (bot.home, bot.flee_i > 0 && game.nade.is_none()) {
+                let target = if bot.flee_i >= 2 { bot.flee[bot.flee_i - 2] } else { home };
+                if p.pos.distance(target) < 0.3 {
+                    bot.flee_i -= 1;
+                    if bot.flee_i == 0 { p.yaw = (-(look.x - p.pos.x)).atan2(-(look.y - p.pos.y)); p.pitch = -0.04; }
+                } else { c.world_move = Some((target - p.pos).normalize()); c.fast = true; c.ads = false; }
+            }
             done = bot.n >= n || game.mode != Mode::Play;
         }
         // posição e ponto para onde olhar vindos de CQB_POS="x,z,olhar_x,olhar_z"
         Cmd::TpEnv => {
             let v: Vec<f32> = std::env::var("CQB_POS").unwrap_or_default().split(',').filter_map(|s| s.trim().parse().ok()).collect();
-            if v.len() == 4 { p.pos = Vec2::new(v[0], v[1]); p.vel = Vec2::ZERO; p.yaw = (-(v[2] - v[0])).atan2(-(v[3] - v[1])); p.pitch = -0.04; }
+            if v.len() == 4 {
+                p.pos = Vec2::new(v[0], v[1]); p.vel = Vec2::ZERO; p.yaw = (-(v[2] - v[0])).atan2(-(v[3] - v[1])); p.pitch = -0.04;
+                bot.home = Some((Vec2::new(v[0], v[1]), Vec2::new(v[2], v[3])));
+                bot.flee = std::env::var("CQB_FLEE").unwrap_or_default().split(';').filter_map(|q| { let w: Vec<f32> = q.split(',').filter_map(|s| s.trim().parse().ok()).collect(); if w.len() == 2 { Some(Vec2::new(w[0], w[1])) } else { None } }).collect();
+                bot.flee_i = 0;
+            }
             done = true;
         }
         // vai para a frente de um alvo escolhido pelo papel dele no cenário: 0 captor, 1 ameaça com escudo, 2 falso rendido, 3 quem vai se render, 4 caçador

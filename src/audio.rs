@@ -166,6 +166,7 @@ pub fn play_sfx(mut ev: EventReader<Sfx>, mut s: ResMut<Sounds>, mut commands: C
             Sfx::Rifle => (if corridor { s.rifle_corr.clone() } else { s.rifle_room.clone() }, 1.0, None),
             Sfx::Voice(i) => (s.voice[(i as usize).min(s.voice.len() - 1)].clone(), 0.9, None),
             Sfx::EnemyShot(q) => (s.enemy[hid(q)].clone(), 1.7, Some(q)),
+            Sfx::EnemyRound(q) => (s.enemy[hid(q)].clone(), 1.5, Some(q)),
             Sfx::Dry => (s.dry.clone(), 0.8, None),
             Sfx::Click => (s.click.clone(), 0.7, None),
             Sfx::Reload => (s.reload.clone(), 0.9, None),

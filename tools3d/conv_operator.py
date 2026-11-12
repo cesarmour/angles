@@ -6,8 +6,9 @@ import numpy as np
 a = sys.argv[sys.argv.index('--') + 1:]
 src, patch, out = a[0], a[1], a[2]
 # quarto argumento: "hostage" = refém (sem arma, capacete e equipamento; roupa clara, a cor de "não atire"; mãos para o alto)
-#                   "threat"  = ameaça (roupa cáqui; sem insígnia; pistola no lugar do fuzil; clipes Idle, Aim, Shoot e quedas);
-#                               pede um quinto argumento: o arquivo da pistola (assets/models/pistola_colt.glb)
+#                   "threat"  = ameaça (roupa cáqui; sem insígnia; fica com o fuzil do modelo, as duas mãos ajustadas a ele;
+#                               clipes Idle, Aim, Shoot em rajada, Walk e quedas);
+#                               quinto argumento: o arquivo da pistola (assets/models/pistola_colt.glb), usado só no modo "player"
 MODE = a[3] if len(a) > 3 else 'operator'
 HOSTAGE, THREAT = MODE == 'hostage', MODE == 'threat'
 # "player" = o operador do jogador na vista de cima: preto como o do menu, com a pistola e as poses da ameaça
@@ -262,8 +263,103 @@ if ARMED:
     def pose_restore(snap):
         for pb in arm.pose.bones: pb.location, pb.rotation_quaternion, pb.scale = snap[pb.name]
         bpy.context.view_layer.update()
-    # sai o fuzil (a ameaça passa a usar a pistola); carregadores e bolsos do colete acompanham o tronco
-    kill(bpy.data.objects['Gun_99'])
+    # a ameaça fica com o fuzil do modelo, preso à mão direita (as duas mãos são ajustadas a ele quadro a quadro, mais abaixo);
+    # o corpo do jogador troca o fuzil pela pistola. Carregadores e bolsos do colete acompanham o tronco.
+    RIFLE = THREAT
+    if RIFLE:
+        sc.frame_set(1); bpy.context.view_layer.update()
+        gun = bpy.data.objects['Gun_99']; gun.name = 'Rifle'
+        G0 = gun.matrix_world.copy(); G0i = G0.inverted()
+        HAND = {s_: bone(s_ + 'Hand') for s_ in ('Left', 'Right')}
+        # como cada mão segura o fuzil na pose original do modelo (punho e orientação, em coordenadas da arma) e os dedos fechados
+        HR0, HL0 = G0i @ world(HAND['Right']), G0i @ world(HAND['Left'])
+        A0, B0 = world(HAND['Right']).translation.copy(), world(HAND['Left']).translation.copy()
+        FINGERS = [pb for s_ in ('Left', 'Right') for pb in subtree(HAND[s_]) if pb is not HAND[s_]]
+        FING0 = {pb.name: (pb.location.copy(), pb.rotation_quaternion.copy(), pb.scale.copy()) for pb in FINGERS}
+        # eixo do cano (da coronha para a boca) e o "para cima" da arma (oposto ao carregador), no mundo, na pose original
+        dg_ = bpy.context.evaluated_depsgraph_get()
+        gp, mp = [], []
+        def _collect(o):
+            if o.type == 'MESH':
+                w_ = [tuple(o.matrix_world @ v.co) for v in o.data.vertices]
+                gp.extend(w_)
+                if 'Magazine' in o.name or (o.parent and 'Magazine' in o.parent.name): mp.extend(w_)
+            for c in o.children: _collect(c)
+        _collect(gun)
+        gp = _np.array(gp); gc = gp.mean(0)
+        D0 = _np.linalg.svd(gp - gc, full_matrices=False)[2][0]
+        if D0.dot(_np.array(B0 - A0)) < 0: D0 = -D0
+        U0 = gc - _np.array(mp).mean(0) if mp else _np.array([0.0, 0.0, 1.0])
+        U0 = U0 - U0.dot(D0) * D0; U0 /= _np.linalg.norm(U0)
+        D0, U0 = Vector(D0.tolist()), Vector(U0.tolist())
+        along = (gp - gc) @ _np.array(D0)
+        print("FUZIL comprimento %.2f m; boca a %.2f m e coronha a %.2f m do punho direito; eixo (%.2f %.2f %.2f) cima (%.2f %.2f %.2f)" % (
+            along.max() - along.min(), along.max() - (_np.array(A0) - gc).dot(_np.array(D0)), (_np.array(A0) - gc).dot(_np.array(D0)) - along.min(), *D0, *U0))
+        MUZZLE0 = Vector((gc + _np.array(D0) * along.max()).tolist())
+        EJECT0 = Vector((gc + _np.array(D0) * (along.min() + 0.33 * (along.max() - along.min())) + _np.array(U0) * 0.03).tolist())
+        bone_parent(gun, HAND['Right'])
+        def gun_from_wrists(wR, wL, fwd=None):
+            # onde a arma fica para os dois punhos caírem nos pontos em que o modelo a segura: a linha entre os punhos dá a
+            # direção, o carregador fica para baixo; com `fwd`, o cano é levado exatamente para essa direção (mira)
+            R = (B0 - A0).rotation_difference(wL - wR)
+            e = (wL - wR).normalized()
+            u1 = R @ U0; u1 = u1 - u1.dot(e) * e
+            z = Vector((0, 0, 1)); z = z - z.dot(e) * e
+            if u1.length > 1e-5 and z.length > 1e-5:
+                ang = u1.angle(z)
+                if u1.cross(z).dot(e) < 0: ang = -ang
+                from mathutils import Quaternion as _Q
+                R = _Q(e, ang) @ R
+            if fwd is not None:
+                R = (R @ D0).rotation_difference(Vector(fwd).normalized()) @ R
+                # depois de apontar, tira de novo a inclinação lateral
+                d = (R @ D0).normalized(); u1 = R @ U0; z = Vector((0, 0, 1)); z = z - z.dot(d) * d
+                if z.length > 1e-5:
+                    ang = u1.angle(z)
+                    if u1.cross(z).dot(d) < 0: ang = -ang
+                    from mathutils import Quaternion as _Q
+                    R = _Q(d, ang) @ R
+            return Matrix.Translation(wR) @ R.to_matrix().to_4x4() @ Matrix.Translation(-A0) @ G0
+        def turn_about(pb, q):
+            M = world(pb); h = M.translation.copy()
+            set_world(pb, Matrix.Translation(h) @ q.to_matrix().to_4x4() @ Matrix.Translation(-h) @ M)
+        def fix_hands(G):
+            # mão direita na empunhadura; braço esquerdo dobrado até o punho chegar ao guarda-mão; dedos fechados como no modelo
+            M = G @ HR0; M.translation = world(HAND['Right']).translation; set_world(HAND['Right'], M)
+            ua, fa, hb = bone('LeftArm'), bone('LeftForeArm'), HAND['Left']
+            S, E0, W0 = world(ua).translation.copy(), world(fa).translation.copy(), world(hb).translation.copy()
+            W = (G @ HL0).translation
+            L1, L2 = (E0 - S).length, (W0 - E0).length
+            v = W - S; d = min(max(v.length, abs(L1 - L2) + 1e-4), (L1 + L2) * 0.999); u = v.normalized()
+            a_ = (L1 * L1 - L2 * L2 + d * d) / (2 * d); h = max(L1 * L1 - a_ * a_, 0.0) ** 0.5
+            pole = (E0 - S) - (E0 - S).dot(u) * u
+            if pole.length < 1e-5: pole = Vector((0, 0, -1)) - Vector((0, 0, -1)).dot(u) * u
+            E = S + u * a_ + pole.normalized() * h; W = S + u * d
+            turn_about(ua, (E0 - S).rotation_difference(E - S))
+            E1, W1 = world(fa).translation.copy(), world(hb).translation.copy()
+            turn_about(fa, (W1 - E1).rotation_difference(W - E1))
+            M = G @ HL0; M.translation = world(hb).translation; set_world(hb, M)
+            for pb in FINGERS: pb.location, pb.rotation_quaternion, pb.scale = FING0[pb.name]
+            bpy.context.view_layer.update()
+        GRIPPED = [HAND['Right'], bone('LeftArm'), bone('LeftForeArm'), HAND['Left']] + FINGERS
+        def gun_now(): return world(HAND['Right']) @ HR0.inverted()
+        def grip_clip(act, fwd=None):
+            # passa o clipe inteiro acertando as mãos na arma (as mãos do Mixamo seguram um fuzil de outro tamanho)
+            arm.animation_data.action = act
+            last = {}
+            for f in range(1, int(act.frame_range[1]) + 1):
+                sc.frame_set(f); bpy.context.view_layer.update()
+                fix_hands(gun_from_wrists(world(HAND['Right']).translation.copy(), world(HAND['Left']).translation.copy(), fwd))
+                for pb in GRIPPED:
+                    q = pb.rotation_quaternion
+                    if pb.name in last and last[pb.name].dot(q) < 0: pb.rotation_quaternion = -q
+                    last[pb.name] = pb.rotation_quaternion.copy()
+                key(GRIPPED, (f,))
+            sc.frame_set(1); bpy.context.view_layer.update()
+            d = (gun_now().to_3x3() @ (G0i.to_3x3() @ D0)).normalized()
+            print("EMPUNHADURA %s: cano aponta para (%.2f, %.2f, %.2f)" % (act.name, d.x, d.y, d.z))
+    else:
+        kill(bpy.data.objects['Gun_99'])
     for o in bpy.data.objects:
         if o.type == 'EMPTY' and (o.name.startswith('pouch') or o.name.startswith('Magazine.0')): bone_parent(o, bone('Spine1'))
         # insígnias (só existem no operador do jogador): a das costas acompanha o tronco, a do ombro acompanha o braço
@@ -283,63 +379,90 @@ if ARMED:
     def mx(name, file, **kw):
         act, n = mixamo_lib.retarget(os.path.join(MXDIR, file + '.fbx'), arm, tmap, name, hip_base=HIP0, **kw)
         print("MIXAMO %s: %d quadros" % (name, n)); return act
-    aim = mx('Aim', 'pistol_idle_aim')
+    aim = mx('Aim', 'rifle_aim' if RIFLE else 'pistol_idle_aim')
+    if RIFLE:
+        grip_clip(aim, (0, -1, 0))
+        # onde ficam a boca do cano e a janela de ejeção na mira (o jogo põe ali o clarão e solta a cápsula)
+        for nm, p0 in (('BOCA', MUZZLE0), ('EJECAO', EJECT0)):
+            w_ = gun_now() @ G0i @ p0
+            print("%s na mira: %.3f à frente, %.3f para a esquerda dele, altura %.3f" % (nm, -w_.y, w_.x, w_.z))
     arm.animation_data.action = aim
     sc.frame_set(1); bpy.context.view_layer.update()
-    # ---- pistola: só a arma (sem as mãos de primeira pessoa), na pose parada do arquivo, encaixada na mão direita
-    objs0, acts0 = set(bpy.data.objects), set(bpy.data.actions)
-    bpy.ops.import_scene.gltf(filepath=PISTOL)
-    newo = [o for o in bpy.data.objects if o not in objs0]
-    fp = next(o for o in newo if o.type == 'ARMATURE')
-    still = [x for x in bpy.data.actions if x not in acts0 and x.name.startswith('Idle')]
-    if still: fp.animation_data.action = still[0]
-    sc.frame_set(1); bpy.context.view_layer.update()
-    dg = bpy.context.evaluated_depsgraph_get()
-    pistol = bpy.data.objects.new('Pistol', None); sc.collection.objects.link(pistol)
-    pts = []
-    for o in newo:
-        if o.type == 'MESH' and o.data.materials and o.data.materials[0] and o.data.materials[0].name.startswith('Colt'):
-            me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
-            part = bpy.data.objects.new('Pistol_part', me); sc.collection.objects.link(part)
-            part.matrix_world = o.matrix_world.copy(); part.parent = pistol
-            pts += [tuple(o.matrix_world @ v.co) for v in me.vertices]
-    for o in newo: bpy.data.objects.remove(o)
-    for x in list(bpy.data.actions):
-        if x not in acts0: bpy.data.actions.remove(x)
-    bpy.context.view_layer.update()
-    pts = _np.array(pts)
-    hi = pts[pts[:, 2] > _np.median(pts[:, 2])]                 # metade de cima = ferrolho e cano
-    d = _np.linalg.svd(hi - hi.mean(0), full_matrices=False)[2][0]
-    if d[1] > 0: d = -d                                          # no arquivo a arma aponta para -Y
-    up = _np.array([0.0, 0.0, 1.0]); up = up - up.dot(d) * d; up /= _np.linalg.norm(up)
-    A = _np.array([d, up, _np.cross(d, up)]).T
-    F, U = _np.array([0.0, -1.0, 0.0]), _np.array([0.0, 0.0, 1.0])
-    Rw = Matrix((_np.array([F, U, _np.cross(F, U)]).T @ A.T).tolist()).to_4x4()
-    h = pts @ up
-    grip = Vector(pts[h < _np.quantile(h, 0.35)].mean(0).tolist())   # punho da pistola = parte de baixo
-    length = float((pts @ d).max() - (pts @ d).min())
-    SC = 0.21 / length                                           # comprimento real de uma .45: 21 cm
-    Mh = world(bone('RightHand'))
-    wrist = Mh.translation.copy(); hd = (Mh.to_3x3() @ Vector((0, 1, 0))).normalized()
-    palm = wrist + hd * GRIP_FWD + Vector(GRIP_OFF)
-    pistol.matrix_world = Matrix.Translation(palm) @ Rw @ Matrix.Scale(SC, 4) @ Matrix.Translation(-grip)
-    bpy.context.view_layer.update()
-    bone_parent(pistol, bone('RightHand'))
-    print("PISTOLA comprimento no arquivo %.2f, escala %.4f; mão aponta para (%.2f, %.2f, %.2f)" % (length, SC, hd.x, hd.y, hd.z))
+    if not RIFLE:
+        # ---- pistola: só a arma (sem as mãos de primeira pessoa), na pose parada do arquivo, encaixada na mão direita
+        objs0, acts0 = set(bpy.data.objects), set(bpy.data.actions)
+        bpy.ops.import_scene.gltf(filepath=PISTOL)
+        newo = [o for o in bpy.data.objects if o not in objs0]
+        fp = next(o for o in newo if o.type == 'ARMATURE')
+        still = [x for x in bpy.data.actions if x not in acts0 and x.name.startswith('Idle')]
+        if still: fp.animation_data.action = still[0]
+        sc.frame_set(1); bpy.context.view_layer.update()
+        dg = bpy.context.evaluated_depsgraph_get()
+        pistol = bpy.data.objects.new('Pistol', None); sc.collection.objects.link(pistol)
+        pts = []
+        for o in newo:
+            if o.type == 'MESH' and o.data.materials and o.data.materials[0] and o.data.materials[0].name.startswith('Colt'):
+                me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
+                part = bpy.data.objects.new('Pistol_part', me); sc.collection.objects.link(part)
+                part.matrix_world = o.matrix_world.copy(); part.parent = pistol
+                pts += [tuple(o.matrix_world @ v.co) for v in me.vertices]
+        for o in newo: bpy.data.objects.remove(o)
+        for x in list(bpy.data.actions):
+            if x not in acts0: bpy.data.actions.remove(x)
+        bpy.context.view_layer.update()
+        pts = _np.array(pts)
+        hi = pts[pts[:, 2] > _np.median(pts[:, 2])]                 # metade de cima = ferrolho e cano
+        d = _np.linalg.svd(hi - hi.mean(0), full_matrices=False)[2][0]
+        if d[1] > 0: d = -d                                          # no arquivo a arma aponta para -Y
+        up = _np.array([0.0, 0.0, 1.0]); up = up - up.dot(d) * d; up /= _np.linalg.norm(up)
+        A = _np.array([d, up, _np.cross(d, up)]).T
+        F, U = _np.array([0.0, -1.0, 0.0]), _np.array([0.0, 0.0, 1.0])
+        Rw = Matrix((_np.array([F, U, _np.cross(F, U)]).T @ A.T).tolist()).to_4x4()
+        h = pts @ up
+        grip = Vector(pts[h < _np.quantile(h, 0.35)].mean(0).tolist())   # punho da pistola = parte de baixo
+        length = float((pts @ d).max() - (pts @ d).min())
+        SC = 0.21 / length                                           # comprimento real de uma .45: 21 cm
+        Mh = world(bone('RightHand'))
+        wrist = Mh.translation.copy(); hd = (Mh.to_3x3() @ Vector((0, 1, 0))).normalized()
+        palm = wrist + hd * GRIP_FWD + Vector(GRIP_OFF)
+        pistol.matrix_world = Matrix.Translation(palm) @ Rw @ Matrix.Scale(SC, 4) @ Matrix.Translation(-grip)
+        bpy.context.view_layer.update()
+        bone_parent(pistol, bone('RightHand'))
+        print("PISTOLA comprimento no arquivo %.2f, escala %.4f; mão aponta para (%.2f, %.2f, %.2f)" % (length, SC, hd.x, hd.y, hd.z))
     aim_pose = pose_snapshot()
     # ---- disparo: coice curto (braços e mãos sobem, cano levanta) e volta para a mira; feito aqui, porque o clipe de tiro
     # do Mixamo gira o corpo de lado e o boneco do jogo precisa continuar de frente para o operador
     shoot = bpy.data.actions.new('Shoot'); arm.animation_data.action = shoot
-    def kick(arm_deg, hand_deg):
+    def kick(k):
+        # k = quanto do coice (1 = pico; negativo = a arma passa um pouco do ponto ao voltar). O tronco e os ombros recuam,
+        # os braços sobem, os punhos quebram para cima e a cabeça compensa para os olhos ficarem no alvo.
         pose_restore(aim_pose)
-        for s_ in ('Left', 'Right'): rotx(bone(s_ + 'Arm'), -arm_deg)
-        for s_ in ('Left', 'Right'): rotx(bone(s_ + 'Hand'), -hand_deg)
-    for frame, arm_deg, hand_deg in ((1, 0, 0), (3, 7, 15), (7, 2, 4), (12, 0, 0)):
-        kick(arm_deg, hand_deg)
+        if RIFLE:
+            # fuzil apoiado no ombro: quem absorve é o tronco (vai para trás) e a boca sobe pouco; a mão esquerda segue a arma
+            rotx(bone('Spine'), -0.8 * k); rotx(bone('Spine1'), -1.3 * k); rotx(bone('Spine2'), -1.9 * k)
+            rotx(bone('Head'), 2.6 * k)
+            for s_ in ('Left', 'Right'):
+                rotx(bone(s_ + 'Shoulder'), -1.6 * k)
+                rotx(bone(s_ + 'Arm'), -2.4 * k)
+            fix_hands(gun_now())
+            return
+        rotx(bone('Spine1'), -1.5 * k); rotx(bone('Spine2'), -2.5 * k)
+        rotx(bone('Head'), 3.0 * k)
+        for s_ in ('Left', 'Right'):
+            rotx(bone(s_ + 'Shoulder'), -2.0 * k)
+            rotx(bone(s_ + 'Arm'), -7.0 * k)
+            rotx(bone(s_ + 'ForeArm'), -6.0 * k)
+            rotx(bone(s_ + 'Hand'), -19.0 * k)
+    # pistola: um coice; fuzil: rajada curta de três tiros (um a cada três quadros) e volta para a mira
+    KICKS = ((1, 0.0), (2, 1.0), (3, 0.5), (4, 0.3), (5, 1.05), (6, 0.55), (7, 0.35), (8, 1.1), (9, 0.6), (11, 0.22), (13, -0.08), (16, 0.0)) if RIFLE else \
+            ((1, 0.0), (2, 0.72), (3, 1.0), (5, 0.38), (7, -0.13), (10, 0.04), (14, 0.0))
+    for frame, k in KICKS:
+        kick(k)
         key(list(arm.pose.bones), (frame,))
     # ---- espera com a pistola baixa e caminhada (o mesmo ciclo serve com a arma baixa e apontada)
-    idle = mx('Idle', 'pistol_idle_low')
-    walk = mx('Walk', 'pistol_walk', in_place=True)
+    idle = mx('Idle', 'rifle_idle' if RIFLE else 'pistol_idle_low')
+    walk = mx('Walk', 'rifle_walk' if RIFLE else 'pistol_walk', in_place=True)
+    if RIFLE: grip_clip(idle); grip_clip(walk)
     walk_aim = walk.copy(); walk_aim.name = 'WalkAim'
     CLIPS = ['Aim', 'Shoot', 'Walk', 'WalkAim']
     if MODE == 'threat':
@@ -442,6 +565,8 @@ for m in bpy.data.materials:
 TARGET = {'Krinkov': 4200, 'Magazine': 700, 'pouch.002': 800, 'helmet': 4500, 'boots': 1800}
 # a ameaça aparece várias vezes ao mesmo tempo no mapa: malha mais leve que a do operador do menu
 if ARMED: TARGET = {'Colt': 1400, 'Magazine': 380, 'pouch.002': 420, 'helmet': 2400, 'boots': 900}
+# o fuzil da ameaça aparece de perto na mira: fica com a mesma malha do operador do menu (reduzir mais desmancha o cano e o carregador)
+if THREAT: TARGET.update({'Krinkov': 4200, 'Magazine': 700})
 total = 0
 for o in [o for o in bpy.data.objects if o.type == 'MESH']:
     me = o.data

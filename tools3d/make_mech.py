@@ -378,17 +378,50 @@ def shoot(f):
     p['Torso'][0] = (2.0 - 7.0 * k, 0, 0)
     p['Hips'][1] = (0, 0.05 * k, -0.07 - 0.02 * k)
     return p
+# pernas: comprimentos e ângulos de repouso no plano (y, z); os ângulos crescem no sentido da rotação em torno de X
+H0, K0, A0, T0 = (0.05, 1.15), (-0.28, 0.78), (0.16, 0.40), (-0.14, 0.07)
+LA, LB, LC = ((K0[0] - H0[0]) ** 2 + (K0[1] - H0[1]) ** 2) ** 0.5, ((A0[0] - K0[0]) ** 2 + (A0[1] - K0[1]) ** 2) ** 0.5, ((T0[0] - A0[0]) ** 2 + (T0[1] - A0[1]) ** 2) ** 0.5
+AT0, AS0, AF0 = atan2(K0[1] - H0[1], K0[0] - H0[0]), atan2(A0[1] - K0[1], A0[0] - K0[0]), atan2(T0[1] - A0[1], T0[0] - A0[0])
+def _wrap(x): return (x + pi) % (2 * pi) - pi
+def leg_ik(hip, toe, foot_ang):
+    """Rotações (graus, em torno de X) de coxa, canela e pé para a ponta do pé ficar em `toe`, com o pé no ângulo dado."""
+    from math import acos, degrees
+    ay, az = toe[0] - LC * cos(foot_ang), toe[1] - LC * sin(foot_ang)        # tornozelo
+    vy, vz = ay - hip[0], az - hip[1]
+    d = min((vy * vy + vz * vz) ** 0.5, LA + LB - 0.005)
+    base = atan2(vz, vy)
+    g = acos(max(-1.0, min(1.0, (LA * LA + d * d - LB * LB) / (2 * LA * d))))
+    cands = []
+    for sg in (1.0, -1.0):
+        at = base + sg * g
+        cands.append((hip[0] + LA * cos(at), at))
+    ky, at = min(cands)                                                      # joelho à frente (menor y)
+    kz = hip[1] + LA * sin(at)
+    ash = atan2(az - kz, ay - ky)
+    return degrees(_wrap(at - AT0)), degrees(_wrap((ash - AS0) - (at - AT0))), degrees(_wrap((foot_ang - AF0) - (ash - AS0)))
+STRIDE, DUTY, LIFT = 0.90, 0.60, 0.20      # passada para 1,5 m/s com um ciclo por segundo; cada pé fica 60% do ciclo no chão
 def walk(f):
-    t = (f - 1) / 30.0 * 2 * pi
+    ph = (f - 1) / 30.0
+    t = ph * 2 * pi
     p = base(-8.0)
-    p['Hips'][1] = (0, 0, 0.03 * abs(sin(t)) - 0.03)
-    p['Torso'][0] = (2.5 * sin(2 * t), 3.0 * sin(t), -3.5 * sin(t))
-    p['Head'][0] = (-2.0 * sin(2 * t), 0, 3.0 * sin(t))
-    for s, ph in (('L', 0.0), ('R', pi)):
-        th = -20.0 * sin(t + ph)                              # negativo = perna para a frente
-        lift = max(0.0, cos(t + ph))                          # perna no ar enquanto vem para a frente
-        kn = 12.0 * sin(t + ph) - 16.0 * lift
-        p['Thigh' + s][0] = (th - 8.0 * lift, 0, 0); p['Shin' + s][0] = (kn, 0, 0); p['Foot' + s][0] = (-(th + kn) * 0.8 + 14.0 * lift, 0, 0)
+    # o corpo baixa quando os dois pés estão no chão, balança para o lado da perna de apoio e gira um pouco contra o passo
+    dz, dx = -0.05 + 0.022 * cos(2 * t), 0.03 * sin(t)
+    p['Hips'][1] = (dx, 0, dz)
+    p['Hips'][0] = (0, -2.0 * sin(t), 0)
+    p['Torso'][0] = (1.2 * sin(2 * t), 1.4 * sin(t), -3.0 * sin(t))
+    p['Head'][0] = (-1.0 * sin(2 * t), 0, 2.5 * sin(t))
+    p['Cannon'][0] = (-8.0 + 0.8 * sin(2 * t + 0.6), 0, 0)
+    hip = (H0[0], H0[1] + dz)
+    for s, off in (('L', 0.0), ('R', 0.5)):
+        q = (ph + off) % 1.0
+        if q < DUTY:                                           # apoio: o pé fica parado no chão enquanto o corpo passa por cima
+            u = q / DUTY
+            toe = (-0.10 - STRIDE / 2 + STRIDE * u, T0[1]); fa = AF0
+        else:                                                  # balanço: o pé sobe, vem para a frente e pousa
+            u = (q - DUTY) / (1 - DUTY)
+            toe = (-0.10 + STRIDE / 2 - STRIDE * sm(u), T0[1] + LIFT * sin(pi * u)); fa = AF0 + radians(16.0 * sin(2 * pi * u))
+        th, kn, ft = leg_ik(hip, toe, fa)
+        p['Thigh' + s][0] = (th, 0, 0); p['Shin' + s][0] = (kn, 0, 0); p['Foot' + s][0] = (ft, 0, 0)
     return p
 def fall(f):
     # as pernas dobram, a barriga bate no chão, o corpo tomba de lado e o focinho e o canhão arrastam
@@ -438,7 +471,7 @@ if prev:
     w.node_tree.nodes['Background'].inputs[0].default_value = (0.36, 0.38, 0.41, 1)
     sc.render.engine = 'BLENDER_EEVEE_NEXT'; sc.render.resolution_x = 900; sc.render.resolution_y = 900
     sc.render.image_settings.file_format = 'JPEG'; sc.render.image_settings.quality = 85; sc.view_settings.view_transform = 'Standard'
-    shots = [('front', (2.9, -4.3, 1.9), 'Idle', 1), ('side', (5.2, -0.1, 1.4), 'Aim', 1), ('back', (-2.8, 4.4, 2.2), 'Idle', 20), ('walk', (4.6, -2.6, 1.5), 'Walk', 8),
+    shots = [('front', (2.9, -4.3, 1.9), 'Idle', 1), ('side', (5.2, -0.1, 1.4), 'Aim', 1), ('back', (-2.8, 4.4, 2.2), 'Idle', 20), ('walk', (5.4, 0.0, 1.2), 'Walk', 1), ('walk2', (5.4, 0.0, 1.2), 'Walk', 6), ('walk3', (5.4, 0.0, 1.2), 'Walk', 11), ('walk4', (5.4, 0.0, 1.2), 'Walk', 16),
              ('shoot', (-4.2, -3.0, 1.7), 'Shoot', 3), ('fall', (3.6, -3.8, 2.0), 'Fall1', 66), ('close', (1.9, -2.5, 1.9), 'Aim', 1), ('rear', (-1.8, 2.6, 2.0), 'Aim', 1), ('left', (2.6, 0.2, 1.6), 'Aim', 1), ('head', (0.9, -2.2, 1.5), 'Idle', 1)]
     by_name = {n_: fn_ for n_, fn_, _ in CLIPS}
     for tag, cp, clip, fr in shots:

@@ -61,10 +61,10 @@ pub const SCENARIOS: [Scenario; 9] = [
             "The run ends when the captor is down. If the clock runs out, the hostage is lost."] },
     Scenario { name: "Home defense", kicker: "SCENARIO 8 · STRONG POINT", map: 5, kind: Kind::Defense, figs: true,
         blurb: "hold your own house against waves of intruders: 2, then 4, 6, 8 and 10",
-        lead: "Intruders come in waves from the yard: two, then four, then six, eight and ten. They fire in under half a second and hit 95% of their shots. You will not win a gunfight in the open.",
+        lead: "Intruders come in waves from the street, through the gates: two, then four, then six, eight and ten. They fire in under half a second and hit 95% of their shots. You will not win a gunfight in the open.",
         points: &["Do not go looking for them. Pick a strong point: one way in, a wall at your back and a long line of sight to the opening they must come through.",
-            "They use the stairs, and half of them climb in through the middle suite, so the upstairs hall is reached from two sides. A room with a single door is not.",
-            "Aim at the opening before they reach it and fire as each one appears. Reload between waves, never during one. The stairs are in the top-left corner of each floor."] },
+            "They use the stairs, and some climb the garage slab to the terrace and come in through the balcony doors of the two front suites, so the upstairs hall is reached from several sides. A room with a single door is not.",
+            "Aim at the opening before they reach it and fire as each one appears. Reload between waves, never during one. If a grenade lands beside you, get a wall between you and it, then take the position back."] },
     Scenario { name: "Walker", kicker: "SCENARIO 9 · VERY HARD · ARMOUR AND FLANK", map: 3, kind: Kind::Walker, figs: true,
         blurb: "very hard: a walking tank with an infantry escort; one hit from its cannon ends the run",
         lead: "A walking tank patrols the lane between the shelving rows, and four armed threats hold the floor around it. This stage has its own difficulty, above HARD, whatever is selected on the menu.",
@@ -85,6 +85,9 @@ pub const INV_REACT: f32 = 0.42;
 pub const INV_FOLLOW: f32 = 0.26;
 pub const INV_HIT: f32 = 0.95;
 const INV_SPEED: f32 = 2.5;
+/// Saída de uma passagem (escada, laje): quanto tempo o invasor leva para subir e de que profundidade ele vem.
+const RISE_SECS: f32 = 0.5;
+const RISE_DEPTH: f32 = 1.15;
 const ROAM_SPEED: f32 = 1.6;
 
 /// Tempo do resgate, conforme a dificuldade (CQB_CLOCK troca o valor nos testes).
@@ -464,7 +467,9 @@ pub fn scenario_system(
                         let a = cur + off.clamp(-MECH_TURN * dt, MECH_TURN * dt);
                         t.fwd = Vec2::new(a.sin(), a.cos());
                         let mut np = pos;
-                        if off.abs() < 0.35 { np = pos + dir * (MECH_SPEED * dt).min(v.length()); t.moving = true; }
+                        // as pernas trabalham também enquanto ele gira no lugar
+                        t.moving = true;
+                        if off.abs() < 0.35 { np = pos + dir * (MECH_SPEED * dt).min(v.length()); }
                         t.def.x = np.x; t.def.z = np.y; t.def.fx = np.x + t.fwd.x; t.def.fz = np.y + t.fwd.y;
                         if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(np.x, 0.0, np.y); tf.rotation = Quat::from_rotation_y(t.fwd.x.atan2(t.fwd.y)); }
                     }
@@ -473,6 +478,8 @@ pub fn scenario_system(
         }
         /* ---------- defesa da casa: ondas ---------- */
         Some(Kind::Defense) if !dying => {
+            // o operador defende a casa: não passa do portão para a rua (é lá, atrás do muro, que os invasores chegam)
+            if p.pos.y > 16.75 { let dz = p.pos.y - 16.75; p.pos.y = 16.75; p.eye.z -= dz; p.vel.y = p.vel.y.min(0.0); }
             let n = targets.list.len();
             // quem está esperando a vez entra em cena
             for i in 0..n {
@@ -512,15 +519,16 @@ pub fn scenario_system(
                             t.def = target_defs()[i];
                             t.clear_run();
                             crate::combat::place_target(&level, t);
-                            // fora de cena até a vez dele: entram um a um, com 0,8 s de intervalo
+                            // fora de cena até a vez dele: a onda chega junta à rua e entra em grupo pelos dois portões (um a um, o portão vira um
+                            // funil que qualquer posição de frente para a entrada vence)
                             t.off = true; t.alive = false; t.fall = 1.0; t.landed = true;
-                            // alguns dos que entram pela garagem conhecem a subida pela laje
-                            t.hunter = true; t.alt = slot >= 2 && slot % 2 == 0 && slot < 8; t.alert = 9999.0; t.pend = 0.05 + slot as f32 * 0.8;
+                            // alguns, dos dois lados, conhecem a subida para o terraço
+                            t.hunter = true; t.alt = matches!(slot, 2 | 3 | 6 | 7); t.alert = 9999.0; t.pend = 0.05 + slot as f32 * 0.3;
                             for m in t.marks.drain(..) { commands.entity(m).despawn(); }
                             commands.entity(t.root).insert(Visibility::Hidden);
                         }
                         if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT ONDA {} com {} invasores t={:.1} derrubados={}", game.wave, count, game.time, game.stats.threats_down); }
-                        let msg = format!("Wave {} of {}: {} intruders in the yard.", game.wave, WAVES, count);
+                        let msg = format!("Wave {} of {}: {} intruders at the gates.", game.wave, WAVES, count);
                         game.toast(&msg, 2, 3.5);
                         sfx.write(Sfx::Bad); game.ui_dirty = true;
                     }
@@ -545,6 +553,13 @@ pub fn scenario_system(
         if !t.hunter || !t.alive || t.off { continue; }
         t.alert = t.alert.max(60.0);
         // de frente para o operador e com linha de tiro: para e atira (quem decide é o combate)
+        if t.rise > 0.0 {
+            t.rise = (t.rise - dt).max(0.0);
+            let k = t.rise / RISE_SECS;
+            if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation.y = -RISE_DEPTH * k * k * (3.0 - 2.0 * k); }
+            t.moving = true;
+            continue;
+        }
         if t.engaged { t.moving = false; continue; }
         let pos = Vec2::new(t.def.x, t.def.z);
         let d = &nav.dist[t.alt as usize];
@@ -556,7 +571,9 @@ pub fn scenario_system(
             if there < here {
                 t.def.x = q.ex; t.def.z = q.ez;
                 if let Some(z) = zone_at(q.ex, q.ez) { t.def.zone = zones()[z].id; }
-                if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(q.ex, 0.0, q.ez); }
+                // sai do vão de baixo para cima (escada ou laje), em vez de surgir de pé
+                t.rise = RISE_SECS;
+                if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(q.ex, -RISE_DEPTH, q.ez); }
                 continue;
             }
         }
@@ -615,6 +632,121 @@ pub fn scenario_system(
         t.def.x = np.x; t.def.z = np.y; t.def.fx = np.x + f.x; t.def.fz = np.y + f.y; t.fwd = f; t.moving = true;
         if let Some(z) = zone_at(np.x, np.y) { t.def.zone = zones()[z].id; }
         if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(np.x, 0.0, np.y); tf.rotation = Quat::from_rotation_y(f.x.atan2(f.y)); }
+    }
+}
+
+/* ------------------------------------------------------------------ granadas ------------------------------------------------------------------ */
+
+/// Granada lançada por uma ameaça: voa em arco até o ponto de queda e estoura depois do pavio.
+#[derive(Component)]
+pub struct Grenade { from: Vec3, to: Vec3, t: f32, fuse: f32 }
+const NADE_FLY: f32 = 0.9;
+const NADE_FUSE: f32 = 2.4;
+/// Raios do estouro: perto disso abate; até o segundo, fere. Parede e móvel alto entre a granada e o operador protegem.
+const NADE_KILL: f32 = 2.2;
+const NADE_HURT: f32 = 4.0;
+/// Quanto tempo o operador pode ficar no mesmo lugar (num raio de 1,2 m) antes de alguém jogar uma granada.
+const CAMP_SECS: f32 = 4.0;
+
+#[derive(Default)]
+pub struct NadeState { camp: Vec2, camp_t: f32, cd: f32, tick: f32, last_time: f32 }
+
+/// Contra quem fica parado: uma ameaça que sabe do operador, está perto e não tem linha de tiro joga uma granada para junto
+/// dele. Vale no percurso livre, na missão 2 e nos cenários (não no tutorial nem com alvos de papelão).
+#[allow(clippy::too_many_arguments)]
+pub fn grenade_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, level: Res<Level>, targets: Res<Targets>, fx: Res<crate::combat::Fx>,
+    mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut smats: ResMut<Assets<StandardMaterial>>, mut nades: Query<(Entity, &mut Grenade, &mut Transform)>,
+    mut sfx: EventWriter<Sfx>, mut gz: Gizmos, mut st: Local<NadeState>, mut art: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>) {
+    let dt = time.delta_secs().min(0.05);
+    if game.mode != Mode::Play {
+        // partida encerrada ou zerada: some o que estiver no ar
+        if matches!(game.mode, Mode::Menu | Mode::Debrief | Mode::Down | Mode::Card) { for (e, _, _) in &nades { commands.entity(e).try_despawn(); } game.nade = None; }
+        return;
+    }
+    if game.time < st.last_time { *st = NadeState::default(); for (e, _, _) in &nades { commands.entity(e).try_despawn(); } game.nade = None; }
+    st.last_time = game.time;
+    let script = std::env::var("CQB_SCRIPT").is_ok();
+    let nodeath = std::env::var("CQB_NODEATH").is_ok();
+
+    /* ---------- granadas em cena ---------- */
+    game.nade = None;
+    for (e, mut g, mut tf) in &mut nades {
+        g.t += dt;
+        if g.t < NADE_FLY {
+            let u = g.t / NADE_FLY;
+            tf.translation = g.from.lerp(g.to, u) + Vec3::Y * (1.1 * (std::f32::consts::PI * u).sin());
+            tf.rotate(Quat::from_rotation_x(9.0 * dt));
+        } else {
+            if g.t - dt < NADE_FLY { sfx.write(Sfx::Casing(g.to)); sfx.write(Sfx::Metal(g.to)); }
+            tf.translation = g.to;
+            g.fuse -= dt;
+            // anel vermelho no chão: até onde o estouro fere
+            let c = g.to;
+            let blink = if (g.fuse * 6.0).fract() < 0.5 { 1.0 } else { 0.45 };
+            for k in 0..28 {
+                let (a0, a1) = (k as f32 / 28.0 * std::f32::consts::TAU, (k + 1) as f32 / 28.0 * std::f32::consts::TAU);
+                gz.line(Vec3::new(c.x + a0.cos() * NADE_HURT, 0.04, c.z + a0.sin() * NADE_HURT), Vec3::new(c.x + a1.cos() * NADE_HURT, 0.04, c.z + a1.sin() * NADE_HURT), Color::srgba(1.0, 0.25, 0.2, 0.55 * blink));
+                gz.line(Vec3::new(c.x + a0.cos() * 0.18, 0.05, c.z + a0.sin() * 0.18), Vec3::new(c.x + a1.cos() * 0.18, 0.05, c.z + a1.sin() * 0.18), Color::srgba(1.0, 0.3, 0.2, blink));
+            }
+        }
+        game.nade = Some((Vec2::new(g.to.x, g.to.z), (NADE_FLY - g.t).max(0.0) + g.fuse.max(0.0)));
+        if g.t >= NADE_FLY && g.fuse <= 0.0 {
+            let c = g.to;
+            commands.entity(e).try_despawn();
+            game.nade = None;
+            crate::combat::blast(&mut commands, &fx, &mut smats, c, game.time);
+            commands.spawn((PointLight { color: Color::srgb(1.0, 0.8, 0.5), intensity: 2_500_000.0, range: 12.0, shadows_enabled: false, ..default() }, Transform::from_translation(c + Vec3::Y * 0.6), crate::world::light_layers(), crate::operator::EnemyFlash(0.11)));
+            sfx.write(Sfx::EnemyShot(c)); sfx.write(Sfx::Fall(c)); sfx.write(Sfx::Impact(c));
+            let d = Vec2::new(c.x, c.z).distance(p.pos);
+            let open = level.los(c.x, c.z, 0.5, p.pos.x, p.pos.y, 1.0) || level.los(c.x, c.z, 0.5, p.eye.x, p.eye.z, p.eye.y);
+            if script { println!("BOT GRANADA estourou a {:.1} m do operador, linha livre={}", d, open); }
+            game.shake = (1.6 - d * 0.2).clamp(0.3, 1.5);
+            if open && d < NADE_HURT && game.down_t <= 0.0 {
+                game.stats.hits_taken += 1; game.dmg_t = 1.3;
+                sfx.write(Sfx::Hurt);
+                game.wounds += if d < NADE_KILL { MAX_WOUNDS } else { 1 };
+                if game.wounds >= MAX_WOUNDS && !nodeath {
+                    game.down_t = DOWN_SECS; game.toast = None;
+                    game.down_why = "A grenade went off beside you. When one lands, leave the spot at once and put a wall between you and it.".into();
+                } else { game.toast("Hit by a grenade (simulated). You stayed in one place too long: when one lands, get a wall between you and it.", 2, 6.0); }
+            }
+        }
+    }
+
+    /* ---------- quem fica parado leva granada ---------- */
+    if game.demo || !game.free || !want_figs() || game.down_t > 0.0 { return; }
+    if p.pos.distance(st.camp) > 1.2 { st.camp = p.pos; st.camp_t = 0.0; } else { st.camp_t += dt; }
+    st.cd = (st.cd - dt).max(0.0);
+    st.tick -= dt;
+    if st.tick > 0.0 || st.cd > 0.0 || st.camp_t < CAMP_SECS || !nades.is_empty() { return; }
+    st.tick = 0.25;
+    for t in targets.list.iter().filter(|t| t.hostile() && !is_mech(&t.def) && t.mind == MIND_NONE && !t.shield && !t.captor && t.pend <= 0.0 && t.rise <= 0.0 && (t.alert > 0.0 || t.hunter)) {
+        let tp = Vec2::new(t.def.x, t.def.z);
+        let d = tp.distance(p.pos);
+        if !(3.0..11.0).contains(&d) { continue; }
+        // quem tem linha de tiro atira; a granada é de quem não tem
+        if level.los(tp.x, tp.y, 1.4, p.pos.x, p.pos.y, 1.2) || level.los(tp.x, tp.y, 1.4, p.eye.x, p.eye.z, p.eye.y) { continue; }
+        // ponto de queda: perto do operador, à vista de quem lança e com linha livre até o operador
+        let mut best: Option<(f32, Vec2)> = None;
+        for r in [1.0f32, 1.8, 2.6] {
+            for k in 0..10 {
+                let a = k as f32 / 10.0 * std::f32::consts::TAU;
+                let q = p.pos + Vec2::new(a.cos(), a.sin()) * r;
+                if zone_at(q.x, q.y).is_none() || blocked(&level, q, 0.15) { continue; }
+                if !level.los(tp.x, tp.y, 1.5, q.x, q.y, 0.4) || !level.los(q.x, q.y, 0.4, p.pos.x, p.pos.y, 1.0) { continue; }
+                if best.map_or(true, |b| r < b.0) { best = Some((r, q)); }
+            }
+            if best.is_some() { break; }
+        }
+        let Some((_, q)) = best else { continue };
+        let (mesh, mat) = art.get_or_insert_with(|| (meshes.add(Sphere::new(0.045).mesh().uv(12, 8)), smats.add(StandardMaterial { base_color: Color::srgb(0.10, 0.14, 0.08), perceptual_roughness: 0.6, metallic: 0.3, ..default() }))).clone();
+        let from = Vec3::new(tp.x, 1.5, tp.y);
+        commands.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(from).with_scale(Vec3::new(1.0, 1.35, 1.0)), bevy::pbr::NotShadowCaster, Grenade { from, to: Vec3::new(q.x, 0.05, q.y), t: 0.0, fuse: NADE_FUSE }));
+        sfx.write(Sfx::Rustle);
+        st.cd = if map().defense { 12.0 } else if difficulty() == 2 { 7.0 } else { 10.0 };
+        st.camp_t = CAMP_SECS * 0.5;
+        if script { println!("BOT GRANADA lançada por {} de {:.1} m para ({:.1},{:.1})", t.def.id, d, q.x, q.y); }
+        break;
     }
 }
 

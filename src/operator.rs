@@ -123,13 +123,25 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
     let rnd = |s: f32| (s.sin() * 43758.547).fract().abs();
     let mut shooters: Vec<usize> = Vec::new();
     for ev in shots.read() {
-        let Sfx::EnemyShot(src) = *ev else { continue };
-        // quem atirou: a ameaça mais próxima da origem do disparo
-        if let Some((i, _)) = targets.list.iter().enumerate().filter(|(_, t)| t.alive && t.def.kind == crate::map::TKind::Threat)
-            .min_by(|a, b| Vec2::new(a.1.def.x - src.x, a.1.def.z - src.z).length().partial_cmp(&Vec2::new(b.1.def.x - src.x, b.1.def.z - src.z).length()).unwrap()) { shooters.push(i); }
-        let to = Vec3::new(p.eye.x - src.x, 0.0, p.eye.z - src.z).normalize_or_zero();
-        let mz = Vec3::new(src.x, 1.44, src.z) + to * 0.42;
-        commands.spawn((Mesh3d(quad.clone()), MeshMaterial3d(mat.clone()), Transform::from_translation(mz).looking_at(p.eye, Vec3::Y).with_scale(Vec3::splat(0.55)), bevy::pbr::NotShadowCaster, EnemyFlash(0.075)));
+        // EnemyShot = primeiro disparo (origem perto do corpo de quem atirou); EnemyRound = resto da rajada (origem já na boca do fuzil)
+        let (src, first) = match *ev { Sfx::EnemyShot(s) => (s, true), Sfx::EnemyRound(s) => (s, false), _ => continue };
+        let mut mz = src;
+        if first {
+            // quem atirou: a ameaça mais próxima da origem do disparo
+            let who = targets.list.iter().enumerate().filter(|(_, t)| t.alive && t.def.kind == crate::map::TKind::Threat)
+                .min_by(|a, b| Vec2::new(a.1.def.x - src.x, a.1.def.z - src.z).length().partial_cmp(&Vec2::new(b.1.def.x - src.x, b.1.def.z - src.z).length()).unwrap());
+            let to = Vec3::new(p.eye.x - src.x, 0.0, p.eye.z - src.z).normalize_or_zero();
+            mz = Vec3::new(src.x, 1.44, src.z) + to * 0.42;
+            if let Some((i, t)) = who {
+                shooters.push(i);
+                if !crate::map::is_mech(&t.def) {
+                    let flat = Vec3::new(p.eye.x - t.def.x, 0.0, p.eye.z - t.def.z).normalize_or_zero();
+                    mz = crate::combat::enemy_muzzle(t.def.x, t.def.z, flat);
+                }
+            }
+        }
+        let to = Vec3::new(p.eye.x - mz.x, 0.0, p.eye.z - mz.z).normalize_or_zero();
+        commands.spawn((Mesh3d(quad.clone()), MeshMaterial3d(mat.clone()), Transform::from_translation(mz + to * 0.06).looking_at(p.eye, Vec3::Y).with_scale(Vec3::splat(0.55)), bevy::pbr::NotShadowCaster, EnemyFlash(0.075)));
         commands.spawn((PointLight { color: Color::srgb(1.0, 0.78, 0.5), intensity: 900_000.0, range: 9.0, shadows_enabled: false, ..default() }, Transform::from_translation(mz + to * 0.2), crate::world::light_layers(), EnemyFlash(0.11)));
     }
     let fdt = time.delta_secs();
@@ -179,7 +191,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         }
         if a.frozen { pl.resume_all(); a.frozen = false; a.mode = 0; a.recoil = 0.0; tr.play(&mut pl, a.idle, Duration::ZERO).repeat(); }
         // disparo: coice curto e volta para a mira
-        if shooters.contains(&a.target) { if let Some(n) = a.shoot { tr.play(&mut pl, n, Duration::from_millis(30)); a.recoil = 0.36; a.mode = 1; } }
+        if shooters.contains(&a.target) { if let Some(n) = a.shoot { tr.play(&mut pl, n, Duration::from_millis(30)); a.recoil = 0.52; a.mode = 1; } }
         if a.recoil > 0.0 {
             a.recoil -= fdt;
             if a.recoil <= 0.0 { if let Some(n) = a.aim { tr.play(&mut pl, n, Duration::from_millis(90)).repeat(); } }
@@ -262,7 +274,7 @@ pub fn body_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Gl
     for (mut a, mut pl, mut tr) in &mut anims {
         if p.shot_n != a.shot_n {
             a.shot_n = p.shot_n; a.hot = 1.4;
-            if let Some(n) = a.shoot { tr.play(&mut pl, n, Duration::from_millis(30)); a.recoil = 0.36; a.mode = 9; }
+            if let Some(n) = a.shoot { tr.play(&mut pl, n, Duration::from_millis(30)); a.recoil = 0.44; a.mode = 9; }
         }
         a.hot = (a.hot - dt).max(0.0);
         if a.recoil > 0.0 { a.recoil -= dt; if a.recoil > 0.0 { continue; } }
@@ -418,7 +430,7 @@ pub fn hands_setup(mut commands: Commands, figs: Query<(Entity, &Fig), Without<H
         while let Some(c) = stack.pop() {
             if let Ok(n) = names.get(c) {
                 let n = n.as_str();
-                if n == "Pistol" { pistol = Some(c); }
+                if n == "Pistol" || n == "Rifle" { pistol = Some(c); }
                 // nomes no arquivo: "mixamorig:LeftArm_12" (o número muda de osso para osso)
                 if let Some(rest) = n.strip_prefix("mixamorig:") {
                     let base = rest.rsplit_once('_').map_or(rest, |(a, _)| a);

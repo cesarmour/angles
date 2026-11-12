@@ -79,6 +79,7 @@ fn main() {
         .add_systems(Update, scenario::scenario_system.after(combat::combat).before(lessons::update_lessons))
         .add_systems(Update, scenario::rank_system.after(lessons::update_lessons).before(ui::update_ui))
         .add_systems(Update, operator::hands_setup)
+        .add_systems(Update, scenario::grenade_system.after(scenario::scenario_system).before(lessons::update_lessons))
         .add_systems(PostUpdate, operator::hands_pose.after(bevy::app::Animation).before(bevy::transform::TransformSystem::TransformPropagate))
         .run();
 }

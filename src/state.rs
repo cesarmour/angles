@@ -23,7 +23,7 @@ pub struct Game {
     pub entry: [Option<f32>; MAX_DOORWAYS], pub entry_pie: [Option<f32>; MAX_DOORWAYS], pub dwell: [f32; MAX_DOORWAYS], pub door_side: [Option<bool>; MAX_DOORS],
     pub stats: Stats, pub bird_zoom: f32, pub sens: f32,
     pub toast: Option<(String, u8, f32)>, pub hit_t: f32, pub dmg_t: f32,
-    pub ui_dirty: bool, pub tracers: Vec<(Vec3, Vec3, f32)>, pub shake: f32, pub near_door: Option<usize>,
+    pub ui_dirty: bool, pub tracers: Vec<(Vec3, Vec3, f32)>, pub burst: Vec<(f32, Vec3, Vec3)>, pub shake: f32, pub near_door: Option<usize>,
     /// Amostras do trajeto da lição atual (tempo, posição, direção, ângulo oculto) para o replay.
     pub track: Vec<(f32, Vec2, f32, f32)>, pub replay_t: f32, pub replay_next: Option<usize>,
     /// Demonstração do traçado ideal (o operador anda sozinho) e linha-guia no chão.
@@ -58,6 +58,8 @@ pub struct Game {
     pub rank: Option<(usize, usize)>, pub ranked: bool,
     /// Quanto falta para o canhão do mech disparar (0 = sem mira, 1 = disparo): vira o aviso "CANNON LOCK" na tela.
     pub lock: f32,
+    /// Granada em cena: onde ela está no chão e quantos segundos faltam para estourar (aviso na tela).
+    pub nade: Option<(Vec2, f32)>,
 }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
@@ -89,11 +91,11 @@ impl Default for Game {
     fn default() -> Self {
         Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: false, flash: true, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
             flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
-            bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
+            bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), burst: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
             scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
-            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0 }
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -187,6 +189,8 @@ pub struct TargetState {
     /// mudar de ideia e relógio desse estado; ameaça que usa um refém como escudo; captor do refém a resgatar; metade dos
     /// invasores conhece o caminho alternativo (laje).
     pub hunter: bool, pub pend: f32, pub mind: u8, pub mind_t: f32, pub shield: bool, pub captor: bool, pub alt: bool,
+    /// Tempo que resta da subida depois de uma passagem (o invasor sai do vão da escada ou da laje, de baixo para cima).
+    pub rise: f32,
 }
 impl TargetState {
     /// Ameaça viva que ainda precisa ser resolvida (quem se rendeu não conta).
@@ -195,7 +199,7 @@ impl TargetState {
     pub fn clear_run(&mut self) {
         self.alive = true; self.fall = 0.0; self.fall_v = 0.0; self.sw = 0.0; self.swv = 0.0; self.landed = false; self.hits = 0; self.seen = false; self.vis = false; self.react = 0.0;
         self.contact = false; self.first_facing = None; self.goal = None; self.wait = 0.0; self.moving = false; self.stuck = 0.0; self.moved = 0; self.move_cd = 0.0;
-        self.alert = 0.0; self.notice = 0.0; self.engaged = false; self.hunter = false; self.pend = 0.0; self.mind = MIND_NONE; self.mind_t = 0.0; self.shield = false; self.captor = false; self.alt = false;
+        self.alert = 0.0; self.notice = 0.0; self.engaged = false; self.hunter = false; self.pend = 0.0; self.mind = MIND_NONE; self.mind_t = 0.0; self.shield = false; self.captor = false; self.alt = false; self.rise = 0.0;
     }
 }
 #[derive(Resource, Default)]
@@ -207,7 +211,7 @@ impl Targets {
 
 /// Eventos sonoros disparados pela simulação.
 #[derive(Event, Clone, Copy)]
-pub enum Sfx { Shot, Rifle, Voice(u8), EnemyShot(Vec3), Dry, Click, Reload, Step(bool), Impact(Vec3), Metal(Vec3), Paper(Vec3), Thwack(Vec3), Fall(Vec3), Door(Vec3), Casing(Vec3), Good, Bad, Hurt, Ui, Rustle }
+pub enum Sfx { Shot, Rifle, Voice(u8), EnemyShot(Vec3), EnemyRound(Vec3), Dry, Click, Reload, Step(bool), Impact(Vec3), Metal(Vec3), Paper(Vec3), Thwack(Vec3), Fall(Vec3), Door(Vec3), Casing(Vec3), Good, Bad, Hurt, Ui, Rustle }
 
 /// Uma arma de primeira pessoa: modelo, clipes de animação e números de jogo.
 /// Medidas em metros no espaço da câmera (X direita, Y cima, -Z frente), relativas à pose em que o autor do modelo deixou a arma.

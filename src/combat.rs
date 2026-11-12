@@ -81,7 +81,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         let mut t = TargetState {
             def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
             fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
-            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false,
+            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false, rise: 0.0,
         };
         place_target(level, &mut t);
         list.push(t);
@@ -211,6 +211,14 @@ fn raycast(level: &Level, targets: &Targets, o: Vec3, d: Vec3) -> Option<Hit> {
     best
 }
 
+/// Estouro de granada: fumaça escura e clara, fagulhas e lascas a partir do ponto.
+pub fn blast(commands: &mut Commands, fx: &Fx, smats: &mut Assets<StandardMaterial>, point: Vec3, seed: f32) {
+    for (k, n) in [Vec3::Y, Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z].into_iter().enumerate() {
+        puff(commands, fx, smats, point + Vec3::Y * 0.2, (n + Vec3::Y * 0.6).normalize(), 4, if k % 2 == 0 { Color::srgb(0.16, 0.15, 0.14) } else { Color::srgb(0.42, 0.40, 0.37) }, 3.2, 0.42);
+        sparks(commands, fx, smats, point + Vec3::Y * 0.15, (n + Vec3::Y).normalize(), seed + k as f32);
+    }
+    chips(commands, fx, smats, point + Vec3::Y * 0.1, Vec3::Y, seed);
+}
 fn puff(commands: &mut Commands, fx: &Fx, smats: &mut Assets<StandardMaterial>, point: Vec3, normal: Vec3, n: usize, color: Color, speed: f32, size: f32) {
     for k in 0..n {
         let r = |a: f32, b: f32, s: f32| a + (b - a) * ((point.x * 12.9898 + point.z * 78.233 + k as f32 * 37.1 + s).sin() * 43758.547).fract().abs();
@@ -263,7 +271,7 @@ pub fn combat(
     mut ml: Query<(&mut PointLight, &mut Transform), With<MuzzleLight>>,
     mut pivots: Query<(&mut Transform, &TargetPivot), (Without<DoorLeaf>, Without<MuzzleLight>)>,
     mut doors: Query<(&mut Transform, &DoorLeaf), (Without<TargetPivot>, Without<MuzzleLight>)>,
-    (mut vis, mut heard): (Query<&mut Visibility>, Local<Vec<Vec2>>),
+    (mut vis, mut heard, mut called): (Query<&mut Visibility>, Local<Vec<Vec2>>, Local<Vec<&'static str>>),
 ) {
     let dt = time.delta_secs().min(0.05);
     // clarão de boca
@@ -445,7 +453,22 @@ pub fn combat(
     let defense = map().defense;
     let (react_t, follow_t) = if game.demo { (3.0, 1.5) } else if easy { (1.9, 1.4) } else if game.free { (REACT / quick, FOLLOW / quick) } else { (REACT_TUT / quick, FOLLOW_TUT / quick) };
     let script = std::env::var("CQB_SCRIPT").is_ok();
+    // alerta de área: quando o operador atira ou é visto, todas as ameaças do cômodo dele e do cômodo de quem o viu ficam
+    // sabendo (no quadro seguinte) e, fora do tutorial e do nível EASY, saem do lugar para atacar
+    let mut areas: Vec<&'static str> = Vec::new();
+    if fired { areas.push(zones()[p.zone].id); }
+    let called_now: Vec<&'static str> = std::mem::take(&mut *called);
+    let attack = game.free && !easy && !defense;
     // disparos de ameaças no quadro anterior (as outras ouvem) e os deste quadro; disparos que erraram o operador
+    // rajada do fuzil das ameaças: depois do primeiro disparo (o único que conta para o acerto) saem mais dois, só de efeito:
+    // som, clarão, fumaça e cápsula, no ritmo do clipe de disparo (um a cada décimo de segundo)
+    let mut rounds: Vec<(Vec3, Vec3)> = Vec::new();
+    game.burst.retain_mut(|b| { b.0 -= dt; if b.0 <= 0.0 { rounds.push((b.1, b.2)); false } else { true } });
+    for (mz, to) in rounds {
+        sfx.write(Sfx::EnemyRound(mz));
+        puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
+        enemy_casing(&mut commands, &fx, &mut smats, mz, to, game.time * 3.1 + mz.x);
+    }
     let mut shots_now: Vec<Vec2> = Vec::new();
     let mut missed: Vec<(Vec3, Vec3)> = Vec::new();
     for i in 0..targets.list.len() {
@@ -480,6 +503,11 @@ pub fn combat(
         let dir = dv / d;
         // tiro por perto (do operador ou de outra ameaça) põe a ameaça em alerta
         t.alert = (t.alert - dt).max(0.0);
+        if !easy && called_now.contains(&t.def.zone) {
+            t.alert = ALERT_SECS.max(t.alert);
+            // sai do lugar e vai atrás do operador (quem tem papel fixo no cenário fica: escudo, captor, rendição, mech)
+            if attack && !t.shield && !t.captor && t.mind == MIND_NONE && !is_mech(&t.def) { t.hunter = true; t.goal = None; }
+        }
         if let Some(dc) = breached {
             if dc.distance(tp) < HEAR { t.alert = ALERT_SECS; if !easy && level.los(t.def.x, t.def.z, 1.4, dc.x, dc.y, 1.0) { let f = (dc - tp).normalize_or_zero(); if f != Vec2::ZERO { t.fwd = f; } } }
         }
@@ -503,7 +531,7 @@ pub fn combat(
         t.engaged = rate > 0.0 && if easy { dir.dot(t.fwd) > 0.15 } else { t.alert > 0.0 };
         if t.engaged {
             exposed = true;
-            if !t.contact { t.contact = true; t.contact_t = game.time; }
+            if !t.contact { t.contact = true; t.contact_t = game.time; areas.push(t.def.zone); areas.push(zones()[p.zone].id); }
             // para de andar e gira o corpo para o operador; só atira depois de estar de frente para ele
             if t.goal.is_some() { t.goal = None; t.moving = false; t.move_cd = 4.0; }
             let cur = t.fwd.x.atan2(t.fwd.y);
@@ -528,11 +556,19 @@ pub fn combat(
                 sfx.write(Sfx::EnemyShot(src));
                 shots_now.push(tp);
                 // o disparo da ameaça aparece: clarão na boca da arma e traço até o operador (ou rente a ele, se errou)
-                let from = Vec3::new(t.def.x, 1.45, t.def.z);
                 let aim = Vec3::new(p.eye.x, p.eye.y - 0.3, p.eye.z);
-                let to = (aim - from).normalize_or_zero();
-                let mz = from + Vec3::new(to.x, 0.0, to.z).normalize_or_zero() * 0.72;
+                // boca do fuzil na pose de mira: 0,69 m à frente do corpo, um pouco à direita dele, a 1,38 m do chão
+                // (medido na conversão do boneco); o canhão do mech fica mais alto
+                let flat = Vec3::new(aim.x - t.def.x, 0.0, aim.z - t.def.z).normalize_or_zero();
+                let mz = if mech { Vec3::new(t.def.x, 1.45, t.def.z) + flat * 0.72 } else { enemy_muzzle(t.def.x, t.def.z, flat) };
+                let to = (aim - mz).normalize_or_zero();
                 puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
+                puff(&mut commands, &fx, &mut smats, mz + to * 0.1, to, 2, Color::srgb(0.2, 0.2, 0.19), 1.6, 0.09);
+                // cápsula ejetada para a direita da arma e o resto da rajada (o mech não ejeta nem dá rajada)
+                if !mech {
+                    enemy_casing(&mut commands, &fx, &mut smats, mz, to, game.time * 2.3 + i as f32);
+                    game.burst.push((0.1, mz, to)); game.burst.push((0.2, mz, to));
+                }
                 // acerta quase sempre o corpo exposto; bem menos a cabeça na quina, o operador distante ou correndo
                 let mut chance: f32 = if body { 0.85 } else { 0.45 };
                 if d > 9.0 { chance *= 0.8; }
@@ -578,6 +614,8 @@ pub fn combat(
         if game.toast.is_none() && !game.demo { game.toast("A threat fired at you and missed. Get out of its line of fire or put it down.", 2, 3.0); }
     }
     *heard = shots_now;
+    areas.sort(); areas.dedup();
+    *called = areas;
     // tempo exposto: enquanto alguma ameaça viva tem linha de tiro para o operador
     if exposed { game.expo_now += dt; game.expo_total += dt; } else { game.expo_now = (game.expo_now - dt * 2.0).max(0.0); }
     for (mut tf, tp) in pivots.iter_mut() {
@@ -588,6 +626,22 @@ pub fn combat(
 }
 
 pub fn rand01(seed: f32) -> f32 { ((seed.sin() * 43758.547).fract()).abs() }
+
+/// Boca do fuzil de uma ameaça em pé na posição (x, z), apontando para `flat` (direção no chão). Medidas do boneco na pose
+/// de mira, impressas pela conversão (tools3d/conv_operator.py, linha "BOCA na mira").
+pub fn enemy_muzzle(x: f32, z: f32, flat: Vec3) -> Vec3 {
+    let right = Vec3::new(-flat.z, 0.0, flat.x);
+    Vec3::new(x, 1.38, z) + flat * 0.69 + right * 0.064
+}
+
+/// Cápsula que sai da janela de ejeção do fuzil de uma ameaça (meio metro atrás da boca), para a direita e para cima.
+fn enemy_casing(commands: &mut Commands, fx: &Fx, smats: &mut Assets<StandardMaterial>, mz: Vec3, to: Vec3, seed: f32) {
+    let flat = Vec3::new(to.x, 0.0, to.z).normalize_or_zero();
+    let right = Vec3::new(-flat.z, 0.0, flat.x);
+    let vel = right * (1.5 + rand01(seed) * 0.9) + Vec3::Y * (1.3 + rand01(seed * 2.1 + 0.7) * 0.8) - flat * 0.3;
+    commands.spawn((Mesh3d(fx.casing_mesh.clone()), MeshMaterial3d(smats.add(StandardMaterial { base_color: Color::srgb(0.79, 0.64, 0.30), metallic: 1.0, perceptual_roughness: 0.3, ..default() })),
+        Transform::from_translation(mz - flat * 0.49 + right * 0.02 + Vec3::Y * 0.03), Casing { vel, ang: Vec3::new(15.0, -9.0, 21.0), life: 4.0, rest: false }));
+}
 
 pub fn update_fx(time: Res<Time>, mut commands: Commands, mut puffs: Query<(Entity, &mut Transform, &mut Puff, &MeshMaterial3d<StandardMaterial>), Without<Casing>>,
     mut casings: Query<(Entity, &mut Transform, &mut Casing), Without<Puff>>, mut smats: ResMut<Assets<StandardMaterial>>,

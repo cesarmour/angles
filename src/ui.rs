@@ -564,7 +564,7 @@ pub fn update_ui(
             Tag::TacPanel => show(&mut node, game.tac),
             Tag::MiniFrame | Tag::Legend => show(&mut node, game.tac && !bird),
             Tag::Prompt => show(&mut node, play && (game.near_door.is_some() || game.breach.is_some())),
-            Tag::Lock => show(&mut node, play && game.lock > 0.03),
+            Tag::Lock => show(&mut node, play && (game.lock > 0.03 || game.nade.map_or(false, |(q, _)| q.distance(p.pos) < 9.0))),
             Tag::Replay => show(&mut node, game.mode == Mode::Replay),
             Tag::ReplayCursor if game.mode == Mode::Replay => { node.margin = UiRect::left(Val::Px(628.0 * (game.replay_t / REPLAY_SECS).clamp(0.0, 1.0))); }
             Tag::ReplayBars if game.ui_dirty && game.mode == Mode::Replay => {
@@ -809,7 +809,9 @@ pub fn update_ui(
             Tag::DownTip if game.mode == Mode::Down => set(&mut t, if !game.down_title.is_empty() { "" } else if scenario::is(&game, Kind::Defense) { "Intruders fire in under half a second and almost never miss. Hold a strong point: one way in, a wall at your back and your sights already on the opening." }
                 else if scenario::is(&game, Kind::Walker) { "Very hard stage. The walker's cannon ends the run with one hit after a one-second lock, and the escort hits 95% of its shots. Use the shelves: break line of sight, move, hit it from the side or the back." }
                 else { "Two hits end the run. A threat turns to face you and fires about a second after it has you in its sights: see it first, show as little of yourself as you can and do not stay in its line of fire." }),
-            Tag::LockText => set(&mut t, &format!("CANNON LOCK {}%  ·  BREAK LINE OF SIGHT", (game.lock * 20.0).round() as i32 * 5)),
+            Tag::LockText => set(&mut t, &match game.nade.filter(|(q, _)| q.distance(p.pos) < 9.0) {
+                Some((q, left)) => format!("GRENADE  ·  {:.1} s  ·  {} m  ·  GET A WALL BETWEEN YOU AND IT", left, q.distance(p.pos).round() as i32),
+                None => format!("CANNON LOCK {}%  ·  BREAK LINE OF SIGHT", (game.lock * 20.0).round() as i32 * 5) }),
             Tag::DownTitle if game.mode == Mode::Down => set(&mut t, if game.down_title.is_empty() { "OPERATOR DOWN" } else { &game.down_title }),
             Tag::ScnBest(i) if game.mode == Mode::Scenarios => {
                 let sc = &SCENARIOS[i as usize];

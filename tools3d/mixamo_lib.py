@@ -21,6 +21,8 @@ CHAIN = {'Hips': 'Spine', 'Spine': 'Spine1', 'Spine1': 'Spine2', 'Spine2': 'Neck
 # Arquivos esperados em 3dmodels/mixamo/ (baixados do Mixamo em FBX, "With Skin", 30 quadros por segundo, boneco X Bot):
 #   pistol_idle_low  = espera com a pistola baixa        pistol_idle_aim = espera com a pistola apontada
 #   pistol_walk      = caminhada com a pistola (marcar "In Place")
+#   rifle_aim  = "Rifle Aiming Idle"   rifle_idle = "Rifle Idle"   rifle_walk = "Rifle Walk" (as ameaças usam o fuzil do modelo;
+#                o disparo em rajada é feito na conversão, em cima da pose de mira)
 #   death_front, death_right, death_forward, death_back = quatro quedas diferentes (viram Fall1 a Fall4, nesta ordem)
 FALLS = (('Fall1', 'death_front'), ('Fall2', 'death_right'), ('Fall3', 'death_forward'), ('Fall4', 'death_back'))
 FPS = 30
