@@ -413,7 +413,7 @@ pub static MAPS: [MapDef; 6] = [
             op("Suite 1 door", "S1", 3.6, 1.4, 4.5, 1.4, 0.0, 1.0, None), op("Suite 2 door", "S2", 6.6, 1.4, 7.5, 1.4, 0.0, 1.0, None), op("Master suite door", "Ms", 9.3, 0.2, 9.3, 1.2, 1.0, 0.0, None),
             op("Front door", "Lv", 3.3, 13.0, 4.4, 13.0, 0.0, -1.0, None), op("Gourmet opening", "Gm", 10.6, 13.0, 13.4, 13.0, 0.0, -1.0, None), op("Garage gate", "Yd", 2.6, 17.2, 5.4, 17.2, 0.0, -1.0, None),
         ],
-        lights: &[lt(1.4, 0.7, WARM, 0.85, false), lt(4.3, 0.7, WARM, 0.7, false), lt(7.6, 0.7, WARM, 0.7, false), lt(2.6, 3.7, WARM, 0.85, false), lt(6.2, 3.7, WARM, 0.85, false), lt(11.0, 4.1, WARM, 0.9, false), lt(11.6, 1.1, WARM, 0.6, false),
+        lights: &[lt(1.9, 0.7, WARM, 0.9, false), lt(4.3, 0.7, WARM, 0.7, false), lt(7.6, 0.7, WARM, 0.7, false), lt(2.6, 3.7, WARM, 0.85, false), lt(6.2, 3.7, WARM, 0.85, false), lt(11.0, 4.1, WARM, 0.9, false), lt(11.6, 1.1, WARM, 0.6, false),
             lt(4.6, 6.5, COOL, 0.35, false),
             lt(3.0, 10.5, NEUTRAL, 0.95, false), lt(7.4, 10.5, NEUTRAL, 0.95, false), lt(12.0, 10.0, NEUTRAL, 0.9, false), lt(3.6, 15.1, COOL, 0.6, false), lt(10.6, 15.1, COOL, 0.6, false)],
         // dez invasores de reserva: esperam na rua, fora da vista de quem está na casa, até a onda chamá-los
@@ -449,9 +449,9 @@ pub static MAPS: [MapDef; 6] = [
         // escada é uma passagem: o lance entra num vão escuro e continua no vão escuro do outro andar.
         portals: &[
             // sobe: do alto do lance do térreo ao patamar de baixo da escada do andar de cima
-            Portal { x1: 0.5, z1: 7.12, x2: 1.08, z2: 7.6, ex: 0.5, ez: 0.45, yaw: -1.5708, player: true, alt: false, ha: (1.6, 7.35), hb: (0.5, 1.85) },
+            Portal { x1: 0.5, z1: 7.12, x2: 1.08, z2: 7.6, ex: 0.8, ez: 0.7, yaw: -1.5708, player: true, alt: false, ha: (1.6, 7.35), hb: (-0.4, 0.7) },
             // desce: do patamar de baixo da escada de cima ao alto do lance do térreo
-            Portal { x1: 0.12, z1: 0.8, x2: 0.85, z2: 1.28, ex: 0.3, ez: 7.4, yaw: 3.1416, player: true, alt: false, ha: (0.5, 1.85), hb: (1.6, 7.35) },
+            Portal { x1: 0.12, z1: 0.12, x2: 0.55, z2: 1.28, ex: 0.3, ez: 7.4, yaw: 3.1416, player: true, alt: false, ha: (-0.4, 0.7), hb: (1.6, 7.35) },
             // escada de mão no canto do quintal: quem conhece o caminho sobe por ela e entra pela ponta da sacada
             Portal { x1: 0.3, z1: 13.3, x2: 1.4, z2: 14.0, ex: 0.75, ez: 6.5, yaw: 0.0, player: false, alt: true, ha: (0.85, 13.45), hb: (-0.4, 6.5) },
             // e pelo lado da piscina: sobe junto ao muro e entra pela outra ponta da sacada, perto da porta-balcão da suíte do meio
@@ -460,13 +460,15 @@ pub static MAPS: [MapDef; 6] = [
         ramps: &[
             // térreo: lance de baixo (sobe para oeste), patamar da curva e lance de cima (sobe para o norte, dentro do nicho)
             Ramp { x1: 1.19, z1: 8.1, x2: 2.0, z2: 9.0, along_x: true, a: 2.0, b: 1.19, ha: 0.0, hb: 0.57 },
+            // (o lance de cima vem antes do patamar na lista: onde os dois retângulos se cruzam vale o lance)
+            Ramp { x1: 0.1, z1: 7.1, x2: 1.1, z2: 8.3, along_x: false, a: 8.3, b: 7.45, ha: 0.57, hb: 1.14 },
             Ramp { x1: 0.1, z1: 8.0, x2: 1.19, z2: 9.0, along_x: true, a: 1.19, b: 0.1, ha: 0.57, hb: 0.57 },
-            Ramp { x1: 0.1, z1: 7.1, x2: 1.1, z2: 8.0, along_x: false, a: 8.0, b: 7.43, ha: 0.57, hb: 1.14 },
-            // andar de cima: do fim do corredor desce para oeste até o patamar de baixo
-            Ramp { x1: 0.1, z1: 0.1, x2: 2.6, z2: 1.3, along_x: true, a: 2.6, b: 0.9, ha: 0.0, hb: -1.66 },
+            // andar de cima: do fim do corredor desce para oeste, nove degraus de 27 cm, até o patamar de baixo
+            Ramp { x1: 0.1, z1: 0.1, x2: 3.3, z2: 1.3, along_x: true, a: 3.3, b: 0.9, ha: 0.0, hb: -1.66 },
         ],
-        pit: Some((0.1, 0.1, 2.6, 1.3, 1.66)),
-        darks: &[(1.085, 1.14, 7.12, 1.1, 2.78, 7.6), (0.12, -1.66, 1.285, 0.85, -0.02, 1.3), (0.1, 0.0, 6.2, 0.115, 2.0, 6.8), (8.3, 0.0, 6.885, 9.1, 2.0, 6.9)],
+        pit: Some((0.1, 0.1, 3.3, 1.3, 1.66)),
+        // vãos escuros: no alto do lance do térreo (parede do nicho), no fim da descida do andar de cima (em frente) e nas pontas da sacada
+        darks: &[(1.085, 1.14, 7.12, 1.1, 2.78, 7.6), (0.1, -1.66, 0.12, 0.115, -0.02, 1.28), (0.1, 0.0, 6.2, 0.115, 2.0, 6.8), (8.3, 0.0, 6.885, 9.1, 2.0, 6.9)],
     },
 ];
 

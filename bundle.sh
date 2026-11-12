@@ -3,9 +3,12 @@
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 APP="$DIR/dist/Point of Entry.app"
-mkdir -p "$APP/Contents/MacOS/assets" "$APP/Contents/Resources"
+# Os recursos (modelos, texturas) vão em Contents/Resources; em Contents/MacOS fica só o executável. Com arquivos de dados em
+# Contents/MacOS a assinatura do pacote não fecha e o macOS recusa o app baixado como "danificado".
+rm -rf "$APP/Contents/MacOS/assets" "$APP/Contents/_CodeSignature"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 cp "$DIR/target/release/ponto-de-entrada" "$APP/Contents/MacOS/ponto-de-entrada"
-rsync -a --delete "$DIR/assets/tex" "$DIR/assets/models" "$APP/Contents/MacOS/assets/"
+rsync -a --delete "$DIR/assets/tex" "$DIR/assets/models" "$APP/Contents/Resources/assets/"
 cp "$DIR/assets/icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -18,13 +21,18 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>ponto-de-entrada</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.9.1</string>
-  <key>CFBundleVersion</key><string>11</string>
+  <key>CFBundleShortVersionString</key><string>0.9.2</string>
+  <key>CFBundleVersion</key><string>12</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.simulation-games</string>
 </dict>
 </plist>
 PLIST
+# assinatura local (sem conta de desenvolvedor da Apple): sela o pacote inteiro, para ele chegar íntegro a quem baixa
+find "$APP" -name ".DS_Store" -delete
+xattr -cr "$APP"
+codesign --force --deep --sign - "$APP" 2>/dev/null
+codesign --verify --deep --strict "$APP" && echo "Assinatura do pacote: ok"
 du -sh "$APP" | cut -f1
 echo "Aplicativo em: $APP"

@@ -318,8 +318,8 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
     // escuros por onde a escada continua para o outro andar e as escadas de mão do quintal. Os degraus são só desenho: a
     // altura de quem anda neles vem de `ramp_h`.
     if !map().ramps.is_empty() || !map().portals.is_empty() {
-        let granite = mats.add(StandardMaterial { base_color: Color::srgb(0.07, 0.07, 0.078), perceptual_roughness: 0.2, reflectance: 0.6, ..default() });
-        let pale = mats.add(StandardMaterial { base_color: Color::srgb(0.42, 0.42, 0.44), perceptual_roughness: 0.35, ..default() });
+        let granite = mats.add(StandardMaterial { base_color: Color::srgb(0.13, 0.13, 0.14), perceptual_roughness: 0.32, reflectance: 0.5, ..default() });
+        let pale = mats.add(StandardMaterial { base_color: Color::srgb(0.27, 0.27, 0.285), perceptual_roughness: 0.3, ..default() });
         let white = mats.add(StandardMaterial { base_color: Color::srgb(0.86, 0.86, 0.84), perceptual_roughness: 0.5, ..default() });
         let dark = mats.add(StandardMaterial { base_color: Color::BLACK, unlit: true, ..default() });
         let (mut steps, mut ladders, mut holes, mut lining) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
@@ -338,7 +338,7 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
                 steps.push(slab(c0, c1 + (c1 - c0).signum() * 0.004, h));
                 // friso claro na quina de cada degrau (o granito preto some no escuro) e corrimão branco na parede
                 let edge = if r.hb > r.ha { c0 } else { c1 };
-                let (e0, e1) = (edge.min(edge + (c1 - c0).signum() * if r.hb > r.ha { 0.04 } else { -0.04 }), edge.max(edge + (c1 - c0).signum() * if r.hb > r.ha { 0.04 } else { -0.04 }));
+                let (e0, e1) = (edge.min(edge + (c1 - c0).signum() * if r.hb > r.ha { 0.022 } else { -0.022 }), edge.max(edge + (c1 - c0).signum() * if r.hb > r.ha { 0.022 } else { -0.022 }));
                 nosing.push(if r.along_x { b3(e0, h, r.z1 + 0.002, e1, h + 0.006, r.z2 - 0.002) } else { b3(r.x1 + 0.002, h, e0, r.x2 - 0.002, h + 0.006, e1) });
             }
             // corrimão branco na parede, inclinado junto com o lance

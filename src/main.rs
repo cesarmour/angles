@@ -41,6 +41,17 @@ fn exit_log(mut close: EventReader<bevy::window::WindowCloseRequested>, mut exit
     for e in exit.read() { println!("BOT SAIDA pedida pelo jogo {:?} (modo {:?})", e, game.mode); }
 }
 
+/// Pasta dos recursos (modelos e texturas). Dentro do pacote .app eles ficam em Contents/Resources: em Contents/MacOS só pode
+/// haver código, senão a assinatura do pacote fica inválida e o macOS diz, em quem baixou o app, que ele está "danificado".
+fn asset_dir() -> String {
+    if std::env::var("BEVY_ASSET_ROOT").is_err() {
+        if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) {
+            if d.join("../Resources/assets").is_dir() { return "../Resources/assets".into(); }
+        }
+    }
+    "assets".into()
+}
+
 fn main() {
     if let Ok(dir) = std::env::var("CQB_DUMP") { art::dump(&dir); return; }
     // dificuldade inicial nos testes automáticos: CQB_DIFF=0 (easy), 1 (normal) ou 2 (hard)
@@ -63,7 +74,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window { title: "Point of Entry".into(), resolution: { let r = WindowResolution::new(world::env_f("CQB_W", 1440.0), world::env_f("CQB_H", 810.0)); match std::env::var("CQB_SCALE").ok().and_then(|s| s.parse::<f32>().ok()) { Some(sc) => r.with_scale_factor_override(sc), None => r } }, present_mode: if std::env::var("CQB_NOVSYNC").is_ok() { PresentMode::AutoNoVsync } else { PresentMode::AutoVsync }, ..default() }),
             ..default()
-        }).set(bevy::pbr::PbrPlugin { use_gpu_instance_buffer_builder: std::env::var("CQB_CPUB").is_err(), ..default() }))
+        }).set(AssetPlugin { file_path: asset_dir(), ..default() }).set(bevy::pbr::PbrPlugin { use_gpu_instance_buffer_builder: std::env::var("CQB_CPUB").is_err(), ..default() }))
         .add_plugins(TemporalAntiAliasPlugin)
         .add_event::<state::Sfx>()
         .add_event::<ui::ResetGame>()
