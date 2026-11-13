@@ -17,7 +17,7 @@ A teaching tool for close-quarters battle fundamentals. Real technique is learne
 - Oriented Strand Board (walls of the family home), by Dimitrios Savva. Sheet seams added and gloss removed with `tools/prep_osb.py`.
 
 ## Instructor voice
-Generated with ElevenLabs (voice "Brian") from the script in `assets/voice/script.tsv`. The characters' lines (`assets/voice/ch_*.wav` and `assets/sfx/voz_op_*.wav`) were generated the same way from `tools/voices_characters.tsv`: voices "Bill" and "Callum" for the two intruders, "Sarah" for the hostage and "Brian" (the instructor's voice) for the operator.
+Generated with ElevenLabs (voice "Brian") from the script in `assets/voice/script.tsv`. The characters' lines (`assets/voice/ch_*.wav` and `assets/sfx/voz_op_*.wav`) were generated the same way from `tools/voices_characters.tsv`: voices "Bill" and "Callum" for the two intruders, "Sarah" for the hostage and "Brian" (the instructor's voice) for the operator. The body falls, bullet hits on a person, the grenade blast and bounce (`assets/sfx/corpo_*.wav`, `carne_*.wav`, `granada_*.wav`) and the menu music loop (`assets/music/menu_loop.wav`) were generated with the ElevenLabs sound-effects model from text prompts.
 
 ## Arc font
 Barlow Condensed, by Jeremy Tribby, SIL Open Font License 1.1 (`assets/fonts/OFL-BarlowCondensed.txt`).

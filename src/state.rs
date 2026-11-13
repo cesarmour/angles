@@ -259,7 +259,7 @@ impl Targets {
 
 /// Eventos sonoros disparados pela simulação.
 #[derive(Event, Clone, Copy)]
-pub enum Sfx { Shot, Rifle, Voice(u8), EnemyShot(Vec3), EnemyRound(Vec3), Dry, Click, Reload, Step(bool), Impact(Vec3), Metal(Vec3), Paper(Vec3), Thwack(Vec3), Fall(Vec3), Door(Vec3), Casing(Vec3), Good, Bad, Hurt, Ui, Rustle }
+pub enum Sfx { Shot, Rifle, Voice(u8), EnemyShot(Vec3), EnemyRound(Vec3), Dry, Click, Reload, Step(bool), Impact(Vec3), Metal(Vec3), Paper(Vec3), Thwack(Vec3), Fall(Vec3), Body(Vec3), Flesh(Vec3), Blast(Vec3), Clink(Vec3), Door(Vec3), Casing(Vec3), Good, Bad, Hurt, Ui, Rustle }
 
 /// Uma arma de primeira pessoa: modelo, clipes de animação e números de jogo.
 /// Medidas em metros no espaço da câmera (X direita, Y cima, -Z frente), relativas à pose em que o autor do modelo deixou a arma.

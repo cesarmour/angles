@@ -383,7 +383,8 @@ pub fn combat(
                 for (ti, _, q) in h.through.iter() { let t = &mut targets.list[*ti]; paper_mark(&mut commands, &fx, t, *q, game.time + 3.0); t.swv -= 1.2; sfx.write(Sfx::Paper(*q)); }
                 if let Some((ti, zone)) = h.target {
                     game.stats.hits += 1; game.hit_t = 0.14;
-                    sfx.write(Sfx::Thwack(h.point));
+                    // boneco: pancada abafada em colete e tecido; papelão: o estalo de sempre
+                    { let d = &targets.list[ti].def; sfx.write(if is_fig(d) && !is_mech(d) { Sfx::Flesh(h.point) } else { Sfx::Thwack(h.point) }); }
                     puff(&mut commands, &fx, &mut smats, h.point, -dir, 2, Color::srgb(0.3, 0.27, 0.2), 1.0, 0.1);
                     match zone { 3 => game.stats.zone_a += 1, 2 => game.stats.zone_c += 1, _ => game.stats.zone_d += 1 }
                     let t = &mut targets.list[ti];
@@ -518,7 +519,7 @@ pub fn combat(
                 t.fall += t.fall_v * dt;
                 if t.fall >= 1.0 {
                     t.fall = 1.0;
-                    if t.fall_v > 0.9 { if !t.landed { sfx.write(Sfx::Fall(Vec3::new(t.def.x, 0.3, t.def.z))); } t.fall_v *= -0.22; } else { t.fall_v = 0.0; }
+                    if t.fall_v > 0.9 { if !t.landed { let q = Vec3::new(t.def.x, 0.3, t.def.z); sfx.write(if is_fig(&t.def) && !is_mech(&t.def) { Sfx::Body(q) } else { Sfx::Fall(q) }); } t.fall_v *= -0.22; } else { t.fall_v = 0.0; }
                     t.landed = true;
                 }
             }

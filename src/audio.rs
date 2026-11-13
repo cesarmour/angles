@@ -95,13 +95,13 @@ type Pair = [H; 2];
 #[derive(Resource)]
 pub struct Sounds {
     shot_room: H, shot_corr: H, rifle_room: H, rifle_corr: H, voice: Vec<H>, enemy: Pair, dry: H, click: H, reload: H, steps: Vec<H>, casing: Vec<H>, impact: Vec<Pair>, metal: Pair,
-    paper: Pair, thwack: Pair, fall: Pair, door: Pair, rustle: H, good: H, bad: H, hurt: H, ui: H, n: u32,
+    paper: Pair, thwack: Pair, fall: Pair, body: Vec<Pair>, flesh: Vec<Pair>, blast: Pair, clink: Pair, door: Pair, rustle: H, good: H, bad: H, hurt: H, ui: H, n: u32,
 }
 
 fn add(a: &mut Assets<AudioSource>, s: &[f32], p: f32) -> H { a.add(wav(s, p)) }
 fn pair(a: &mut Assets<AudioSource>, s: &[f32], p: f32) -> Pair { [a.add(wav(s, p)), a.add(wav(&lowpass(s, 520.0), p * 0.6))] }
 
-pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
+pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>, asset: Res<AssetServer>) {
     // testes automáticos rodam mudos (CQB_MUTE): o volume geral vai a zero e nenhum som toca
     if std::env::var("CQB_MUTE").map_or(false, |v| !v.is_empty()) { commands.insert_resource(GlobalVolume::new(Volume::Linear(0.0))); }
     // disparo: gravação de .45 de perto, reforçada no grave e com a cauda do ambiente
@@ -128,8 +128,34 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
     let thwack = reverb(&pad(&mix(&clip!("papel_1"), &lowpass(&clip!("impacto_1"), 900.0), 0.5), 0.4), 0.3, 0.7);
     let fall = reverb(&pad(&mix(&clip!("queda_1"), &clip!("queda_2"), 0.5), 0.6), 0.4, 0.9);
     let door = reverb(&pad(&clip!("porta_1"), 0.6), 0.35, 0.9);
-    let reload = reverb(&pad(&clip!("recarga_1"), 0.3), 0.12, 0.5);
     let buf = |secs: f32| vec![0.0f32; (secs * SR) as usize];
+    // soma um trecho em outro a partir de um instante
+    let lay = |out: &mut Vec<f32>, x: &[f32], at: f32, g: f32| { let s0 = (at * SR) as usize; if out.len() < s0 + x.len() { out.resize(s0 + x.len(), 0.0); } for (i, v) in x.iter().enumerate() { out[s0 + i] += v * g; } };
+    // pessoa caindo no chão (não é a tábua do alvo de papelão): baque surdo e pesado do tronco, um segundo baque menor
+    // dos membros logo depois, roupa e equipamento raspando; quase nada de agudo
+    // corta o silêncio do começo de uma gravação (o som precisa sair no instante do evento)
+    let trim = |x: &[f32]| -> Vec<f32> { let m = x.iter().fold(0.0f32, |a, v| a.max(v.abs())).max(1e-6); let k = x.iter().position(|v| v.abs() > m * 0.03).unwrap_or(0); x[k.saturating_sub(64)..].to_vec() };
+    // pessoa caindo no chão (não é a tábua do alvo de papelão): gravações de corpo com equipamento caindo, com um baque
+    // grave por baixo para dar peso; três variações para não repetir
+    let body: Vec<Vec<f32>> = [clip!("corpo_1"), clip!("corpo_2"), clip!("corpo_3")].iter().map(|c| {
+        let mut b = norm(&trim(c), 0.9);
+        let mut low = buf(0.5);
+        tone(&mut low, 0.0, 0.24, 88.0, 38.0, 0.55, false);
+        lay(&mut b, &low, 0.0, 1.0);
+        reverb(&pad(&norm(&b, 0.95), 0.5), 0.25, 0.7)
+    }).collect();
+    // tiro acertando uma pessoa: pancada abafada em colete e tecido, sem o estalo de papelão
+    let flesh: Vec<Vec<f32>> = [clip!("carne_1"), clip!("carne_2")].iter().map(|c| {
+        let mut b = norm(&trim(c), 0.9);
+        let mut low = buf(0.2);
+        tone(&mut low, 0.0, 0.07, 120.0, 58.0, 0.5, false);
+        lay(&mut b, &low, 0.0, 1.0);
+        reverb(&pad(&norm(&b, 0.9), 0.3), 0.2, 0.5)
+    }).collect();
+    // granada: a explosão em sala fechada (com um grave por baixo) e o quique dela no chão antes de estourar
+    let blast = { let mut b = norm(&trim(&clip!("granada_1")), 0.95); let mut low = buf(0.6); tone(&mut low, 0.0, 0.45, 70.0, 28.0, 0.8, false); lay(&mut b, &low, 0.0, 1.0); reverb(&pad(&norm(&b, 0.97), 0.8), 0.45, 1.2) };
+    let clink = reverb(&pad(&norm(&trim(&clip!("granada_quique")), 0.8), 0.3), 0.3, 0.7);
+    let reload = reverb(&pad(&clip!("recarga_1"), 0.3), 0.12, 0.5);
     let good = { let mut b = buf(0.4); tone(&mut b, 0.0, 0.12, 880.0, 880.0, 0.5, false); tone(&mut b, 0.09, 0.2, 1320.0, 1320.0, 0.5, false); b };
     let bad = { let mut b = buf(0.5); tone(&mut b, 0.0, 0.2, 392.0, 392.0, 0.4, false); tone(&mut b, 0.16, 0.3, 294.0, 294.0, 0.4, false); b };
     // ser atingido: baque surdo de impacto no colete e um zumbido curto no ouvido, sem buzina
@@ -155,11 +181,26 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
             for c in [clip!("voz_op_1"), clip!("voz_op_2"), clip!("voz_op_3"), clip!("voz_op_4")] { v.push(add(&mut a, &reverb(&pad(&norm(&deeper(&c, 0.88), 0.9), 0.4), 0.22, 0.6), 0.85)); }
             v }, enemy: pair(&mut a, &enemy, 0.95), dry: add(&mut a, &clip!("seco_1"), 0.6), click: add(&mut a, &clip!("interruptor_1"), 0.5),
         reload: add(&mut a, &reload, 0.7), steps: steps.iter().map(|s| add(&mut a, s, 0.7)).collect(), casing: casing.iter().map(|s| add(&mut a, s, 0.45)).collect(),
-        impact: vec![pair(&mut a, &imp1, 0.8), pair(&mut a, &imp3, 0.8)], metal: pair(&mut a, &metal, 0.8), paper: pair(&mut a, &paper, 0.7), thwack: pair(&mut a, &thwack, 0.85), fall: pair(&mut a, &fall, 0.85), door: pair(&mut a, &door, 0.85),
+        impact: vec![pair(&mut a, &imp1, 0.8), pair(&mut a, &imp3, 0.8)], metal: pair(&mut a, &metal, 0.8), paper: pair(&mut a, &paper, 0.7), thwack: pair(&mut a, &thwack, 0.85), fall: pair(&mut a, &fall, 0.85), body: body.iter().map(|b| pair(&mut a, b, 0.9)).collect(), flesh: flesh.iter().map(|b| pair(&mut a, b, 0.85)).collect(), blast: pair(&mut a, &blast, 0.97), clink: pair(&mut a, &clink, 0.6), door: pair(&mut a, &door, 0.85),
         rustle: add(&mut a, &gain(&clip!("roupa_1"), 1.0)[..(0.6 * SR) as usize], 0.35), good: add(&mut a, &good, 0.35), bad: add(&mut a, &bad, 0.3), hurt: add(&mut a, &hurt, 0.6), ui: add(&mut a, &ui, 0.25), n: 0,
     };
     commands.spawn((AudioPlayer::new(a.add(wav(&clip!("ambiente"), 0.5))), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.3), ..default() }));
     commands.insert_resource(sounds);
+    // música de fundo das telas (menu, etapas, avaliação): some quando a partida começa
+    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/menu_loop.wav")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0)));
+}
+
+/// Música de fundo e o volume em que ela está agora.
+#[derive(Component)] pub struct Music(pub f32);
+pub fn music_system(time: Res<Time<Real>>, game: Res<crate::state::Game>, mut q: Query<(&mut AudioSink, &mut Music)>) {
+    use crate::state::Mode;
+    let want = match game.mode { Mode::Play | Mode::Replay | Mode::Down => 0.0, Mode::Card | Mode::Pause => 0.12, Mode::Debrief => 0.22, _ => 0.32 };
+    let dt = time.delta_secs().min(0.1);
+    for (mut sink, mut m) in &mut q {
+        let step = dt * 0.35;
+        m.0 = if (want - m.0).abs() <= step { want } else { m.0 + step * (want - m.0).signum() };
+        sink.set_volume(Volume::Linear(m.0));
+    }
 }
 
 pub fn play_sfx(mut ev: EventReader<Sfx>, mut s: ResMut<Sounds>, mut commands: Commands, p: Res<Player>, level: Res<Level>) {
@@ -186,6 +227,10 @@ pub fn play_sfx(mut ev: EventReader<Sfx>, mut s: ResMut<Sounds>, mut commands: C
             Sfx::Paper(q) => (s.paper[hid(q)].clone(), 1.2, Some(q)),
             Sfx::Thwack(q) => (s.thwack[hid(q)].clone(), 1.6, Some(q)),
             Sfx::Fall(q) => (s.fall[hid(q)].clone(), 1.6, Some(q)),
+            Sfx::Body(q) => (s.body[k % s.body.len()][hid(q)].clone(), 1.9, Some(q)),
+            Sfx::Flesh(q) => (s.flesh[k % s.flesh.len()][hid(q)].clone(), 1.7, Some(q)),
+            Sfx::Blast(q) => (s.blast[hid(q)].clone(), 2.6, Some(q)),
+            Sfx::Clink(q) => (s.clink[hid(q)].clone(), 1.3, Some(q)),
             Sfx::Door(q) => (s.door[0].clone(), 1.5, Some(q)),
             Sfx::Casing(q) => (s.casing[k % s.casing.len()].clone(), 0.9, Some(q)),
             Sfx::Good => (s.good.clone(), 0.6, None),
@@ -198,5 +243,24 @@ pub fn play_sfx(mut ev: EventReader<Sfx>, mut s: ResMut<Sounds>, mut commands: C
             Some(q) => { settings.spatial = true; settings.spatial_scale = Some(SpatialScale::new(0.25)); commands.spawn((AudioPlayer::new(h), settings, Transform::from_translation(q))); }
             None => { commands.spawn((AudioPlayer::new(h), settings)); }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// Monta todos os sons como na abertura do jogo, sem janela nem placa de som: pega estouro de índice ou divisão
+    /// por zero no tratamento das gravações antes de o jogo abrir.
+    #[test]
+    fn sounds_build() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<AudioSource>();
+        app.add_systems(Startup, setup_audio);
+        app.update();
+        let s = app.world().resource::<Sounds>();
+        assert_eq!(s.body.len(), 3);
+        assert_eq!(s.flesh.len(), 2);
+        assert!(s.voice.len() >= 5);
     }
 }

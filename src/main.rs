@@ -107,6 +107,7 @@ fn main() {
         .add_systems(Update, course::course_system.after(scenario::rank_system).before(ui::update_ui))
         .add_systems(Update, course::voice_system.after(course::course_system).before(ui::update_ui))
         .add_systems(Update, chatter::chatter_system.after(combat::combat))
+        .add_systems(Update, audio::music_system)
         .add_systems(Update, operator::hands_setup)
         .add_systems(Update, scenario::grenade_system.after(scenario::scenario_system).before(lessons::update_lessons))
         .add_systems(PostUpdate, operator::hands_pose.after(bevy::app::Animation).before(bevy::transform::TransformSystem::TransformPropagate))

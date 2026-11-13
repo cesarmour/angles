@@ -1063,6 +1063,8 @@ pub fn grenade_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, l
     /* ---------- granadas em cena ---------- */
     game.nade = None;
     for (e, mut g, mut tf) in &mut nades {
+        // caiu no chão: o quique da granada avisa onde ela está
+        if g.t < NADE_FLY && g.t + dt >= NADE_FLY { sfx.write(Sfx::Clink(g.to)); }
         g.t += dt;
         if g.t < NADE_FLY {
             let u = g.t / NADE_FLY;
@@ -1088,7 +1090,7 @@ pub fn grenade_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, l
             game.nade = None;
             crate::combat::blast(&mut commands, &fx, &mut smats, c, game.time);
             commands.spawn((PointLight { color: Color::srgb(1.0, 0.8, 0.5), intensity: 2_500_000.0, range: 12.0, shadows_enabled: false, ..default() }, Transform::from_translation(c + Vec3::Y * 0.6), crate::world::light_layers(), crate::operator::EnemyFlash(0.11)));
-            sfx.write(Sfx::EnemyShot(c)); sfx.write(Sfx::Fall(c)); sfx.write(Sfx::Impact(c));
+            sfx.write(Sfx::Blast(c));
             let d = Vec2::new(c.x, c.z).distance(p.pos);
             let open = level.los(c.x, c.z, 0.5, p.pos.x, p.pos.y, 1.0) || level.los(c.x, c.z, 0.5, p.eye.x, p.eye.z, p.eye.y);
             if script { println!("BOT GRANADA estourou a {:.1} m do operador, linha livre={}", d, open); }
