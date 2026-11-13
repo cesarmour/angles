@@ -12,7 +12,7 @@ import base64, mimetypes, pathlib, re
 
 HERE = pathlib.Path(__file__).parent
 VERSION = "0.12.0"
-SIZE = "100 MB"
+SIZE = "106 MB"
 REPO = "https://github.com/cesarmour/point-of-entry"
 DOWNLOAD = f"{REPO}/releases/download/v{VERSION}/Angles-mac.zip"
 DESCRIPTION = ("Angles is a free CQB teaching simulator for Mac: a shoot house with armed threats, hostages "

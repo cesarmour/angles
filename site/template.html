@@ -420,12 +420,10 @@ footer .warn{color:var(--text);font-weight:600}
     <h2>Install on Mac</h2>
     <div class="get">
       <ol class="steps">
-        <li><div><b>Open Terminal.</b><span>Press Command and Space, type Terminal, press Return.</span></div></li>
-        <li><div><b>Paste this line and press Return.</b>
-          <span class="cmdbox"><code id="cmd">curl -L {{repo}}/releases/latest/download/Angles-mac.zip -o /tmp/Angles.zip &amp;&amp; ditto -x -k /tmp/Angles.zip ~/Applications &amp;&amp; open ~/Applications/Angles.app</code>
-          <button class="copy" type="button" id="copy-cmd">Copy</button></span></div></li>
-        <li><div><b>That is all.</b><span>The game is now in the Applications folder inside your home folder, and it opens. To play again, open Angles from there.</span></div></li>
-        <li><div><b>Start the course.</b><span>Five phases, from cardboard targets to a team that thinks.</span></div></li>
+        <li><div><b>Download the zip.</b><span><a class="btn" href="{{download}}">Download for Mac · {{size}}</a></span></div></li>
+        <li><div><b>Open it.</b><span>Double-click the zip in your Downloads folder, then drag Angles to Applications.</span></div></li>
+        <li><div><b>Double-click Angles.</b><span>The first time, macOS asks to confirm that you want to open an app downloaded from the internet. Click Open.</span></div></li>
+        <li><div><b>Start the course.</b><span>Five phases, from cardboard targets to a team that thinks. Or go straight to a free run against live opposition.</span></div></li>
       </ol>
       <div class="getbox">
         <h3>Angles · Kill House {{version}}</h3>
@@ -434,7 +432,7 @@ footer .warn{color:var(--text);font-weight:600}
           <li>Keyboard and trackpad or mouse</li>
           <li>Free. Single player, no account, works offline</li>
         </ul>
-        <p class="why"><b>Why a command?</b> Angles is signed by its developer, and Apple's notarization is still in review. Until it is approved, macOS refuses to open the app when the zip is downloaded with a browser; fetched this way it opens normally.</p>
+        <p class="why"><b>Signed and notarized.</b> Angles is signed with an Apple Developer ID and notarized by Apple, so macOS opens it like any other downloaded app.</p>
         <div class="cta">
           <a class="btn ghost" href="{{download}}">Zip · {{size}}</a>
           <a class="btn ghost" href="{{repo}}/releases">All versions</a>
