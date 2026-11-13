@@ -6,6 +6,7 @@ mod combat;
 mod gi;
 mod lessons;
 mod map;
+mod maps;
 mod operator;
 mod player;
 mod scenario;

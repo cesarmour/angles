@@ -1252,7 +1252,18 @@ mod tests {
         best
     }
 
-    /// Casa de dois andares: dados do mapa conferidos, todo invasor chega a pé a qualquer cômodo (pelos dois caminhos),
+    /// Todos os mapas: dados conferidos (alvos nos cômodos certos, vagas, portas sobre vãos, tudo alcançável a pé).
+    #[test]
+    fn all_maps_valid() {
+        for i in 0..MAPS.len() {
+            set_map(i);
+            let errs = Level::new().validate();
+            assert!(errs.is_empty(), "mapa {} ({}): {:?}", i, map().name, errs);
+        }
+        assert_eq!(MAPS.iter().map(|m| m.name).collect::<Vec<_>>(), ["Training house", "Apartment", "Office", "Warehouse", "Hallway", "Family home"]);
+    }
+
+    /// Casa térrea: dados do mapa conferidos, todo invasor chega a pé a qualquer cômodo (pelos dois caminhos),
     /// ninguém atravessa janela, e a visão passa por cima do peitoril mas não por baixo.
     #[test]
     fn home_map_routes() {
