@@ -1,0 +1,38 @@
+phase1	Phase one. Cardboard. Nobody fires back, so take your time. Learn to move, to lean, and to read the bar at the top of your screen.
+phase2	Phase two. Doors. You work one room at a time, and you open the doorway from outside before you put a foot in it.
+phase3	Phase three. Hallways. Doors on both sides. Every opening you walk past without slicing is an angle at your back.
+phase4	Phase four. Opposition. From here on, the targets think. They slice your doorway the way you slice theirs.
+phase5	Final exam. Everything at once. They learn the door that hurt them, and the walls will not stop a round. Shoot, then move.
+stage1	Fundamentals. A doorway is one hundred and eighty degrees of angle. You cannot see all of it from one spot. So you walk an arc outside it, and you open it one slice at a time.
+stage2	Threshold. A small room is cleared from the door. Walk the arc from one jamb to the other. Step in only for the corner you could not see.
+stage3	Clean shot. The threat is behind a hostage. Do not hurry the trigger. Step sideways until the angle gives you the threat and nothing else.
+stage4	Opposing doors. Slice the left, then the right, then move. Never stand between two openings you have not looked into.
+stage5	Locked door. Work it from the side of the frame. Stay off the line of the doorway. That line is where the rounds come out.
+stage6	Rear security. A cleared room does not stay cleared. Check behind you every time you stop.
+stage7	Second look. Hands tell you more than faces. Identify at the moment of the shot, not before.
+stage8	Hostage rescue. You are on a clock. Open only the angles that are on your way, and accept the ones you leave.
+stage9	Home defense. Hold nothing for long. Take your shots, change position, and never fire twice from the same spot.
+step_left	Step left.
+step_right	Step right.
+keep_slicing	Keep slicing. There is still angle on that door.
+door_open	Good. That doorway is open. Go.
+half_open	Half the doorway. Keep walking the arc.
+dont_stop	Do not stop in the doorway. Move through.
+off_the_wall	Come off the wall. Distance gives you angle.
+too_fast	Too fast. One step, one slice.
+gun_on_opening	Muzzle on the opening. What you see, your sights see.
+back_exposed	You turned your back on an angle you never opened.
+near_corners	Near corners. Left, then right.
+lean	Lean. Show your eye and your muzzle, not your chest.
+good_entry	Good entry. You saw it before it saw you.
+contact	Contact. Finish it or break the angle.
+hit	You are hit. You stood in a line of fire too long.
+through_wall	That came through the wall. Board hides you. It does not stop rounds. Move.
+grenade	Grenade. Get a wall between you and it.
+door_marked	They marked that door. Do not be behind it when they come back.
+reload	Reload now, while the angle is empty.
+hostage_hit	Cease fire. That was a hostage. Identify before you press.
+room_clear	Room clear.
+stage_passed	Stage passed. Next one is open.
+stage_failed	Not yet. Run it again and open more of the doorway before you enter.
+course_done	Course complete. You know what an angle costs. Go again and do it cleaner.

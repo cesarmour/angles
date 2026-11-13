@@ -322,24 +322,20 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
         match p.kind {
             PropKind::Crate => model(&mut *commands, "wooden_military_crate", c, if d > w { hp2 } else { 0.0 }, Vec3::ONE, Vec3::ZERO),
             PropKind::Barrel => model(&mut *commands, "Barrel_01", c, mx * 2.3, Vec3::splat(0.93), Vec3::ZERO),
-            PropKind::Bench => {
-                model(&mut *commands, "WoodenTable_01", c, hp2, Vec3::splat(1.4), Vec3::ZERO);
-                for (k, dz) in [-0.8f32, -0.55, 0.5].iter().enumerate() { model(&mut *commands, "ammo_box", Vec3::new(mx - 0.1 + k as f32 * 0.08, p.h, mz + dz), 0.4 + k as f32, Vec3::ONE, Vec3::ZERO); }
-                model(&mut *commands, "cardboard_box_01", Vec3::new(mx + 0.05, p.h, mz + 0.95), 0.3, Vec3::ONE, Vec3::new(0.0, 0.0, 0.03));
+            // kill house: nada de mobília de casa. O que era bancada, mesa, sofá ou cama vira uma barricada baixa de OSB
+            // com tampa de sarrafo; o que era estante ou armário vira um painel alto de OSB em quadro de sarrafo. O tamanho,
+            // a altura e a colisão continuam os mesmos (o que cada peça ensina, cobertura baixa ou espaço morto, não muda)
+            PropKind::Bench | PropKind::Table | PropKind::Sofa | PropKind::Bed => {
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.02, 0.0, p.z1 + 0.02, p.x2 - 0.02, p.h - 0.04, p.z2 - 0.02)], OSB_UV, &m.ply);
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1, p.h - 0.04, p.z1, p.x2, p.h, p.z2),
+                    b3(p.x1, 0.0, p.z1, p.x1 + 0.045, p.h - 0.041, p.z1 + 0.045), b3(p.x2 - 0.045, 0.0, p.z1, p.x2, p.h - 0.041, p.z1 + 0.045),
+                    b3(p.x1, 0.0, p.z2 - 0.045, p.x1 + 0.045, p.h - 0.041, p.z2), b3(p.x2 - 0.045, 0.0, p.z2 - 0.045, p.x2, p.h - 0.041, p.z2)], 1.0, &m.lumber);
             }
-            PropKind::Table => model(&mut *commands, "metal_office_desk", c, 0.0, Vec3::ONE, Vec3::ZERO),
-            PropKind::Sofa => model(&mut *commands, "Sofa_01", c, std::f32::consts::PI, Vec3::splat(1.15), Vec3::new(0.0, 0.0, -0.03)),
-            PropKind::Shelf => {
-                for k in 0..2 { model(&mut *commands, "steel_frame_shelves_01", Vec3::new(p.x1 + 0.495 + k as f32 * 0.99, 0.0, mz), 0.0, Vec3::splat(0.09), Vec3::ZERO); }
-                model(&mut *commands, "cardboard_box_01", Vec3::new(p.x1 + 0.5, 0.52, mz), 1.2, Vec3::splat(0.9), Vec3::ZERO);
-                model(&mut *commands, "cardboard_box_01", Vec3::new(p.x1 + 1.5, 1.0, mz), 0.2, Vec3::splat(0.9), Vec3::ZERO);
-            }
-            PropKind::Locker => model(&mut *commands, "vintage_cabinet_01", c, hp2, Vec3::ONE, Vec3::new(0.0, 0.0, 0.055)),
-            // cama: estrado de madeira, colchão claro e travesseiro (peças com folga entre si, para as faces não coincidirem)
-            PropKind::Bed => {
-                sb(&mut *commands, &mut *meshes, &[b3(p.x1, 0.0, p.z1, p.x2, 0.3, p.z2), b3(p.x1, 0.3, p.z1, p.x2, 0.92, p.z1 + 0.07)], 0.8, &m.wood);
-                sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.04, 0.3, p.z1 + 0.09, p.x2 - 0.04, p.h, p.z2 - 0.04)], 0.6, &m.fabric);
-                sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.2, p.h, p.z1 + 0.16, p.x2 - 0.2, p.h + 0.1, p.z1 + 0.56)], 0.5, &m.cloth);
+            PropKind::Shelf | PropKind::Locker => {
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1 + 0.03, 0.0, p.z1 + 0.03, p.x2 - 0.03, p.h - 0.05, p.z2 - 0.03)], OSB_UV, &m.ply);
+                let mut frame = vec![b3(p.x1, p.h - 0.05, p.z1, p.x2, p.h, p.z2), b3(p.x1, 0.0, p.z1, p.x2, 0.045, p.z1 + 0.029), b3(p.x1, 0.0, p.z2 - 0.029, p.x2, 0.045, p.z2)];
+                for (x, z) in [(p.x1, p.z1), (p.x2 - 0.045, p.z1), (p.x1, p.z2 - 0.045), (p.x2 - 0.045, p.z2 - 0.045)] { frame.push(b3(x, 0.046, z, x + 0.045, p.h - 0.051, z + 0.045)); }
+                sb(&mut *commands, &mut *meshes, &frame, 1.0, &m.lumber);
             }
             // piscina: borda baixa e água (bloqueia a passagem, não a visão)
             PropKind::Pool => {
