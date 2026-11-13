@@ -566,7 +566,8 @@ pub fn update_ui(
     let db_w = if portrait_db { (uw - 72.0 - PORTRAIT_PAD).min(820.0) } else { (uw - 112.0).min(820.0) };
     for (e, tag, mut node) in nodes.iter_mut() {
         match *tag {
-            Tag::Hud => show(&mut node, !matches!(game.mode, Mode::Menu | Mode::Debrief | Mode::Credits | Mode::Down | Mode::Scenarios | Mode::Ranking)),
+            // CQB_NOHUD: capturas limpas para o site, sem nada da interface por cima
+            Tag::Hud => show(&mut node, std::env::var("CQB_NOHUD").is_err() && !matches!(game.mode, Mode::Menu | Mode::Debrief | Mode::Credits | Mode::Down | Mode::Scenarios | Mode::Ranking)),
             Tag::Credits => show(&mut node, game.mode == Mode::Credits),
             Tag::Scenarios => show(&mut node, game.mode == Mode::Scenarios),
             Tag::Ranking => show(&mut node, game.mode == Mode::Ranking),

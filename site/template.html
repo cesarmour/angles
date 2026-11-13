@@ -47,9 +47,9 @@ a:focus-visible,.btn:focus-visible,input:focus-visible,button:focus-visible{outl
 
 /* abertura */
 .hero{position:relative;min-height:min(92vh,900px);display:flex;align-items:flex-end;overflow:hidden}
-.hero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 40%;animation:drift 18s var(--ease) both}
+.hero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:100% 30%;animation:drift 18s var(--ease) both}
 @keyframes drift{from{transform:scale(1.08)}to{transform:scale(1)}}
-.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(7,9,10,.6) 0%,rgba(7,9,10,.05) 30%,rgba(7,9,10,.74) 66%,var(--bg) 100%),linear-gradient(90deg,rgba(7,9,10,.8) 0%,rgba(7,9,10,0) 62%)}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(7,9,10,.5) 0%,rgba(7,9,10,0) 26%,rgba(7,9,10,.18) 62%,rgba(7,9,10,.82) 88%,var(--bg) 100%),linear-gradient(90deg,rgba(7,9,10,.86) 0%,rgba(7,9,10,.55) 30%,rgba(7,9,10,0) 54%)}
 .hero .wrap{position:relative;z-index:2;width:100%;padding-top:120px;padding-bottom:70px}
 .hero h1{font-size:clamp(72px,14vw,210px);margin:18px 0 6px}
 .hero .tag{font:600 clamp(22px,3vw,36px)/1.05 var(--display);text-transform:uppercase;letter-spacing:.06em;max-width:760px}
@@ -218,7 +218,7 @@ footer a{color:var(--dim)}
 
 <main id="top">
 <div class="hero">
-  <img src="{{img:hero.jpg}}" alt="First-person view inside a plywood kill house: an armed intruder in tan fatigues ahead, another in camouflage behind him, pistol raised toward them.">
+  <img src="{{img:hero.jpg}}" alt="First-person view inside a plywood kill house: an armed intruder in green camouflage at arm's length, another in tan fatigues right behind him, pistol raised toward them.">
   <div class="wrap">
     <p class="eyebrow">Close-quarters battle · Kill House</p>
     <h1>Angles</h1>

@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    HideBox, Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
+    HideBox, Yaw(f32), Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
     /// Espera um invasor começar a sair do vão de chegada de uma passagem entre andares.
     WaitClimb,
     /// Espera um invasor começar a fatiar uma porta (parado ao lado do batente); assusta todos os invasores vivos (motivo 1, 2 ou 3).
@@ -211,6 +211,10 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         // ameaças reagindo (sem CQB_NOREACT): várias capturas logo que elas veem o operador, antes do aviso de tiro levado
         "site3" => vec![Wait(200), Start(true), Wait(150), HideBox, Near(false, 1, 3.4), Wait(14), Shot("aim-1a"), Wait(8), Shot("aim-1b"), Wait(8), Shot("aim-1c"), Near(false, 0, 3.6), Wait(14), Shot("aim-0a"), Wait(8), Shot("aim-0b"), Wait(8), Shot("aim-0c"),
             Near(false, 3, 3.4), Wait(14), Shot("aim-3a"), Wait(8), Shot("aim-3b"), Quit],
+        // foto de abertura do site (CQB_NOHUD=1 CQB_NOREACT=1 CQB_NODEATH=1 CQB_SCALE=3): os invasores de perto, sem interface
+        "hero" => { let mut v = vec![Wait(200), Start(true), Wait(150)];
+            for (n, name) in [(0usize, "hero-0"), (1, "hero-1"), (2, "hero-2"), (3, "hero-3"), (4, "hero-4"), (5, "hero-5")] { v.extend([Near(false, n, 1.9), Yaw(0.42), Wait(55), Shot(name)]); }
+            v.push(Quit); v },
         "house" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20),
             Tp(0.6, 7.4, 3.1416, 0.0), Wait(20), Shot("h-01"), Tp(0.6, 7.4, -1.5708, 0.0), Wait(20), Shot("h-02"), Tp(0.6, 7.4, 3.1416, 0.5), Wait(20), Shot("h-03"),
             Tp(0.6, 8.5, 0.0, 0.1), Wait(20), Shot("h-04"), Tp(1.6, 8.55, 1.5708, 0.25), Wait(20), Shot("h-05"), Tp(3.4, 9.9, 1.037, -0.05), Wait(20), Shot("h-06"),
@@ -401,6 +405,8 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         Cmd::Crouch(n) => { bot.hold_crouch = n > 0; c.crouch_hold = bot.hold_crouch; done = bot.n >= n; }
         Cmd::Tac(b) => { if game.tac != b { c.tac = true; } done = true; }
         Cmd::HideBox => { game.hide_box = true; game.ui_dirty = true; done = true; }
+        // gira a vista um tanto (radianos), para enquadrar o alvo fora do centro
+        Cmd::Yaw(a) => { p.yaw += a; done = true; }
         Cmd::ViewTo(v) => { if game.view != v { c.view = true; } done = true; }
         Cmd::Flash(b) => { if game.flash != b { c.flash = true; } done = true; }
         Cmd::Shot(name) => {
