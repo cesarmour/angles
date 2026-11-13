@@ -18,11 +18,61 @@ pub const PPM: f32 = 16.0;
 pub const GW: usize = 352;
 pub const GH: usize = 304;
 
-/// Barra da porta em foco (a única leitura de ângulos na tela): 180 fatias de 1°, da esquerda para a direita na ordem em
-/// que se abrem para quem olha (a ponta esquerda é o que se abre andando para a esquerda).
-pub const BAR_W: usize = 180;
+/// Arco da porta em foco (a única leitura de ângulos na tela): um transferidor pendurado no alto, com os 180° do vão da
+/// esquerda para a direita na ordem em que se abrem para quem olha. Desenhado numa textura com o dobro da resolução da tela.
+pub const ARC_W: usize = 824;
+pub const ARC_H: usize = 400;
+/// Centro do arco e raio, em pixels da textura (metade disso em pontos da interface).
+pub const ARC_C: (f32, f32) = (ARC_W as f32 / 2.0, 52.0);
+pub const ARC_R: f32 = 192.0;
 #[derive(Resource)]
 pub struct PieBarTex(pub Handle<Image>);
+
+/// Desenha o arco. `st[k]` é o estado de cada grau, da esquerda (0) para a direita (179): 0 = falta abrir (tracejado
+/// âmbar), 1 = já aberto (verde-água), 2 = vendo agora (branco, com brilho e uma agulha até o centro). Por fora, a régua
+/// de transferidor (um traço a cada 5°, mais longo a cada 45°); por trás, uma sombra suave no lugar de uma caixa.
+pub fn draw_arc(data: &mut [u8], st: &[u8; 180]) {
+    let (cx, cy, r) = (ARC_C.0, ARC_C.1, ARC_R);
+    let (first, last) = (st.iter().position(|v| *v == 2), st.iter().rposition(|v| *v == 2));
+    let mid = first.zip(last).map(|(a, b)| (a + b + 1) as f32 / 2.0);
+    const WHITE: [f32; 3] = [255.0, 255.0, 255.0];
+    const TEAL: [f32; 3] = [94.0, 226.0, 190.0];
+    const AMBER: [f32; 3] = [240.0, 168.0, 48.0];
+    for y in 0..ARC_H { for x in 0..ARC_W {
+        let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+        let dist = (dx * dx + dy * dy).sqrt();
+        let k0 = ((r + 150.0 - dist) / 120.0).clamp(0.0, 1.0);
+        let mut a = 0.36 * k0 * k0 * (3.0 - 2.0 * k0);
+        let mut col = [6.0f32, 8.0, 10.0];
+        let mut put = |c: [f32; 3], k: f32| {
+            if k <= 0.0 { return; }
+            let k = k.min(1.0);
+            let oa = k + a * (1.0 - k);
+            for i in 0..3 { col[i] = (c[i] * k + col[i] * a * (1.0 - k)) / oa; }
+            a = oa;
+        };
+        if dy >= 0.0 && dist > 1.0 {
+            let deg = 180.0 - dy.atan2(dx).to_degrees();
+            let b = (deg.floor().max(0.0) as usize).min(179);
+            let ring = |rad: f32, w: f32| (0.5 + w / 2.0 - (dist - rad).abs()).clamp(0.0, 1.0);
+            put(WHITE, ring(r, 4.0) * 0.18);
+            match st[b] {
+                1 => put(TEAL, ring(r + 2.0, 8.0)),
+                0 => if deg % 4.2 < 2.2 { put(AMBER, ring(r + 2.0, 6.0)); },
+                _ => { put(WHITE, (1.0 - (dist - (r + 4.0)).abs() / 22.0).clamp(0.0, 1.0) * 0.32); put(WHITE, ring(r + 4.0, 12.0)); }
+            }
+            let near = (deg / 5.0).round() * 5.0;
+            let big = (near.round() as i32) % 45 == 0;
+            if dist >= r + 14.0 && dist <= r + if big { 30.0 } else { 20.0 } {
+                put(WHITE, (if big { 0.6 } else { 0.28 }) * (1.3 - (deg - near).abs().to_radians() * dist).clamp(0.0, 1.0));
+            }
+            if let Some(m) = mid { if dist > 20.0 && dist < r - 16.0 { put(WHITE, 0.43 * (1.1 - (deg - m).abs().to_radians() * dist).clamp(0.0, 1.0)); } }
+        }
+        put(WHITE, 0.92 * (5.5 - dist).clamp(0.0, 1.0));
+        let o = (y * ARC_W + x) * 4;
+        data[o] = col[0] as u8; data[o + 1] = col[1] as u8; data[o + 2] = col[2] as u8; data[o + 3] = (a * 255.0) as u8;
+    } }
+}
 
 #[derive(Component)] pub struct OverlayPlane;
 #[derive(Component)] pub struct FogPlane;
@@ -109,7 +159,7 @@ pub fn setup_tactical(mut commands: Commands, mut images: ResMut<Assets<Image>>,
         vis: Vis::default(), wedge: Wedge::default(), hfov: 1.7, c: 0.0, seen: vec![0; GW * GH], cur: vec![0; GW * GH], expo: vec![0; GW * GH], zone_idx: vec![-1i8; GW * GH], tot: [0; MAX_ZONES], pct: [0.0; MAX_ZONES],
         expo_deg: 0.0, stat_t: 0.0, overlay, fog, wedge_mesh, overlay_mat: om, fog_mat: fmat, primary: None, body_cm: 25.0, corner_zone: None, pie: vec![[0u8; 180]; openings().len()], pie_now: vec![None; openings().len()], pie_active: None, lean_hint: None, bar_left: 0, bar_right: 0,
     };
-    let bar = images.add(art::rgba_image(BAR_W as u32, 1, vec![0u8; BAR_W * 4], true, false, false));
+    let bar = images.add(art::rgba_image(ARC_W as u32, ARC_H as u32, vec![0u8; ARC_W * ARC_H * 4], true, false, false));
     commands.insert_resource(PieBarTex(bar));
     tac.rebuild(&level);
     commands.insert_resource(tac);
@@ -219,13 +269,12 @@ pub fn tac_update(
         for (b, v) in tac.pie[i].iter().enumerate() { if *v > 0 { sig = (sig ^ (b as u64 + 7)).wrapping_mul(1099511628211); } }
         if sig != *bar_sig {
             *bar_sig = sig;
-            if let Some(data) = images.get_mut(&bar.0).and_then(|img| img.data.as_mut()) {
-                for k in 0..BAR_W {
-                    let b = if rev { BAR_W - 1 - k } else { k };
-                    let col: [u8; 3] = if now.map_or(false, |(lo, hi)| b as f32 >= lo - 0.5 && (b as f32) <= hi + 0.5) { [96, 214, 232] } else if tac.pie[i][b] > 0 { [111, 213, 142] } else { [236, 90, 78] };
-                    data[k * 4..k * 4 + 4].copy_from_slice(&[col[0], col[1], col[2], 255]);
-                }
+            let mut st = [0u8; 180];
+            for (k, v) in st.iter_mut().enumerate() {
+                let b = if rev { 179 - k } else { k };
+                *v = if now.map_or(false, |(lo, hi)| b as f32 >= lo - 0.5 && (b as f32) <= hi + 0.5) { 2 } else if tac.pie[i][b] > 0 { 1 } else { 0 };
             }
+            if let Some(data) = images.get_mut(&bar.0).and_then(|img| img.data.as_mut()) { draw_arc(data, &st); }
         }
     }
     // dica: quantos graus a mais da abertura em foco entram no setor inclinando para cada lado
@@ -343,4 +392,24 @@ pub fn tac_gizmos(mut gz: Gizmos, mut game: ResMut<Game>, time: Res<Time>, p: Re
     }
     // (sem linhas de setor, de quina, leques de abertura nem marcadores de alvo: a leitura de ângulos é só a barra da porta)
     let _ = (&tac, &level, &targets);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// Desenha o arco num estado de exemplo e grava em PPM (CQB_ARC_OUT) para conferir o desenho sem abrir o jogo.
+    #[test]
+    fn arc_draws() {
+        let mut st = [0u8; 180];
+        for (k, v) in st.iter_mut().enumerate() { *v = if (138..=151).contains(&k) { 2 } else if (44..160).contains(&k) { 1 } else { 0 }; }
+        let mut data = vec![0u8; ARC_W * ARC_H * 4];
+        draw_arc(&mut data, &st);
+        assert!(data.chunks_exact(4).any(|p| p[3] > 200 && p[1] > 200 && p[0] < 120), "sem trecho aberto no arco");
+        if let Ok(f) = std::env::var("CQB_ARC_OUT") {
+            let mut out = format!("P6\n{} {}\n255\n", ARC_W, ARC_H).into_bytes();
+            // sobre um fundo de parede clara, para ver o contraste
+            for p in data.chunks_exact(4) { let a = p[3] as f32 / 255.0; for i in 0..3 { out.push((p[i] as f32 * a + [150.0, 140.0, 120.0][i] * (1.0 - a)) as u8); } }
+            std::fs::write(f, out).unwrap();
+        }
+    }
 }

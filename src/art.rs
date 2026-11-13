@@ -10,6 +10,11 @@ pub const FONT_BOLD: &[u8] = include_bytes!("../assets/fonts/Rajdhani-Bold.ttf")
 pub const FONT_SEMI: &[u8] = include_bytes!("../assets/fonts/Rajdhani-SemiBold.ttf");
 pub const FONT_BODY: &[u8] = include_bytes!("../assets/fonts/Rajdhani-Medium.ttf");
 pub const FONT_REG: &[u8] = include_bytes!("../assets/fonts/Rajdhani-Regular.ttf");
+/// Fonte do arco da porta (Barlow Condensed, SIL OFL): leve para o número grande, média e semibold para o resto.
+pub const FONT_HUD_LIGHT: &[u8] = include_bytes!("../assets/fonts/BarlowCondensed-Light.ttf");
+pub const FONT_HUD_REG: &[u8] = include_bytes!("../assets/fonts/BarlowCondensed-Regular.ttf");
+pub const FONT_HUD_MED: &[u8] = include_bytes!("../assets/fonts/BarlowCondensed-Medium.ttf");
+pub const FONT_HUD_SEMI: &[u8] = include_bytes!("../assets/fonts/BarlowCondensed-SemiBold.ttf");
 /// Estêncil para as placas pintadas nas paredes.
 pub const FONT_STENCIL: &[u8] = include_bytes!("../assets/fonts/SairaStencilOne-Regular.ttf");
 

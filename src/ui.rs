@@ -16,19 +16,23 @@ const GOOD: Color = Color::srgb(0.435, 0.835, 0.557);
 const BAD: Color = Color::srgb(1.0, 0.353, 0.31);
 const CYAN: Color = Color::srgb(0.376, 0.839, 0.91);
 const PANEL: Color = Color::srgba(0.035, 0.05, 0.055, 0.92);
+/// Âmbar do arco da porta (par seguro para daltônicos com o verde-água do trecho aberto).
+const HUD_AMBER: Color = Color::srgb(0.941, 0.659, 0.188);
 const SCREEN: Color = Color::srgba(0.02, 0.03, 0.035, 0.88);
 /// Faixa à direita da tela que o operador 3D ocupa no menu e na avaliação (a imagem dele tem 540 de largura, com folga transparente à esquerda).
 const PORTRAIT_PAD: f32 = 462.0;
 
 #[derive(Resource)]
-pub struct UiFonts { pub bold: Handle<Font>, pub semi: Handle<Font>, pub body: Handle<Font> }
+pub struct UiFonts { pub bold: Handle<Font>, pub semi: Handle<Font>, pub body: Handle<Font>,
+    /// Fonte do arco da porta: leve, normal, média e semibold.
+    pub hl: Handle<Font>, pub hr: Handle<Font>, pub hm: Handle<Font>, pub hs: Handle<Font> }
 #[derive(Resource, Default)]
 pub struct Diagrams(pub Vec<Handle<Image>>);
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
-    AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieArrowL, PieArrowR,
+    AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieVerb,
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
     Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound, DiffBtn(u8),
     Scenarios, Ranking, ScnBest(u8), StageBtn(u8), CourseNext, RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
@@ -67,6 +71,10 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         bold: fonts.add(Font::try_from_bytes(art::FONT_BOLD.to_vec()).expect("fonte")),
         semi: fonts.add(Font::try_from_bytes(art::FONT_SEMI.to_vec()).expect("fonte")),
         body: fonts.add(Font::try_from_bytes(art::FONT_BODY.to_vec()).expect("fonte")),
+        hl: fonts.add(Font::try_from_bytes(art::FONT_HUD_LIGHT.to_vec()).expect("fonte")),
+        hr: fonts.add(Font::try_from_bytes(art::FONT_HUD_REG.to_vec()).expect("fonte")),
+        hm: fonts.add(Font::try_from_bytes(art::FONT_HUD_MED.to_vec()).expect("fonte")),
+        hs: fonts.add(Font::try_from_bytes(art::FONT_HUD_SEMI.to_vec()).expect("fonte")),
     };
     let mut diagrams = Diagrams::default();
     for i in 0..6 { diagrams.0.push(images.add(art::svg_image(&art::diagram_svg(i), 960, 570, false))); }
@@ -190,29 +198,23 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             });
         });
         for k in 0..7u8 { h.spawn((txt("", &f.bold, 20.0, BAD), Node { display: Display::None, ..abs() }, TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) }, Tag::Label(k))); }
-        // barra da porta em foco, fixa no alto da tela: a única leitura de ângulos. Nome da abertura e graus já fatiados em
-        // cima, a barra das 180 fatias no meio (verde = já aberta, ciano = vendo agora, vermelho = falta), uma frase embaixo
-        // e, nas pontas, quantos graus faltam de cada lado com a seta de para onde andar
-        let tri = |images: &mut Assets<Image>, left: bool| images.add(art::svg_image(&format!("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><polygon points='{}' fill='#ec5a4e'/></svg>", if left { "4,16 26,3 26,29" } else { "28,16 6,3 6,29" }), 64, 64, false));
-        let (tri_l, tri_r) = (tri(&mut images, true), tri(&mut images, false));
-        h.spawn((Node { width: Val::Percent(100.0), top: Val::Px(14.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::PieBar)).with_children(|c| {
-            c.spawn((Node { align_items: AlignItems::Center, column_gap: Val::Px(14.0), padding: UiRect::axes(Val::Px(16.0), Val::Px(9.0)), ..default() }, BackgroundColor(PANEL))).with_children(|r| {
-                let side = |r: &mut ChildSpawnerCommands, num: Tag, arrow: Tag, img: Handle<Image>| {
-                    r.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, width: Val::Px(44.0), row_gap: Val::Px(2.0), ..default() }).with_children(|s| {
-                        s.spawn((txt("", &f.bold, 21.0, BAD), TextLayout::new_with_no_wrap(), num));
-                        s.spawn((Node { width: Val::Px(20.0), height: Val::Px(20.0), ..default() }, ImageNode::new(img), arrow));
-                    });
-                };
-                side(r, Tag::PieLeft, Tag::PieArrowL, tri_l);
-                r.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(430.0), row_gap: Val::Px(5.0), ..default() }).with_children(|m| {
-                    m.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::FlexEnd, ..default() }).with_children(|t| {
-                        t.spawn((txt("", &f.semi, 14.0, BONE.with_alpha(0.8)), TextLayout::new_with_no_wrap(), Tag::PieName));
-                        t.spawn((txt("", &f.bold, 24.0, BONE), TextLayout::new_with_no_wrap(), Tag::PieDeg));
-                    });
-                    m.spawn((Node { width: Val::Px(430.0), height: Val::Px(12.0), ..default() }, ImageNode::new(bar.0.clone())));
-                    m.spawn((txt("", &f.body, 15.0, BONE), TextLayout::new_with_no_wrap(), Tag::PieHint));
+        // arco da porta em foco, pendurado no alto da tela: a única leitura de ângulos. O desenho (trilho, trecho aberto,
+        // o que falta, o que se vê agora, régua e agulha) vem pronto numa textura; aqui ficam os textos: os graus abertos no
+        // meio, o que falta de cada lado nas pontas e, embaixo, a ordem de para onde andar. Sem caixa atrás.
+        let hud = |s: &str, font: &Handle<Font>, size: f32, color: Color| (Text::new(s), TextFont { font: font.clone(), font_size: size, ..default() }, TextColor(color),
+            TextLayout::new_with_no_wrap(), TextShadow { offset: Vec2::splat(1.0), color: Color::srgba(0.0, 0.0, 0.0, 0.6) });
+        let (aw, ah, acx, acy, ar) = (crate::tactical::ARC_W as f32 / 2.0, crate::tactical::ARC_H as f32 / 2.0, crate::tactical::ARC_C.0 / 2.0, crate::tactical::ARC_C.1 / 2.0, crate::tactical::ARC_R / 2.0);
+        h.spawn((Node { width: Val::Percent(100.0), top: Val::Px(0.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::PieBar)).with_children(|c| {
+            c.spawn(Node { width: Val::Px(aw), height: Val::Px(ah + 10.0), ..default() }).with_children(|r| {
+                r.spawn((Node { width: Val::Px(aw), height: Val::Px(ah), ..abs() }, ImageNode::new(bar.0.clone())));
+                r.spawn(Node { left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(acy + 9.0), justify_content: JustifyContent::Center, ..abs() }).with_children(|t| { t.spawn((hud("", &f.hl, 36.0, BONE), Tag::PieDeg)); });
+                r.spawn(Node { left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(acy + 52.0), justify_content: JustifyContent::Center, ..abs() }).with_children(|t| { t.spawn((hud("O F   1 8 0   O P E N", &f.hm, 9.5, BONE.with_alpha(0.62)), Tag::PieName)); });
+                r.spawn(Node { right: Val::Px(aw - acx + ar + 16.0), top: Val::Px(acy - 4.0), ..abs() }).with_children(|t| { t.spawn((hud("", &f.hm, 21.0, HUD_AMBER), Tag::PieLeft)); });
+                r.spawn(Node { left: Val::Px(acx + ar + 16.0), top: Val::Px(acy - 4.0), ..abs() }).with_children(|t| { t.spawn((hud("", &f.hm, 21.0, HUD_AMBER), Tag::PieRight)); });
+                r.spawn(Node { left: Val::Px(0.0), right: Val::Px(0.0), top: Val::Px(acy + ar + 15.0), justify_content: JustifyContent::Center, ..abs() }).with_children(|t| {
+                    t.spawn((hud("", &f.hs, 17.0, HUD_AMBER), Tag::PieVerb));
+                    t.spawn((hud("", &f.hr, 17.0, BONE), Tag::PieHint));
                 });
-                side(r, Tag::PieRight, Tag::PieArrowR, tri_r);
             });
         });
     });
@@ -587,7 +589,7 @@ pub fn update_ui(
             // o painel de medidas e a legenda de cores saíram: ficam a barra da porta em foco e o minimapa (só com o radar)
             Tag::TacPanel | Tag::Legend => show(&mut node, false),
             Tag::MiniFrame => show(&mut node, game.tac && !bird),
-            Tag::PieBar => { show(&mut node, pie_on); let (l, r) = if uw < 1336.0 { (Val::Px(408.0), Val::Px(348.0)) } else { (Val::Px(0.0), Val::Px(0.0)) }; if node.padding.left != l { node.padding.left = l; node.padding.right = r; } }
+            Tag::PieBar => show(&mut node, pie_on),
             Tag::Prompt => show(&mut node, play && (game.near_door.is_some() || game.breach.is_some())),
             Tag::Lock => show(&mut node, play && (game.lock > 0.03 || game.nade.map_or(false, |(q, _)| q.distance(p.pos) < 9.0))),
             Tag::Replay => show(&mut node, game.mode == Mode::Replay),
@@ -803,11 +805,6 @@ pub fn update_ui(
     let lesson = &LESSONS[game.lesson.min(5)];
     for (tag, mut im) in imgs.iter_mut() {
         if *tag == Tag::CardImg && game.mode == Mode::Card { let h = &diagrams.0[game.lesson.min(5)]; if im.image != *h { im.image = h.clone(); } }
-        // seta da barra da porta: só aparece do lado em que ainda falta abrir
-        if *tag == Tag::PieArrowL || *tag == Tag::PieArrowR {
-            let a = if (if *tag == Tag::PieArrowL { tac.bar_left } else { tac.bar_right }) > 0 { 1.0 } else { 0.0 };
-            if im.color.alpha() != a { im.color = Color::WHITE.with_alpha(a); }
-        }
     }
     let score_grade = || {
         let sc = scenario::final_score(&game, &targets);
@@ -916,15 +913,12 @@ pub fn update_ui(
                     if let Some((q, _)) = ideal_points(game.lesson).get(game.guide_i) { set(&mut t, &format!("{:.1} m", q.distance(p.pos))); col.0 = AMBER; }
                 } else if k == 6 { set(&mut t, &format!("{}°", tac.hfov.to_degrees().round() as i32)); col.0 = CYAN; }
             }
-            Tag::PieName => if let Some(i) = tac.pie_active { set(&mut t, &openings()[i].name.to_uppercase()); },
-            Tag::PieDeg => if let Some(i) = tac.pie_active { let d = tac.pie_deg(i); set(&mut t, &format!("{}° / 180°", d.round() as i32)); col.0 = if d >= 140.0 { GOOD } else if d >= 90.0 { AMBER } else { BONE }; },
-            Tag::PieLeft => set(&mut t, &if tac.bar_left > 0 { format!("{}°", tac.bar_left) } else { String::new() }),
-            Tag::PieRight => set(&mut t, &if tac.bar_right > 0 { format!("{}°", tac.bar_right) } else { String::new() }),
-            Tag::PieHint => {
-                let (l, r) = (tac.bar_left, tac.bar_right);
-                set(&mut t, &if l == 0 && r == 0 { "This doorway is fully sliced.".to_string() }
-                    else if l >= r { format!("Step left to open {}° more of this doorway.", l) } else { format!("Step right to open {}° more of this doorway.", r) });
-            }
+            Tag::PieDeg => if let Some(i) = tac.pie_active { set(&mut t, &format!("{}°", tac.pie_deg(i).round() as i32)); },
+            // o que falta de cada lado: o lado com mais graus fica forte, o outro esmaecido; lado já aberto não mostra nada
+            Tag::PieLeft => { let (l, r) = (tac.bar_left, tac.bar_right); set(&mut t, &if l > 0 { format!("‹ {}°", l) } else { String::new() }); col.0 = HUD_AMBER.with_alpha(if l >= r { 1.0 } else { 0.55 }); }
+            Tag::PieRight => { let (l, r) = (tac.bar_left, tac.bar_right); set(&mut t, &if r > 0 { format!("{}° ›", r) } else { String::new() }); col.0 = HUD_AMBER.with_alpha(if r > l { 1.0 } else { 0.55 }); }
+            Tag::PieVerb => { let (l, r) = (tac.bar_left, tac.bar_right); set(&mut t, if l == 0 && r == 0 { "" } else if l >= r { "Step left" } else { "Step right" }); }
+            Tag::PieHint => { let (l, r) = (tac.bar_left, tac.bar_right); set(&mut t, &if l == 0 && r == 0 { "Doorway open".to_string() } else { format!(" to open {}° more", l.max(r)) }); }
             Tag::DbGrade if game.mode == Mode::Debrief => { let (_, (g, c)) = score_grade(); set(&mut t, g); col.0 = c; }
             Tag::DbScore if game.mode == Mode::Debrief => { let (sc, _) = score_grade(); set(&mut t, &format!("{} POINTS  ·  {}  ·  {}", sc, scenario::fmt_time(game.time), diff_label(scenario::run_diff(&game)))); }
             _ => {}
