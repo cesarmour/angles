@@ -187,16 +187,20 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>, a
     commands.spawn((AudioPlayer::new(a.add(wav(&clip!("ambiente"), 0.5))), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.3), ..default() }));
     commands.insert_resource(sounds);
     // música de fundo das telas (menu, etapas, avaliação): some quando a partida começa
-    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/menu_loop.wav")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0)));
+    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/menu_loop.wav")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0, false)));
+    // trilha de dentro da partida: de ação, bem diferente da do menu
+    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/play_loop.wav")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0, true)));
 }
 
-/// Música de fundo e o volume em que ela está agora.
-#[derive(Component)] pub struct Music(pub f32);
+/// Música de fundo: o volume em que ela está agora e se é a trilha de dentro da partida (ou a das telas).
+#[derive(Component)] pub struct Music(pub f32, pub bool);
 pub fn music_system(time: Res<Time<Real>>, game: Res<crate::state::Game>, mut q: Query<(&mut AudioSink, &mut Music)>) {
     use crate::state::Mode;
-    let want = match game.mode { Mode::Play | Mode::Replay | Mode::Down => 0.0, Mode::Card | Mode::Pause => 0.12, Mode::Debrief => 0.22, _ => 0.32 };
+    // telas: música do menu. Partida: a trilha baixa (mais baixa ainda no replay; nada com o operador abatido)
+    let (screens, run) = match game.mode { Mode::Play => (0.0, 0.15), Mode::Replay => (0.0, 0.09), Mode::Down => (0.0, 0.0), Mode::Card | Mode::Pause => (0.10, 0.06), Mode::Debrief => (0.22, 0.0), _ => (0.32, 0.0) };
     let dt = time.delta_secs().min(0.1);
     for (mut sink, mut m) in &mut q {
+        let want = if m.1 { run } else { screens };
         let step = dt * 0.35;
         m.0 = if (want - m.0).abs() <= step { want } else { m.0 + step * (want - m.0).signum() };
         sink.set_volume(Volume::Linear(m.0));

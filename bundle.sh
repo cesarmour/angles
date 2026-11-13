@@ -28,8 +28,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>ponto-de-entrada</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.12.1</string>
-  <key>CFBundleVersion</key><string>17</string>
+  <key>CFBundleShortVersionString</key><string>0.12.2</string>
+  <key>CFBundleVersion</key><string>18</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.simulation-games</string>

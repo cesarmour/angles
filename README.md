@@ -1,6 +1,6 @@
 # Angles
 
-Current version: **Kill House** (0.12.1).
+Current version: **Kill House** (0.12.2).
 
 A teaching simulator for close-quarters battle (CQB) fundamentals, built with Rust and Bevy 0.16.
 A shoot house with IPSC-style cardboard targets, a six-lesson tutorial, first-person and top-down views,
