@@ -44,7 +44,7 @@ pub struct ResetGame { pub free: bool, pub mission2: bool, pub scn: Option<usize
 
 /// A fonte da interface (Rajdhani) tem letras mais baixas que a anterior: compensa no tamanho.
 const FS: f32 = 1.1;
-const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, cejordi84, CosmoX45, discofield, dslrguide, florianreichelt, GeneralSigma, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, qubodup, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nFIRST-PERSON WEAPONS (CC BY 4.0, sketchfab.com)   Pistol and gloves: \"AnimatedPistol\" by JUST  ·  Rifle: \"SCAR\" by JUST, rifle mesh by DelthorGames\n\nOPERATOR AND THREATS (CC BY 4.0)   \"FSB Operator\" by Mateusz Wolinski (jeandiz), with AKS-74u by N-GONE and clothing pieces by ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess  ·  changed for this game: recoloured, insignia and goggles removed, sunglasses added, the threat carries the pistol above, mesh and textures reduced\n\nHOSTAGE (CC BY-NC 4.0, non-commercial)   \"Women in jeans\" by aribb  ·  changed for this game: hands-up pose, recoloured clothes and hair, mesh and textures reduced\n\nCHARACTER ANIMATION   Adobe Mixamo (mixamo.com), applied to the models above  ·  recoil and hands-up poses made for this project\n\nLEVELS, WALKER MECH, PRACTICE TARGET, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
+const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, cejordi84, CosmoX45, discofield, dslrguide, florianreichelt, GeneralSigma, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, qubodup, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nFIRST-PERSON WEAPONS (CC BY 4.0, sketchfab.com)   Pistol and gloves: \"AnimatedPistol\" by JUST  ·  Rifle: \"SCAR\" by JUST, rifle mesh by DelthorGames\n\nOPERATOR AND THREATS (CC BY 4.0)   \"FSB Operator\" by Mateusz Wolinski (jeandiz), with AKS-74u by N-GONE and clothing pieces by ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess  ·  changed for this game: recoloured, insignia and goggles removed, sunglasses added, the threat carries the pistol above, mesh and textures reduced  ·  second intruder: \"Forest soldier\" by buh, mesh reduced, carries the same rifle\n\nHOSTAGE (CC BY-NC 4.0, non-commercial)   \"Women in jeans\" by aribb  ·  changed for this game: hands-up pose, recoloured clothes and hair, mesh and textures reduced\n\nVOICES   instructor, operator, intruders and hostage generated with ElevenLabs\n\nCHARACTER ANIMATION   Adobe Mixamo (mixamo.com), applied to the models above  ·  recoil and hands-up poses made for this project\n\nLEVELS, WALKER MECH, PRACTICE TARGET, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
 fn txt(s: &str, font: &Handle<Font>, size: f32, color: Color) -> (Text, TextFont, TextColor) {
     (Text::new(s), TextFont { font: font.clone(), font_size: size * FS, ..default() }, TextColor(color))
 }
@@ -236,6 +236,8 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(10.0), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|r| {
             button(r, &f, "CONTINUE COURSE · ENTER", Act::Continue, true);
             button(r, &f, "COURSE AND PRACTICE", Act::Scenarios, false);
+            // treino livre contra oposição de verdade (bonecos armados), sem depender do avanço no curso
+            button(r, &f, "FREE RUN · LIVE OPPOSITION", Act::Free, false);
             button(r, &f, "RANKING", Act::Ranking, false);
             button(r, &f, "CREDITS", Act::Credits, false);
             button(r, &f, "QUIT GAME", Act::Quit, false);
@@ -381,7 +383,13 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
         // tutorial e missão 2 são da casa de treino: volta para ela se outro mapa estiver montado
         Act::Start => { set_force_figs(false); if map_index() != 0 || figs_built() != want_figs() { mapreq.0 = Some(0); } reset.write(ResetGame { free: false, mission2: false, scn: None }); }
         // o mapa de defesa não tem percurso livre: volta para a casa de treino
-        Act::Free => { set_force_figs(false); let m = if map().pick { map_index() } else { 0 }; if m != map_index() || figs_built() != want_figs() { mapreq.0 = Some(m); } reset.write(ResetGame { free: true, mission2: false, scn: None }); }
+        // treino livre: sempre com bonecos armados, no mínimo em NORMAL, e a cada partida num mapa diferente
+        Act::Free => {
+            set_force_figs(true); if difficulty() == 0 { set_difficulty(1); }
+            prog.current = None; game.third = false;
+            let picks: Vec<usize> = (0..MAPS.len()).filter(|&i| MAPS[i].pick).collect();
+            let m = if game.mode == Mode::Menu && !picks.is_empty() { let k = picks.iter().position(|&i| i == map_index()).map_or(0, |k| (k + 1) % picks.len()); picks[k] } else if map().pick { map_index() } else { 0 };
+            if m != map_index() || figs_built() != want_figs() { mapreq.0 = Some(m); } reset.write(ResetGame { free: true, mission2: false, scn: None }); }
         Act::CardGo | Act::Resume => { game.mode = Mode::Play; }
         Act::Restart => { reset.write(ResetGame { free: game.free, mission2: game.mission2, scn: game.scn }); }
         Act::Mission2 => { set_force_figs(false); if map_index() != 0 || figs_built() != want_figs() { mapreq.0 = Some(0); } reset.write(ResetGame { free: true, mission2: true, scn: None }); }
@@ -394,10 +402,11 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
         Act::Guide => { game.next_guide(); }
         Act::Box => { game.hide_box = !game.hide_box; }
         Act::Credits => { game.mode = Mode::Credits; }
-        Act::Scenarios => { game.mode = Mode::Scenarios; }
+        Act::Scenarios => { game.third = false; game.mode = Mode::Scenarios; }
         Act::Ranking => { *back = game.mode; game.mode = Mode::Ranking; }
         // curso: a etapa define o tipo de alvo (papelão ou oposição) e o conteúdo (as seis lições ou um cenário)
         Act::Continue | Act::Stage(_) => {
+            if matches!(a, Act::Continue) { game.third = false; }
             let i = match a { Act::Stage(i) => i as usize, _ => prog.done.min(crate::course::STAGES.len() - 1) };
             if !prog.unlocked(i) { return; }
             let st = &crate::course::STAGES[i];
@@ -439,8 +448,8 @@ pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: R
     mut commands: Commands, junk: Query<Entity, Or<(With<Decal>, With<Casing>, With<Puff>)>>, mut fx: ResMut<Fx>) {
     let Some(e) = ev.read().last() else { return };
     let (free, m2, scn) = (e.free, e.mission2, e.scn);
-    let (sens, guide, hide_box) = (game.sens, game.guide, game.hide_box);
-    *game = Game { sens, guide, hide_box, ..default() };
+    let (sens, guide, hide_box, third) = (game.sens, game.guide, game.hide_box, game.third);
+    *game = Game { sens, guide, hide_box, third, ..default() };
     *p = Player::with_weapon(p.weapon);
     level.reset();
     // a posição de ameaças e reféns é sorteada a cada partida, em todos os modos (cada alvo continua no seu cômodo)
@@ -879,7 +888,7 @@ pub fn update_ui(
                 if p.g_block > 0.5 && !bird { s = "GUN PULLED BACK · STEP AWAY FROM THE WALL".into(); }
                 set(&mut t, &s);
             }
-            Tag::ViewTag => set(&mut t, &format!("{}   ·   [SPACE] AIM   ·   [L] FLASHLIGHT {}{}", if bird { "TOP-DOWN VIEW" } else { "FIRST PERSON" }, if game.flash { "ON" } else { "OFF" },
+            Tag::ViewTag => set(&mut t, &format!("{}   ·   [SPACE] AIM   ·   [L] FLASHLIGHT {}{}", if bird { "TOP-DOWN VIEW" } else if game.third { "THIRD PERSON" } else { "FIRST PERSON" }, if game.flash { "ON" } else { "OFF" },
                 if game.free { String::new() } else { format!("   ·   [T] ROUTE {}   ·   [O] BOX", match game.guide { 1 => "ON", 2 => "TIP", _ => "OFF" }) })),
             Tag::FlashBtn => set(&mut t, if game.flash { "FLASHLIGHT: ON · L" } else { "FLASHLIGHT: OFF · L" }),
             Tag::GuideBtn => set(&mut t, match game.guide { 1 => "IDEAL ROUTE: ALWAYS · T", 2 => "IDEAL ROUTE: TIP (SHOWS, THEN FADES) · T", _ => "IDEAL ROUTE: OFF · T" }),

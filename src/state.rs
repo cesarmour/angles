@@ -65,6 +65,8 @@ pub struct Game {
     pub fell: Vec<Vec2>, pub nade_req: Vec<(Vec3, Vec3)>,
     /// Legenda da fala do instrutor que está tocando (texto e segundos que restam).
     pub sub: Option<(String, f32)>,
+    /// Modo em terceira pessoa (câmera por cima do ombro, com o corpo do operador à vista).
+    pub third: bool,
 }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
@@ -94,13 +96,13 @@ pub const MAX_WOUNDS: u8 = 2;
 pub const DOWN_SECS: f32 = 1.3;
 impl Default for Game {
     fn default() -> Self {
-        Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: false, flash: false, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
-            flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
+        Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: true, flash: false, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
+            flag_tac: true, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
             bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), burst: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
             scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
-            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None }
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None, third: std::env::var("CQB_THIRD").is_ok() }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -213,6 +215,8 @@ pub struct Brain {
     /// Tiro através da parede: onde ele viu o operador pela última vez, há quanto tempo perdeu a visada, quantas rajadas já
     /// deu às cegas desde então e intervalo até a próxima; tempo parado depois de uma rajada dessas.
     pub last: Vec2, pub lost: f32, pub bangs: u8, pub bang_cd: f32, pub hold: f32,
+    /// Tempo que resta do gesto de arremessar a granada (só para a animação).
+    pub toss: f32,
 }
 
 pub struct TargetState {

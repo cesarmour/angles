@@ -24,6 +24,9 @@ CHAIN = {'Hips': 'Spine', 'Spine': 'Spine1', 'Spine1': 'Spine2', 'Spine2': 'Neck
 #   rifle_aim  = "Rifle Aiming Idle"   rifle_idle = "Rifle Idle"   rifle_walk = "Rifle Walk" (as ameaças usam o fuzil do modelo;
 #                o disparo em rajada é feito na conversão, em cima da pose de mira)
 #   death_front, death_right, death_forward, death_back = quatro quedas diferentes (viram Fall1 a Fall4, nesta ordem)
+#   clipes extras das ameaças (tools3d/extra_clips.py): backwards_rifle_walk, left_cover_sneak_rifle, right_cover_sneak_rifle,
+#                rifle_run, rifle_shielding_face, hit_reaction, toss_grenade (estes baixados SEM "In Place": a velocidade
+#                do deslocamento original é medida e informada; o deslocamento é retirado na conversão)
 FALLS = (('Fall1', 'death_front'), ('Fall2', 'death_right'), ('Fall3', 'death_forward'), ('Fall4', 'death_back'))
 FPS = 30
 
@@ -36,13 +39,14 @@ def folder(arg=None):
     return d
 
 
-def retarget(path, tgt, tmap, name, in_place=False, frames=None, travel=1.0, hip_base=None):
+def retarget(path, tgt, tmap, name, in_place=False, frames=None, travel=1.0, hip_base=None, mirror=False):
     """Cria no esqueleto `tgt` a ação `name` a partir do FBX do Mixamo em `path`.
     tmap: nome do osso no Mixamo (sem o prefixo "mixamorig:") -> osso de pose do alvo.
     frames: (primeiro, último) para usar só um trecho. travel: fração do deslocamento horizontal do quadril que é mantida
     (as quedas do Mixamo andam mais de 1 m; no jogo o corpo precisa ocupar menos chão). hip_base: onde fica o quadril do
     alvo em pé, no mundo (há esqueletos cujo repouso deixa o quadril no chão e a altura só aparece na pose); sem ele, vale o
-    repouso. Devolve (ação, número de quadros)."""
+    repouso. mirror: espelha o movimento (o que o lado direito faz no Mixamo passa a ser feito pelo esquerdo), para clipes
+    em que a mão que trabalha no Mixamo é a que, no nosso boneco, segura a arma. Devolve (ação, número de quadros)."""
     sc = bpy.context.scene
     objs0, acts0 = set(bpy.data.objects), set(bpy.data.actions)
     data0 = {c: set(getattr(bpy.data, c)) for c in ('meshes', 'materials', 'armatures', 'images')}
@@ -58,7 +62,14 @@ def retarget(path, tgt, tmap, name, in_place=False, frames=None, travel=1.0, hip
     sb = {b.name.split(':')[-1]: b for b in src.data.bones}
     keys = [k for k in tmap if k in sb]
     # repouso dos dois esqueletos, no mundo
-    s_rest = {k: (sw @ sb[k].matrix_local).to_quaternion() for k in keys}
+    s_rest = {k: (sw @ sb[k].matrix_local).to_quaternion() for k in sb}
+    def other(k):
+        # o osso do outro lado, no Mixamo (só com mirror)
+        if not mirror: return k
+        o = 'Right' + k[4:] if k.startswith('Left') else 'Left' + k[5:] if k.startswith('Right') else k
+        return o if o in sb else k
+    def flip_q(q): return Quaternion((q.w, q.x, -q.y, -q.z)) if mirror else q
+    def flip_p(p): return Vector((2 * sw.translation.x - p.x, p.y, p.z)) if mirror else p
     s_head = {k: sw @ sb[k].head_local for k in sb}
     t_rest = {k: (tw @ tmap[k].bone.matrix_local).to_quaternion() for k in keys}
     t_head = {k: tw @ tmap[k].bone.head_local for k in keys}
@@ -112,9 +123,9 @@ def retarget(path, tgt, tmap, name, in_place=False, frames=None, travel=1.0, hip
             prest = rest_q[b.parent.name] if b.parent else twq
             return pq @ (prest.inverted() @ rest_q[b.name])
         out = f - f0 + 1
-        s_pos = {k: (sw @ se.pose.bones[sb[k].name].matrix).translation for k in keys}
+        s_pos = {k: flip_p((sw @ se.pose.bones[sb[other(k)].name].matrix).translation) for k in keys}
         for k in order:
-            des[k] = ((sw @ se.pose.bones[sb[k].name].matrix).to_quaternion() @ s_rest[k].inverted()) @ t_ref[k]
+            des[k] = flip_q((sw @ se.pose.bones[sb[other(k)].name].matrix).to_quaternion() @ s_rest[other(k)].inverted()) @ t_ref[k]
         hip_off = Vector()
         if 'Hips' in des:
             d = (s_pos['Hips'] - s_head['Hips']) * scale

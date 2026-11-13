@@ -11,7 +11,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, T
 use bevy::render::view::RenderLayers;
 
 const STUDIO: Vec3 = Vec3::new(-300.0, 0.0, -300.0);
-const MODEL: &str = "models/operator.glb";
+fn model() -> String { crate::mdl("operator.glb") }
 
 /// Corpo 3D do operador do jogador nas vistas de cima (arquivo de onde saem os clipes).
 #[derive(Component)] pub struct BodyScene(pub Handle<Gltf>);
@@ -41,14 +41,18 @@ const MODEL: &str = "models/operator.glb";
     /// Quedas disponíveis (o jogo sorteia uma a cada vez) e tempo que resta do coice do disparo.
     pub falls: Vec<AnimationNodeIndex>, pub recoil: f32,
     /// Estado em exibição: 0 = espera, 1 = mira (ameaça) ou braços abaixados (refém), 2 = andando.
-    pub mode: u8, pub walk: Option<AnimationNodeIndex>, pub frozen: bool }
+    pub mode: u8, pub walk: Option<AnimationNodeIndex>, pub frozen: bool,
+    /// Clipes extras das ameaças (opcionais): correr no recuo, susto, acerto sofrido e arremesso de granada;
+    /// acertos já vistos e tempo que resta da reação a um acerto.
+    pub run: Option<AnimationNodeIndex>, pub flinch: Option<AnimationNodeIndex>, pub hit: Option<AnimationNodeIndex>, pub toss: Option<AnimationNodeIndex>,
+    pub hits: u8, pub hit_t: f32 }
 
 pub fn setup_operator(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset: Res<AssetServer>) {
     let mut img = Image::new_fill(Extent3d { width: 800, height: 1200, depth_or_array_layers: 1 }, TextureDimension::D2, &[0, 0, 0, 0], TextureFormat::Bgra8UnormSrgb, RenderAssetUsages::default());
     img.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
     let img = images.add(img);
     commands.insert_resource(PortraitTex(img.clone()));
-    commands.spawn((SceneRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(MODEL))), Transform::from_translation(STUDIO), Visibility::default(), PortraitScene, IdleScene(asset.load(MODEL))));
+    commands.spawn((SceneRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(model()))), Transform::from_translation(STUDIO), Visibility::default(), PortraitScene, IdleScene(asset.load(model()))));
     let layer = RenderLayers::layer(L_PORTRAIT);
     // enquadramento fechado, da coxa para cima
     let aim = STUDIO + Vec3::new(0.0, 1.30, 0.0);
@@ -167,6 +171,8 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         let shoot = g.named_animations.get("Shoot").map(|h| graph.add_clip(h.clone(), 1.0, root));
         let relax = g.named_animations.get("Relax").map(|h| graph.add_clip(h.clone(), 1.0, root));
         let walk = g.named_animations.get("Walk").map(|h| graph.add_clip(h.clone(), 1.0, root));
+        let mut extra = |k: &str| g.named_animations.get(k).map(|h| graph.add_clip(h.clone(), 1.0, root));
+        let (run, flinch, hit, toss) = (extra("Run"), extra("Flinch"), extra("Hit"), extra("Toss"));
         let mut names: Vec<&Box<str>> = g.named_animations.keys().filter(|k| k.starts_with("Fall")).collect();
         names.sort();
         let falls: Vec<AnimationNodeIndex> = names.into_iter().map(|k| graph.add_clip(g.named_animations[k].clone(), 1.0, root)).collect();
@@ -174,7 +180,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         // cada boneco começa num ponto diferente do clipe, para não se mexerem todos juntos
         let mut tr = AnimationTransitions::new();
         tr.play(&mut pl, idle, Duration::ZERO).repeat().seek_to((e.index() % 7) as f32 * 1.07);
-        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, FigAnim { target, idle, aim, shoot, relax, falls, recoil: 0.0, mode: 0, walk, frozen: false }));
+        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, FigAnim { target, idle, aim, shoot, relax, falls, recoil: 0.0, mode: 0, walk, frozen: false, run, flinch, hit, toss, hits: 0, hit_t: 0.0 }));
     }
     for (mut a, mut pl, mut tr) in &mut anims {
         let Some(t) = targets.list.get(a.target) else { continue };
@@ -200,15 +206,27 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         }
         // ameaça: mira quando tem o operador na linha de tiro e anda quando troca de posição. Refém: baixa os braços quando
         // o cômodo dela está limpo (área já vista e nenhuma ameaça viva lá dentro).
-        let want: u8 = if a.aim.is_some() { if t.react > 0.04 || t.engaged || t.ai.ready { 1 } else if t.moving && a.walk.is_some() { 2 } else { 0 } } else if a.relax.is_some() {
+        // acerto sofrido sem cair: reação curta
+        if t.hits > a.hits && a.hit.is_some() { a.hit_t = 0.5; }
+        a.hits = t.hits; a.hit_t = (a.hit_t - fdt).max(0.0);
+        let want: u8 = if a.aim.is_some() {
+            if a.hit_t > 0.0 { 6 } else if t.ai.toss > 0.0 && a.toss.is_some() { 5 } else if t.ai.flinch > 0.0 && a.flinch.is_some() { 4 }
+            else if t.moving && t.ai.tactic == crate::state::TAC_RETREAT && a.run.is_some() { 3 }
+            else if t.react > 0.04 || t.engaged || t.ai.ready { 1 } else if t.moving && a.walk.is_some() { 2 } else { 0 } } else if a.relax.is_some() {
             let zi = crate::map::zone_index(t.def.zone);
             (tac.pct.get(zi).map_or(false, |p| *p >= 0.9) && !targets.list.iter().any(|o| o.alive && !o.off && o.def.kind == crate::map::TKind::Threat && o.def.zone == t.def.zone)) as u8
         } else { 0 };
         if want != a.mode {
             a.mode = want;
-            let n = match want { 1 => a.aim.or(a.relax).unwrap_or(a.idle), 2 => a.walk.unwrap_or(a.idle), _ => a.idle };
-            let ms = if a.aim.is_some() { if want == 1 { 200 } else { 350 } } else { 900 };
-            tr.play(&mut pl, n, Duration::from_millis(ms)).repeat();
+            let n = match want { 1 => a.aim.or(a.relax).unwrap_or(a.idle), 2 => a.walk.unwrap_or(a.idle), 3 => a.run.unwrap_or(a.idle), 4 => a.flinch.unwrap_or(a.idle), 5 => a.toss.unwrap_or(a.idle), 6 => a.hit.unwrap_or(a.idle), _ => a.idle };
+            let ms = if a.aim.is_some() { match want { 1 => 200, 4 | 6 => 70, 5 => 120, 3 => 180, _ => 350 } } else { 900 };
+            let x = tr.play(&mut pl, n, Duration::from_millis(ms));
+            // gestos de uma vez só (susto, acerto, arremesso) não repetem
+            if want < 4 { x.repeat(); }
+            // susto: o clipe é longo e termina ajoelhado; toca só o trecho em que o braço cobre o rosto.
+            // arremesso: acelerado para caber no tempo do gesto
+            if want == 4 { x.seek_to(0.7).set_speed(1.5); }
+            if want == 5 { x.seek_to(0.3).set_speed(1.8); }
         }
     }
     let dt = time.delta_secs().min(0.05);

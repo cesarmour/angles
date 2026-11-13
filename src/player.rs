@@ -33,6 +33,8 @@ pub const FLASH_LUMENS: f32 = 700_000.0;
 /// Arquivos de onde vêm os clipes de cada arma, para lê-los pelo nome.
 #[derive(Resource)] pub struct GunGltfs(pub Vec<Handle<Gltf>>);
 #[derive(Component)] pub struct Body;
+/// Os dois bonecos do corpo do jogador: o operador de sempre e, se houver, um alternativo para a terceira pessoa.
+#[derive(Component)] pub struct BodyFig(pub bool);
 #[derive(Component)] pub struct Flashlight;
 #[derive(Component)] pub struct MuzzleLight;
 /// Textura em que a câmera do minimapa desenha; a interface a exibe.
@@ -120,9 +122,9 @@ pub fn setup_player(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mu
        o enxergam (camada L_BODY). No arquivo ele olha para +Z; aqui a frente é -Z. --- */
     let body = commands.spawn((Transform::from_xyz(3.0, 0.0, 15.4), Visibility::default(), Body)).id();
     let fig = commands.spawn((
-        SceneRoot(asset.load(GltfAssetLabel::Scene(0).from_asset("models/player.glb"))),
+        SceneRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(crate::mdl("player.glb")))),
         Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)), Visibility::default(),
-        crate::operator::BodyScene(asset.load("models/player.glb")),
+        crate::operator::BodyScene(asset.load(crate::mdl("player.glb"))), BodyFig(false),
     )).id();
     commands.entity(body).add_child(fig);
 
@@ -325,9 +327,24 @@ pub fn update_cameras(
     if let Ok((mut tf, mut proj, mut cam)) = cams.p0().single_mut() {
         tf.translation = p.eye + Vec3::Y * ((p.bob * 3.9).sin() * 0.012 * bob_amt);
         tf.rotation = rot;
+        // terceira pessoa: câmera atrás e à direita do ombro, encostando na parede em vez de atravessá-la;
+        // olha para o ponto onde a mira do operador chega a 12 m, para o centro da tela continuar sendo a mira
+        let third = game.third && !bird && !matches!(game.mode, Mode::Menu);
+        if third {
+            let (f3, r3) = (rot * Vec3::NEG_Z, rot * Vec3::X);
+            let off = r3 * 0.5 + Vec3::Y * 0.28 - f3 * 2.1;
+            let flat = Vec2::new(off.x, off.z);
+            let len = flat.length().max(0.01);
+            let d = level.cast_ray(p.eye.x, p.eye.z, flat.x / len, flat.y / len, len + 0.25, 0.0);
+            let k = ((d - 0.25) / len).clamp(0.12, 1.0);
+            let mut pos = p.eye + off * k;
+            pos.y = pos.y.clamp(0.45, WALL_H - 0.3);
+            *tf = Transform::from_translation(pos).looking_at(p.eye + f3 * 12.0, Vec3::Y);
+        }
+        let k_down = if third { 0.0 } else { 1.0 };
         // operador abatido: a câmera desaba para o chão e tomba de lado
         let k = if game.mode == Mode::Down { if game.down_title.is_empty() { 1.0 } else { 0.0 } } else if game.down_t > 0.0 { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) } else { 0.0 };
-        if k > 0.0 {
+        if k * k_down > 0.0 {
             let e = k * k * (3.0 - 2.0 * k);
             tf.translation.y += (0.34 - tf.translation.y) * e;
             tf.rotation = rot * Quat::from_euler(EulerRot::YXZ, 0.0, 0.25 * e, 1.05 * e);
@@ -376,7 +393,7 @@ pub fn update_gun(time: Res<Time>, mut p: ResMut<Player>, c: Res<Controls>, game
     let def = p.def();
     // só a arma em uso aparece; no menu a tela é do operador, sem arma na frente
     for (m, mut v) in &mut models {
-        let want = if m.0 == p.weapon && game.mode != Mode::Menu { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if m.0 == p.weapon && game.mode != Mode::Menu && !game.third { Visibility::Inherited } else { Visibility::Hidden };
         if *v != want { *v = want; }
     }
     if let Ok(mut m) = muzzle.single_mut() { if m.translation != def.muzzle { m.translation = def.muzzle; } }
@@ -511,5 +528,19 @@ pub fn gun_anim_drive(anims: Res<GunAnims>, p: Res<Player>, game: Res<Game>, mut
         let x = tr.play(&mut pl, want, Duration::from_millis(170));
         if want == a.idle && a.idle_frozen { x.set_speed(0.0); } else { x.repeat(); }
         st.cur = Some(want); st.once = false;
+    }
+}
+
+/// Terceira pessoa: a câmera do operador passa a enxergar o corpo dele (camada L_BODY) e o boneco exibido troca.
+pub fn third_person_system(game: Res<Game>, mut commands: Commands, cam: Query<Entity, With<FpCam>>, mut figs: Query<(&BodyFig, &mut Visibility)>, mut last: Local<Option<bool>>) {
+    if *last == Some(game.third) { return; }
+    *last = Some(game.third);
+    if let Ok(e) = cam.single() {
+        commands.entity(e).insert(if game.third { RenderLayers::from_layers(&[0, L_FP, L_BODY]) } else { RenderLayers::from_layers(&[0, L_FP]) });
+    }
+    let has_alt = figs.iter().any(|(f, _)| f.0);
+    for (f, mut v) in &mut figs {
+        let show = if game.third && has_alt { f.0 } else { !f.0 };
+        *v = if show { Visibility::Inherited } else { Visibility::Hidden };
     }
 }

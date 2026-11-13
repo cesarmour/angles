@@ -4,6 +4,7 @@ mod audio;
 mod bot;
 mod combat;
 mod course;
+mod chatter;
 mod gi;
 mod lessons;
 mod map;
@@ -41,6 +42,17 @@ fn exit_log(mut close: EventReader<bevy::window::WindowCloseRequested>, mut exit
     if std::env::var("CQB_SCRIPT").is_err() { return; }
     for _ in close.read() { println!("BOT JANELA fechada de fora (modo {:?})", game.mode); }
     for e in exit.read() { println!("BOT SAIDA pedida pelo jogo {:?} (modo {:?})", e, game.mode); }
+}
+
+/// Caminho de um modelo de boneco. Um arquivo de mesmo nome em assets/local/ tem preferência sobre assets/models/:
+/// é a pasta de uso pessoal (modelos que não podem ser redistribuídos), fora do repositório e do pacote publicado.
+pub fn mdl(name: &str) -> String {
+    let rel = asset_dir();
+    let mut bases: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(r) = std::env::var("BEVY_ASSET_ROOT") { bases.push(r.into()); }
+    if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) { bases.push(d); }
+    if let Ok(d) = std::env::current_dir() { bases.push(d); }
+    if bases.iter().any(|b| b.join(&rel).join("local").join(name).is_file()) { format!("local/{name}") } else { format!("models/{name}") }
 }
 
 /// Pasta dos recursos (modelos e texturas). Dentro do pacote .app eles ficam em Contents/Resources: em Contents/MacOS só pode
@@ -87,13 +99,14 @@ fn main() {
             player::update_player, combat::combat, combat::update_fx, player::update_gun, player::update_cameras,
             tactical::tac_update, lessons::update_lessons, lessons::coach_system, lessons::replay_system, tactical::tac_gizmos, lessons::guide_system, ui::update_ui, audio::play_sfx,
         ).chain())
-        .add_systems(Update, (light_log, exit_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::gun_anim_setup, player::gun_anim_drive, operator::update_operator, operator::fig_system, operator::body_system, operator::hostage_look))
+        .add_systems(Update, (light_log, exit_log, world::mip_loaded, world::tame_materials, world::no_shadow_children, player::third_person_system, player::gun_anim_setup, player::gun_anim_drive, operator::update_operator, operator::fig_system, operator::body_system, operator::hostage_look))
         .add_systems(Update, (operator::room_clear_system, operator::threat_move_system).after(tactical::tac_update).before(ui::update_ui))
         .add_systems(Update, lessons::checkpoint_system.after(lessons::replay_system).before(ui::update_ui))
         .add_systems(Update, scenario::scenario_system.after(combat::combat).before(lessons::update_lessons))
         .add_systems(Update, scenario::rank_system.after(lessons::update_lessons).before(ui::update_ui))
         .add_systems(Update, course::course_system.after(scenario::rank_system).before(ui::update_ui))
         .add_systems(Update, course::voice_system.after(course::course_system).before(ui::update_ui))
+        .add_systems(Update, chatter::chatter_system.after(combat::combat))
         .add_systems(Update, operator::hands_setup)
         .add_systems(Update, scenario::grenade_system.after(scenario::scenario_system).before(lessons::update_lessons))
         .add_systems(PostUpdate, operator::hands_pose.after(bevy::app::Animation).before(bevy::transform::TransformSystem::TransformPropagate))

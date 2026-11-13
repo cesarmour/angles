@@ -22,9 +22,9 @@ pub const LESSONS: [Lesson; 6] = [
         points: &["From outside: slice the door from one jamb to the other. Watch the bar at the top: green is what you have opened, red is what is still closed, and the arrows say which way to step. What is left at the end are the near corners.", "On entry: don't stop in the doorway. Go in and get off the door line.", "Near corners first: they are the only part of the room you haven't seen yet.", "The barricade in the middle of the room covers anyone crouching behind it, on either side."],
         objs: &["From outside, slice the door from both sides (110° of 180°)", "Cross the doorway without stopping (1.5 s max)", "Check both near corners", "Neutralize the 2 threats", "Room A clear"] },
     Lesson { title: "Positive identification", kicker: "Lesson 4 of 6 · Room B, corner door", corners: Some("B"),
-        lead: "Not everyone in the house is a threat. The armed figure in tan is a threat. The unarmed person with hands up is a hostage: a no-shoot. Before every shot, confirm what it is and what is behind it.",
-        points: &["Hands up and no weapon: don't shoot. Hitting a hostage is the most serious error on the course.", "Tan: threat. Two shots in the A zone.", "Corner door: the whole room lies to one side. The near corner is the one that runs along the door wall.", "The flashlight (L) helps you see hands and weapons in dark corners."],
-        objs: &["Slice the door before entering (100° of 180°)", "Neutralize the 2 threats (tan targets)", "Don't shoot a hostage (hands up, unarmed)", "Room B clear"] },
+        lead: "Not everyone in the house is a threat. The armed figure is a threat. The unarmed person with hands up is a hostage: a no-shoot. Before every shot, confirm what it is and what is behind it.",
+        points: &["Hands up and no weapon: don't shoot. Hitting a hostage is the most serious error on the course.", "Armed: threat. Two shots in the A zone.", "Corner door: the whole room lies to one side. The near corner is the one that runs along the door wall.", "The flashlight (L) helps you see hands and weapons in dark corners."],
+        objs: &["Slice the door before entering (100° of 180°)", "Neutralize the 2 threats (armed)", "Don't shoot a hostage (hands up, unarmed)", "Room B clear"] },
     Lesson { title: "Closed door and T-junction", kicker: "Lesson 5 of 6 · Corridor 3", corners: None,
         lead: "A closed door tells you nothing about what is behind it. Don't stand in front of it: open it from the side, off the line of fire of whoever is on the other side.",
         points: &["Stand by the jamb and open with F.", "Behind this door the corridor runs both ways: two corners at once.", "Slice one side from inside the room, then the other.", "When you step out you turn your back on one side. Only step out when both are clear."],
@@ -584,6 +584,27 @@ fn put_snap(s: Snap, game: &mut Game, p: &mut Player, tac: &mut Tac, level: &mut
 
 /// Guarda o ponto de retomada quando uma lição começa e volta a ele quando o jogador pede para tentar de novo.
 pub fn checkpoint_system(mut game: ResMut<Game>, mut p: ResMut<Player>, mut tac: ResMut<Tac>, mut level: ResMut<Level>, mut targets: ResMut<Targets>, mut ck: ResMut<Checkpoint>, mut commands: Commands) {
+    // cada lição do tutorial começa do ponto dela: o operador volta para a entrada do trecho, as portas fecham, os alvos
+    // desta lição e das seguintes voltam inteiros e os das lições anteriores ficam caídos (ninguém atira pelas costas).
+    // Sem isso, quem avançava pela casa durante uma lição encontrava a seguinte já resolvida ou impossível.
+    if game.ckpt_req && !game.demo && !game.free && game.lesson >= 1 {
+        const START: [(f32, f32, f32); 6] = [(3.0, 15.4, 0.0), (5.0, 11.0, 0.0), (7.5, 5.0, -1.5708), (10.0, 7.2, -2.356), (15.0, 10.9, -0.47), (17.5, 5.0, -1.5708)];
+        let l = game.lesson.min(5);
+        level.reset(); tac.reset(); tac.corner_zone = LESSONS[l].corners;
+        let (x, z, yaw) = START[l];
+        let w = p.weapon;
+        *p = Player::with_weapon(w);
+        p.pos = Vec2::new(x, z); p.yaw = yaw; p.eye = Vec3::new(x, crate::map::EYE_STAND, z); p.zone = crate::map::zone_at(x, z).unwrap_or(0);
+        for t in targets.list.iter_mut() {
+            let zl = match t.def.zone { "S" => 0, "C1" | "C2" => 1, "A" => 2, "B" => 3, "C3" => 4, _ => 5 };
+            let off = t.off;
+            for m in t.marks.drain(..) { commands.entity(m).despawn(); }
+            crate::combat::place_target(&level, t);
+            t.clear_run();
+            t.off = off;
+            if zl < l || off { t.alive = false; t.fall = 1.0; t.landed = true; }
+        }
+    }
     if game.ckpt_req && !game.demo {
         game.ckpt_req = false;
         ck.snap = if game.free { None } else { Some(Box::new(take_snap(&game, &p, &tac, &level, &targets))) };

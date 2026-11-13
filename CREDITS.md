@@ -17,7 +17,7 @@ A teaching tool for close-quarters battle fundamentals. Real technique is learne
 - Oriented Strand Board (walls of the family home), by Dimitrios Savva. Sheet seams added and gloss removed with `tools/prep_osb.py`.
 
 ## Instructor voice
-Generated with ElevenLabs (voice "Brian") from the script in `assets/voice/script.tsv`.
+Generated with ElevenLabs (voice "Brian") from the script in `assets/voice/script.tsv`. The characters' lines (`assets/voice/ch_*.wav` and `assets/sfx/voz_op_*.wav`) were generated the same way from `tools/voices_characters.tsv`: voices "Bill" and "Callum" for the two intruders, "Sarah" for the hostage and "Brian" (the instructor's voice) for the operator.
 
 ## Arc font
 Barlow Condensed, by Jeremy Tribby, SIL Open Font License 1.1 (`assets/fonts/OFL-BarlowCondensed.txt`).
@@ -61,6 +61,11 @@ Barlow Condensed, by Jeremy Tribby, SIL Open Font License 1.1 (`assets/fonts/OFL
 | Pistol and gloves (`pistola_colt.glb`, `pistola_colt_anim.glb`) | AnimatedPistol | JUST (teenjust500) | https://sketchfab.com/3d-models/animatedpistol-e0bbe625b9504ed59db273c310e1cce7 | Converted from FBX to glTF; animation clips re-exported |
 | SCAR rifle (`scar.glb`) | SCAR | JUST (teenjust500); rifle mesh by DelthorGames (https://sketchfab.com/DelthorGames) | https://sketchfab.com/3d-models/scar-afd0c02ccc1847e2a787917dad5ba260 | Converted from FBX to glTF; textures reduced |
 | Operator on the menu and debrief (`operator.glb`), the player's body in the top-down views (`player.glb`) and armed threats (`threat.glb`) | FSB Operator | Mateusz Woliński (jeandiz). The author credits the AKS-74u to N-GONE and clothing pieces to ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess | https://sketchfab.com/3d-models/fsb-operator-43a561e941704eefb1ab0614be4f0049 | Recoloured (black operator, tan threat); original insignia and night-vision goggles removed; sunglasses added; on the threat and on the player's body the rifle is replaced by the AnimatedPistol model above; recoil clip made for this game; idle, aiming, walking and falling motion from Mixamo (see below); mesh and textures reduced |
+
+## Second intruder — Sketchfab, CC BY 4.0
+| In the game | Original work | Author | Source | Changes |
+|---|---|---|---|---|
+| Camouflaged intruder (`threat_b.glb`) | Forest soldier (outdated) | buh | https://sketchfab.com/3d-models/forest-soldier-outdated-b265975196394070837366de9a0ddb7c | Mesh and textures reduced; skeleton renamed to the Mixamo convention; carries the AKS-74u from the FSB Operator model above; standing, aiming, walking, running, flinching, grenade and falling motion from Mixamo (see below); recoil and hit-reaction clips made for this game. Converted with `tools3d/conv_invader.py` |
 
 ## Hostage — Sketchfab, CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only
 | In the game | Original work | Author | Source | Changes |

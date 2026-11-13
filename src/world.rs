@@ -162,7 +162,7 @@ pub fn tame_materials(mut ev: EventReader<AssetEvent<StandardMaterial>>, mut mat
         let Some(path) = asset.get_path(id) else { continue };
         // operador do menu: tecido preto sem o brilho de plástico que a luz de estúdio dava
         let name = path.path().to_string_lossy();
-        if name.contains("operator.glb") || name.contains("threat.glb") || name.contains("player.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.16; } }
+        if name.contains("operator.glb") || name.contains("threat.glb") || name.contains("threat_b.glb") || name.contains("player.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.16; } }
         if name.contains("hostage.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.25; } }
         if name.contains("walker.glb") { if let Some(m) = mats.get_mut(id) { m.reflectance = 0.2; } }
         if path.path().to_string_lossy().contains("metal_office_desk") {

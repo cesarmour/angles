@@ -473,6 +473,13 @@ if ARMED:
             hp, he = world(bone('Hips')).translation, world(bone('Head')).translation
             print("FIMQUEDA %s quadril (%.2f, %.2f, z %.2f) cabeça (%.2f, %.2f, z %.2f)" % (v, hp.x, hp.y, hp.z, he.x, he.y, he.z))
             CLIPS.append(v)
+        # ---- clipes extras (andar para trás, passo lateral, corrida, proteger o rosto, tiro levado, arremesso), os mesmos
+        # do outro boneco de ameaça (conv_invader.py): tools3d/extra_clips.py. Entram depois dos que já existiam.
+        import extra_clips
+        from types import SimpleNamespace
+        CLIPS += extra_clips.build(SimpleNamespace(arm=arm, sc=sc, mxdir=MXDIR, tmap=tmap, mx=mx, world=world, set_world=set_world, key=key,
+            snapshot=pose_snapshot, restore=pose_restore, grip_clip=grip_clip, gun_from_wrists=gun_from_wrists, fix_hands=fix_hands, gun_now=gun_now,
+            gripped=GRIPPED, fingers=FINGERS, grip_dist=(B0 - A0).length, aim_pose=aim_pose, hip_height=HIP0.z))
     arm.animation_data.action = idle
     sc.frame_set(1)
 

@@ -41,6 +41,8 @@ pub struct Fx {
 pub struct TargetArt { pub frame: Handle<Mesh>, pub board: Handle<Mesh>, pub shoot: Handle<StandardMaterial>, pub no_shoot: Handle<StandardMaterial>, pub wood: Handle<StandardMaterial>,
     /// Bonecos 3D (cena e arquivo, de onde saem os clipes): refém de roupa clara com as mãos para o alto e ameaça armada de cáqui.
     pub hostage: Handle<Scene>, pub hostage_file: Handle<Gltf>, pub threat: Handle<Scene>, pub threat_file: Handle<Gltf>,
+    /// Segunda ameaça (camuflado verde): os invasores se alternam entre os dois modelos.
+    pub threat_b: Handle<Scene>, pub threat_b_file: Handle<Gltf>,
     /// Mech original do projeto (tools3d/make_mech.py).
     pub mech: Handle<Scene>, pub mech_file: Handle<Gltf> }
 
@@ -73,7 +75,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
             // o alvo é o boneco; papelão e sarrafos ficam ocultos (o papelão continua existindo só para a lógica de marcas)
             commands.entity(fr).insert(Visibility::Hidden);
             commands.entity(bd).insert(Visibility::Hidden);
-            let (scene, file) = if is_mech(def) { (art.mech.clone(), art.mech_file.clone()) } else if civil { (art.hostage.clone(), art.hostage_file.clone()) } else { (art.threat.clone(), art.threat_file.clone()) };
+            let (scene, file) = if is_mech(def) { (art.mech.clone(), art.mech_file.clone()) } else if civil { (art.hostage.clone(), art.hostage_file.clone()) } else if i % 2 == 1 { (art.threat_b.clone(), art.threat_b_file.clone()) } else { (art.threat.clone(), art.threat_file.clone()) };
             let h = commands.spawn((SceneRoot(scene), Transform::IDENTITY, Visibility::default(), crate::operator::Fig { target: i, file, threat: !civil, fell: false })).id();
             commands.entity(pivot).add_child(h);
         }
@@ -98,8 +100,9 @@ pub fn setup_targets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, m
     };
     let (shoot, no_shoot) = (mk(&mut images, &mut smats, false), mk(&mut images, &mut smats, true));
     let art = TargetArt { frame, board, shoot, no_shoot, wood: mats.wood.clone(),
-        hostage: asset.load(GltfAssetLabel::Scene(0).from_asset("models/hostage.glb")), hostage_file: asset.load("models/hostage.glb"),
-        threat: asset.load(GltfAssetLabel::Scene(0).from_asset("models/threat.glb")), threat_file: asset.load("models/threat.glb"),
+        hostage: asset.load(GltfAssetLabel::Scene(0).from_asset(crate::mdl("hostage.glb"))), hostage_file: asset.load(crate::mdl("hostage.glb")),
+        threat: asset.load(GltfAssetLabel::Scene(0).from_asset(crate::mdl("threat.glb"))), threat_file: asset.load(crate::mdl("threat.glb")),
+        threat_b: asset.load(GltfAssetLabel::Scene(0).from_asset(crate::mdl("threat_b.glb"))), threat_b_file: asset.load(crate::mdl("threat_b.glb")),
         mech: asset.load(GltfAssetLabel::Scene(0).from_asset("models/walker.glb")), mech_file: asset.load("models/walker.glb") };
     let list = spawn_targets(&mut commands, &art, &level);
     commands.insert_resource(Targets { list, masks: Vec::new() });

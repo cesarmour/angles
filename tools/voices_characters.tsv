@@ -1,0 +1,33 @@
+inv0_spot1	pqHfZKP75CvOlQylNhV4	Contact! Contact front!
+inv0_spot2	pqHfZKP75CvOlQylNhV4	There he is!
+inv0_spot3	pqHfZKP75CvOlQylNhV4	I see him! Light him up!
+inv0_scare1	pqHfZKP75CvOlQylNhV4	Shit! Shit!
+inv0_scare2	pqHfZKP75CvOlQylNhV4	Whoa! He's right there!
+inv0_back1	pqHfZKP75CvOlQylNhV4	Falling back! Cover me!
+inv0_back2	pqHfZKP75CvOlQylNhV4	Back! Get back!
+inv0_nade1	pqHfZKP75CvOlQylNhV4	Frag out!
+inv0_nade2	pqHfZKP75CvOlQylNhV4	Grenade! Going in!
+inv0_yield1	pqHfZKP75CvOlQylNhV4	Don't shoot! Don't shoot! I give up!
+inv0_door1	pqHfZKP75CvOlQylNhV4	On the door. Go slow.
+inv0_door2	pqHfZKP75CvOlQylNhV4	Check the corner.
+inv1_spot1	N2lVS1w4EtoT3dr4eOWO	Got him! Over here!
+inv1_spot2	N2lVS1w4EtoT3dr4eOWO	Target! Right there!
+inv1_spot3	N2lVS1w4EtoT3dr4eOWO	He's inside! Shoot him!
+inv1_scare1	N2lVS1w4EtoT3dr4eOWO	Damn it!
+inv1_scare2	N2lVS1w4EtoT3dr4eOWO	Jesus! Too close!
+inv1_back1	N2lVS1w4EtoT3dr4eOWO	I'm pulling back!
+inv1_back2	N2lVS1w4EtoT3dr4eOWO	Move! Move! Get out!
+inv1_nade1	N2lVS1w4EtoT3dr4eOWO	Grenade out!
+inv1_nade2	N2lVS1w4EtoT3dr4eOWO	Fire in the hole!
+inv1_yield1	N2lVS1w4EtoT3dr4eOWO	Okay! Okay! I'm done! Don't shoot!
+inv1_door1	N2lVS1w4EtoT3dr4eOWO	Door. I'll take it.
+inv1_door2	N2lVS1w4EtoT3dr4eOWO	Slow. He's waiting for us.
+host_see1	EXAVITQu4vr4xnSDxMaL	Don't shoot! Please, don't shoot!
+host_see2	EXAVITQu4vr4xnSDxMaL	I'm a hostage! Please!
+host_see3	EXAVITQu4vr4xnSDxMaL	Help me! Please, help me!
+host_safe1	EXAVITQu4vr4xnSDxMaL	Thank you. Oh God, thank you.
+host_safe2	EXAVITQu4vr4xnSDxMaL	Is it over? Are they gone?
+op_1	nPczCjzI2devNBz1zQrb	Police. Don't move.
+op_2	nPczCjzI2devNBz1zQrb	Drop the weapon. Drop it.
+op_3	nPczCjzI2devNBz1zQrb	Hands. Show me your hands.
+op_4	nPczCjzI2devNBz1zQrb	Get on the ground. Now.

@@ -3,6 +3,9 @@
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 APP="$DIR/dist/Angles.app"
+# LOCAL=1 ./bundle.sh monta a versão de uso pessoal em dist/local/, com os modelos de assets/local/ (que não podem ser
+# redistribuídos). A versão publicada sai sempre de dist/Angles.app, que nunca recebe essa pasta.
+[ "$LOCAL" = "1" ] && APP="$DIR/dist/local/Angles.app"
 # Os recursos (modelos, texturas) vão em Contents/Resources; em Contents/MacOS fica só o executável. Com arquivos de dados em
 # Contents/MacOS a assinatura do pacote não fecha e o macOS recusa o app baixado como "danificado".
 rm -rf "$APP/Contents/MacOS/assets" "$APP/Contents/_CodeSignature"
@@ -10,6 +13,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 cp "$DIR/target/release/ponto-de-entrada" "$APP/Contents/MacOS/ponto-de-entrada"
 # texturas, modelos e as falas do instrutor (só os .wav; o roteiro em texto já vai dentro do executável)
 rsync -a --delete "$DIR/assets/tex" "$DIR/assets/models" "$APP/Contents/Resources/assets/"
+rm -rf "$APP/Contents/Resources/assets/local"
+[ "$LOCAL" = "1" ] && [ -d "$DIR/assets/local" ] && rsync -a "$DIR/assets/local" "$APP/Contents/Resources/assets/"
 mkdir -p "$APP/Contents/Resources/assets/voice" && rsync -a --delete --include="*.wav" --exclude="*" "$DIR/assets/voice/" "$APP/Contents/Resources/assets/voice/"
 cp "$DIR/assets/icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
@@ -23,8 +28,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>ponto-de-entrada</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.11.0</string>
-  <key>CFBundleVersion</key><string>15</string>
+  <key>CFBundleShortVersionString</key><string>0.12.0</string>
+  <key>CFBundleVersion</key><string>16</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.simulation-games</string>

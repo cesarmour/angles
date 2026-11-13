@@ -547,7 +547,7 @@ pub fn scenario_system(
                 let d = Vec2::new(t.def.x, t.def.z).distance(eye);
                 match t.mind {
                     MIND_WILL_YIELD if t.vis && d < 9.0 => {
-                        if t.mind_t == 0.0 && st.voice_cd <= 0.0 { st.voice_cd = 3.0; sfx.write(Sfx::Voice(0)); }
+                        if t.mind_t == 0.0 && st.voice_cd <= 0.0 { st.voice_cd = 3.0; sfx.write(Sfx::Voice(1)); }
                         t.mind_t += dt;
                         if t.mind_t > 0.5 {
                             t.mind = MIND_YIELDED; t.engaged = false; t.react = 0.0; t.alert = 0.0;
@@ -777,7 +777,7 @@ pub fn scenario_system(
         if !t.hunter || !t.alive || t.off { continue; }
         t.alert = t.alert.max(60.0);
         t.ai.lean = crate::map::damp(t.ai.lean, t.ai.lean_to, 10.0, dt);
-        t.ai.flinch = (t.ai.flinch - dt).max(0.0);
+        t.ai.flinch = (t.ai.flinch - dt).max(0.0); t.ai.toss = (t.ai.toss - dt).max(0.0);
         t.ai.door_t = (t.ai.door_t - dt).max(0.0);
         // de frente para o operador e com linha de tiro: para e atira (quem decide é o combate)
         if t.leave > 0.0 || t.rise > 0.0 {
@@ -890,7 +890,7 @@ pub fn scenario_system(
                     }
                     let to = to.unwrap_or_else(|| { let q = gxy(g, (g.a + g.b) / 2.0, g.c - side * 2.0); if zone_at(q.x, q.y).is_some() && !blocked(&level, q, 0.15) { q } else { gxy(g, (g.a + g.b) / 2.0, g.c - side * 1.0) } });
                     game.nade_req.push((Vec3::new(pos.x, 1.5, pos.y), Vec3::new(to.x, 0.05, to.y)));
-                    t.ai.t = NADE_FLY + NADE_FUSE + 0.4;
+                    t.ai.t = NADE_FLY + NADE_FUSE + 0.4; t.ai.toss = 1.1;
                     if script { println!("BOT GRANADA de porta: {} no vao {} para ({:.1},{:.1}) t={:.1}", t.def.id, t.ai.door, to.x, to.y, now); }
                 }
                 continue;

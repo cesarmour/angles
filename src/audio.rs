@@ -25,6 +25,11 @@ macro_rules! clip { ($n:literal) => { wav_samples(include_bytes!(concat!("../ass
 fn pad(x: &[f32], secs: f32) -> Vec<f32> { let mut v = x.to_vec(); v.resize(x.len() + (secs * SR) as usize, 0.0); v }
 fn mix(a: &[f32], b: &[f32], gb: f32) -> Vec<f32> { let n = a.len().max(b.len()); (0..n).map(|i| a.get(i).copied().unwrap_or(0.0) + b.get(i).copied().unwrap_or(0.0) * gb).collect() }
 fn gain(x: &[f32], g: f32) -> Vec<f32> { x.iter().map(|v| v * g).collect() }
+/// Toca o som mais devagar por um fator (< 1): a voz fica mais grave e um pouco mais lenta.
+fn deeper(x: &[f32], f: f32) -> Vec<f32> {
+    let n = (x.len() as f32 / f) as usize;
+    (0..n).map(|i| { let t = i as f32 * f; let k = t as usize; let a = x.get(k).copied().unwrap_or(0.0); let b = x.get(k + 1).copied().unwrap_or(a); a + (b - a) * (t - k as f32) }).collect()
+}
 /// Passa-baixas de dois polos: o que sobra de um som depois de atravessar uma parede.
 fn lowpass(x: &[f32], fc: f32) -> Vec<f32> {
     let a = 1.0 - (-TAU * fc / SR).exp();
@@ -145,7 +150,10 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>) {
     let ui = { let mut b = buf(0.08); tone(&mut b, 0.0, 0.04, 1400.0, 1400.0, 0.5, false); b };
     let sounds = Sounds {
         shot_room: add(&mut a, &shot_room, 0.97), shot_corr: add(&mut a, &shot_corr, 0.97), rifle_room: add(&mut a, &rifle_room, 0.97), rifle_corr: add(&mut a, &rifle_corr, 0.97),
-        voice: vec![add(&mut a, &v_freeze, 0.85)], enemy: pair(&mut a, &enemy, 0.95), dry: add(&mut a, &clip!("seco_1"), 0.6), click: add(&mut a, &clip!("interruptor_1"), 0.5),
+        voice: { let mut v = vec![add(&mut a, &v_freeze, 0.85)];
+            // mais ordens do operador, para não repetir sempre a mesma (voz do instrutor, deixada mais grave: cerca de dois semitons abaixo; mesmo tratamento de sala)
+            for c in [clip!("voz_op_1"), clip!("voz_op_2"), clip!("voz_op_3"), clip!("voz_op_4")] { v.push(add(&mut a, &reverb(&pad(&norm(&deeper(&c, 0.88), 0.9), 0.4), 0.22, 0.6), 0.85)); }
+            v }, enemy: pair(&mut a, &enemy, 0.95), dry: add(&mut a, &clip!("seco_1"), 0.6), click: add(&mut a, &clip!("interruptor_1"), 0.5),
         reload: add(&mut a, &reload, 0.7), steps: steps.iter().map(|s| add(&mut a, s, 0.7)).collect(), casing: casing.iter().map(|s| add(&mut a, s, 0.45)).collect(),
         impact: vec![pair(&mut a, &imp1, 0.8), pair(&mut a, &imp3, 0.8)], metal: pair(&mut a, &metal, 0.8), paper: pair(&mut a, &paper, 0.7), thwack: pair(&mut a, &thwack, 0.85), fall: pair(&mut a, &fall, 0.85), door: pair(&mut a, &door, 0.85),
         rustle: add(&mut a, &gain(&clip!("roupa_1"), 1.0)[..(0.6 * SR) as usize], 0.35), good: add(&mut a, &good, 0.35), bad: add(&mut a, &bad, 0.3), hurt: add(&mut a, &hurt, 0.6), ui: add(&mut a, &ui, 0.25), n: 0,
@@ -164,7 +172,8 @@ pub fn play_sfx(mut ev: EventReader<Sfx>, mut s: ResMut<Sounds>, mut commands: C
         let (h, vol, pos): (H, f32, Option<Vec3>) = match *e {
             Sfx::Shot => (if corridor { s.shot_corr.clone() } else { s.shot_room.clone() }, 1.0, None),
             Sfx::Rifle => (if corridor { s.rifle_corr.clone() } else { s.rifle_room.clone() }, 1.0, None),
-            Sfx::Voice(i) => (s.voice[(i as usize).min(s.voice.len() - 1)].clone(), 0.9, None),
+            // 0 = diante de uma refém (parar, mostrar as mãos); 1 = desafio a uma ameaça (qualquer ordem, inclusive largar a arma)
+            Sfx::Voice(w) => { let set: &[usize] = if w == 0 { &[1, 3] } else { &[1, 2, 3, 4] }; (s.voice[set[k % set.len()].min(s.voice.len() - 1)].clone(), 0.9, None) }
             Sfx::EnemyShot(q) => (s.enemy[hid(q)].clone(), 1.7, Some(q)),
             Sfx::EnemyRound(q) => (s.enemy[hid(q)].clone(), 1.5, Some(q)),
             Sfx::Dry => (s.dry.clone(), 0.8, None),
