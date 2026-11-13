@@ -1,4 +1,4 @@
-//! Ponto de Entrada — simulador didático de CQB (Bevy).
+//! Angles — simulador didático de CQB (Bevy).
 mod art;
 mod audio;
 mod bot;
@@ -66,7 +66,21 @@ fn asset_dir() -> String {
     "assets".into()
 }
 
+/// O jogo já se chamou de outro jeito e guardava o progresso numa pasta com aquele nome: na primeira vez com o nome
+/// novo, o progresso e o ranking são trazidos para a pasta Angles.
+fn migrate_saves() {
+    let Ok(home) = std::env::var("HOME") else { return };
+    let base = std::path::PathBuf::from(home).join("Library/Application Support");
+    let (old, new) = (base.join(["Point", "of", "Entry"].join(" ")), base.join("Angles"));
+    if !old.is_dir() { return; }
+    let _ = std::fs::create_dir_all(&new);
+    for f in ["course.txt", "ranking.tsv"] {
+        if old.join(f).is_file() && !new.join(f).exists() { let _ = std::fs::copy(old.join(f), new.join(f)); }
+    }
+}
+
 fn main() {
+    migrate_saves();
     if let Ok(dir) = std::env::var("CQB_DUMP") { art::dump(&dir); return; }
     // dificuldade inicial nos testes automáticos: CQB_DIFF=0 (easy), 1 (normal) ou 2 (hard)
     if let Some(d) = std::env::var("CQB_DIFF").ok().and_then(|v| v.parse::<u8>().ok()) { state::set_difficulty(d); }

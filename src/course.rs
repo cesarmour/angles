@@ -36,7 +36,7 @@ impl Progress {
     pub fn load() -> Self {
         // nos testes automáticos o progresso do jogador não é tocado e todas as etapas ficam abertas
         let script = std::env::var("CQB_SCRIPT").is_ok();
-        let path = if script { None } else { std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Point of Entry/course.txt")) };
+        let path = if script { None } else { std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Angles/course.txt")) };
         let done = path.as_ref().and_then(|f| std::fs::read_to_string(f).ok()).and_then(|t| t.trim().parse::<usize>().ok()).unwrap_or(if script { STAGES.len() } else { 0 });
         Progress { done: done.min(STAGES.len()), current: None, counted: false, path }
     }

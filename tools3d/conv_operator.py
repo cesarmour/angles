@@ -14,8 +14,8 @@ HOSTAGE, THREAT = MODE == 'hostage', MODE == 'threat'
 # "player" = o operador do jogador na vista de cima: preto como o do menu, com a pistola e as poses da ameaça
 ARMED = MODE in ('threat', 'player')
 # operador principal (menu e corpo do jogador): jaqueta cáqui, colete e equipamento pretos, óculos de proteção no capacete
-# (visual alternativo, desligado: o dono do projeto quer o operador todo de preto; POE_TAN=1 liga para experimentar)
-MAIN = MODE in ('operator', 'player') and os.environ.get('POE_TAN') == '1'
+# (visual alternativo, desligado: o dono do projeto quer o operador todo de preto; ANGLES_TAN=1 liga para experimentar)
+MAIN = MODE in ('operator', 'player') and os.environ.get('ANGLES_TAN') == '1'
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
 for o in list(bpy.data.objects):

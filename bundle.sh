@@ -10,7 +10,7 @@ APP="$DIR/dist/Angles.app"
 # Contents/MacOS a assinatura do pacote não fecha e o macOS recusa o app baixado como "danificado".
 rm -rf "$APP/Contents/MacOS/assets" "$APP/Contents/_CodeSignature"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
-cp "$DIR/target/release/ponto-de-entrada" "$APP/Contents/MacOS/ponto-de-entrada"
+cp "$DIR/target/release/angles" "$APP/Contents/MacOS/angles"
 # texturas, modelos e as falas do instrutor (só os .wav; o roteiro em texto já vai dentro do executável)
 rsync -a --delete "$DIR/assets/tex" "$DIR/assets/models" "$DIR/assets/music" "$APP/Contents/Resources/assets/"
 rm -rf "$APP/Contents/Resources/assets/local"
@@ -24,12 +24,12 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <dict>
   <key>CFBundleName</key><string>Angles</string>
   <key>CFBundleDisplayName</key><string>Angles</string>
-  <key>CFBundleIdentifier</key><string>local.pontodeentrada.cqb</string>
-  <key>CFBundleExecutable</key><string>ponto-de-entrada</string>
+  <key>CFBundleIdentifier</key><string>local.angles.cqb</string>
+  <key>CFBundleExecutable</key><string>angles</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.12.2</string>
-  <key>CFBundleVersion</key><string>18</string>
+  <key>CFBundleShortVersionString</key><string>0.12.3</string>
+  <key>CFBundleVersion</key><string>19</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.simulation-games</string>

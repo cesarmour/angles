@@ -1179,7 +1179,7 @@ impl Ranking {
         let path = match std::env::var("CQB_RANK") {
             Ok(f) => Some(std::path::PathBuf::from(f)),
             Err(_) if std::env::var("CQB_SCRIPT").is_ok() => None,
-            Err(_) => std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Point of Entry/ranking.tsv")),
+            Err(_) => std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Angles/ranking.tsv")),
         };
         let mut rows = Vec::new();
         if let Some(text) = path.as_ref().and_then(|f| std::fs::read_to_string(f).ok()) {

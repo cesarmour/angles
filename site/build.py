@@ -11,9 +11,9 @@ Change VERSION / SIZE below when a new release goes out.
 import base64, mimetypes, pathlib, re
 
 HERE = pathlib.Path(__file__).parent
-VERSION = "0.12.2"
+VERSION = "0.12.3"
 SIZE = "130 MB"
-REPO = "https://github.com/cesarmour/point-of-entry"
+REPO = "https://github.com/cesarmour/angles"
 DOWNLOAD = f"{REPO}/releases/download/v{VERSION}/Angles-mac.zip"
 DESCRIPTION = ("Angles is a free CQB teaching simulator for Mac: a shoot house with armed threats, hostages "
                "and a tactical view that measures slicing the pie in degrees and centimetres.")
