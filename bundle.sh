@@ -2,7 +2,7 @@
 # Monta o aplicativo para Mac a partir da compilação otimizada: ./bundle.sh
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
-APP="$DIR/dist/Point of Entry.app"
+APP="$DIR/dist/Kill House.app"
 # Os recursos (modelos, texturas) vão em Contents/Resources; em Contents/MacOS fica só o executável. Com arquivos de dados em
 # Contents/MacOS a assinatura do pacote não fecha e o macOS recusa o app baixado como "danificado".
 rm -rf "$APP/Contents/MacOS/assets" "$APP/Contents/_CodeSignature"
@@ -15,14 +15,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Point of Entry</string>
-  <key>CFBundleDisplayName</key><string>Point of Entry</string>
+  <key>CFBundleName</key><string>Kill House</string>
+  <key>CFBundleDisplayName</key><string>Kill House</string>
   <key>CFBundleIdentifier</key><string>local.pontodeentrada.cqb</string>
   <key>CFBundleExecutable</key><string>ponto-de-entrada</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.9.2</string>
-  <key>CFBundleVersion</key><string>12</string>
+  <key>CFBundleShortVersionString</key><string>0.10.0</string>
+  <key>CFBundleVersion</key><string>13</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.simulation-games</string>

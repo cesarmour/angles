@@ -136,7 +136,8 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
                 shooters.push(i);
                 if !crate::map::is_mech(&t.def) {
                     let flat = Vec3::new(p.eye.x - t.def.x, 0.0, p.eye.z - t.def.z).normalize_or_zero();
-                    mz = crate::combat::enemy_muzzle(t.def.x, t.def.z, flat);
+                    let l = t.lean_at(1.38);
+                    mz = crate::combat::enemy_muzzle(t.def.x + l.x, t.def.z + l.y, flat);
                 }
             }
         }
@@ -199,7 +200,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         }
         // ameaça: mira quando tem o operador na linha de tiro e anda quando troca de posição. Refém: baixa os braços quando
         // o cômodo dela está limpo (área já vista e nenhuma ameaça viva lá dentro).
-        let want: u8 = if a.aim.is_some() { if t.react > 0.04 || t.engaged { 1 } else if t.moving && a.walk.is_some() { 2 } else { 0 } } else if a.relax.is_some() {
+        let want: u8 = if a.aim.is_some() { if t.react > 0.04 || t.engaged || t.ai.ready { 1 } else if t.moving && a.walk.is_some() { 2 } else { 0 } } else if a.relax.is_some() {
             let zi = crate::map::zone_index(t.def.zone);
             (tac.pct.get(zi).map_or(false, |p| *p >= 0.9) && !targets.list.iter().any(|o| o.alive && !o.off && o.def.kind == crate::map::TKind::Threat && o.def.zone == t.def.zone)) as u8
         } else { 0 };
@@ -242,7 +243,9 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         let mut want = 0.0;
         if f.threat { want = crate::map::ang_diff(t.fwd.x.atan2(t.fwd.y), (t.def.fx - t.def.x).atan2(t.def.fz - t.def.z)); }
         let (cur, _, _) = tf.rotation.to_euler(EulerRot::YXZ);
-        tf.rotation = Quat::from_rotation_y(cur + crate::map::ang_diff(want, cur) * (1.0 - (-16.0 * dt).exp()));
+        // inclinado na quina (rola para o lado, o pé fica no lugar) e o tranco do susto (o tronco vai para trás e volta)
+        let jolt = -0.2 * (std::f32::consts::PI * (t.ai.flinch / 0.38).clamp(0.0, 1.0)).sin();
+        tf.rotation = Quat::from_euler(EulerRot::YXZ, cur + crate::map::ang_diff(want, cur) * (1.0 - (-16.0 * dt).exp()), jolt, t.ai.lean);
     }
 }
 

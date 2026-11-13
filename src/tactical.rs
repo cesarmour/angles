@@ -18,6 +18,12 @@ pub const PPM: f32 = 16.0;
 pub const GW: usize = 352;
 pub const GH: usize = 304;
 
+/// Barra da porta em foco (a única leitura de ângulos na tela): 180 fatias de 1°, da esquerda para a direita na ordem em
+/// que se abrem para quem olha (a ponta esquerda é o que se abre andando para a esquerda).
+pub const BAR_W: usize = 180;
+#[derive(Resource)]
+pub struct PieBarTex(pub Handle<Image>);
+
 #[derive(Component)] pub struct OverlayPlane;
 #[derive(Component)] pub struct FogPlane;
 
@@ -32,6 +38,8 @@ pub struct Tac {
     pub pie: Vec<[u8; 180]>, pub pie_now: Vec<Option<(f32, f32)>>, pub pie_active: Option<usize>,
     /// Inclinar para este lado (-1 = Q, +1 = E) põe mais graus da abertura em foco dentro do setor: (lado, ganho em graus).
     pub lean_hint: Option<(f32, f32)>,
+    /// Barra da porta em foco: graus ainda fechados que se abrem andando para a esquerda e para a direita.
+    pub bar_left: u32, pub bar_right: u32,
 }
 impl Tac {
     pub fn pie_deg(&self, i: usize) -> f32 { self.pie[i].iter().filter(|b| **b > 0).count() as f32 }
@@ -99,8 +107,10 @@ pub fn setup_tactical(mut commands: Commands, mut images: ResMut<Assets<Image>>,
     commands.spawn((Mesh3d(wedge_mesh.clone()), MeshMaterial3d(wmat), Transform::from_xyz(0.0, 3.7, 0.0), RenderLayers::layer(L_TOP), NotShadowCaster, NotShadowReceiver, NoFrustumCulling));
     let mut tac = Tac {
         vis: Vis::default(), wedge: Wedge::default(), hfov: 1.7, c: 0.0, seen: vec![0; GW * GH], cur: vec![0; GW * GH], expo: vec![0; GW * GH], zone_idx: vec![-1i8; GW * GH], tot: [0; MAX_ZONES], pct: [0.0; MAX_ZONES],
-        expo_deg: 0.0, stat_t: 0.0, overlay, fog, wedge_mesh, overlay_mat: om, fog_mat: fmat, primary: None, body_cm: 25.0, corner_zone: None, pie: vec![[0u8; 180]; openings().len()], pie_now: vec![None; openings().len()], pie_active: None, lean_hint: None,
+        expo_deg: 0.0, stat_t: 0.0, overlay, fog, wedge_mesh, overlay_mat: om, fog_mat: fmat, primary: None, body_cm: 25.0, corner_zone: None, pie: vec![[0u8; 180]; openings().len()], pie_now: vec![None; openings().len()], pie_active: None, lean_hint: None, bar_left: 0, bar_right: 0,
     };
+    let bar = images.add(art::rgba_image(BAR_W as u32, 1, vec![0u8; BAR_W * 4], true, false, false));
+    commands.insert_resource(PieBarTex(bar));
     tac.rebuild(&level);
     commands.insert_resource(tac);
 }
@@ -109,9 +119,11 @@ pub fn tac_update(
     time: Res<Time>, game: Res<Game>, p: Res<Player>, mut level: ResMut<Level>, mut tac: ResMut<Tac>, mut targets: ResMut<Targets>,
     mut images: ResMut<Assets<Image>>, mut meshes: ResMut<Assets<Mesh>>, proj: Query<&Projection, With<FpCam>>, windows: Query<&Window, With<PrimaryWindow>>,
     mut overlay: Query<&mut Visibility, With<OverlayPlane>>, mut mats: ResMut<Assets<StandardMaterial>>,
+    bar: Res<PieBarTex>, mut bar_sig: Local<u64>,
 ) {
     if let Ok(mut v) = overlay.single_mut() {
-        let want = if game.tac && game.mode != Mode::Menu { Visibility::Visible } else { Visibility::Hidden };
+        // sem pintura no chão: a única leitura de ângulos é a barra da porta em foco, no alto da tela
+        let want = Visibility::Hidden;
         if *v != want { *v = want; }
     }
     if game.mode != Mode::Play || std::env::var("CQB_NOTAC").is_ok() { return; }
@@ -148,7 +160,9 @@ pub fn tac_update(
     // alvos e cantos vistos
     for t in targets.list.iter_mut() {
         let tp = Vec2::new(t.def.x, t.def.z);
-        t.vis = wedge.sees(eye, tp, 0.05) && level.los(eye.x, eye.y, eye_h, tp.x, tp.y, 1.3);
+        // quem está inclinado na quina aparece pela cabeça, não pelo pé
+        let hp = tp + t.lean_at(1.4);
+        t.vis = (wedge.sees(eye, tp, 0.05) && level.los(eye.x, eye.y, eye_h, tp.x, tp.y, 1.3)) || (hp != tp && wedge.sees(eye, hp, 0.05) && level.los(eye.x, eye.y, eye_h, hp.x, hp.y, 1.5));
         if t.vis { t.seen = true; }
     }
     if let Some(z) = tac.corner_zone {
@@ -189,6 +203,31 @@ pub fn tac_update(
         }
     }
     tac.pie_active = best.map(|b| b.0);
+    // barra da porta em foco. Para ver a fatia `b` do cômodo é preciso estar do lado oposto do vão, então a barra é o arco
+    // de posições em frente à porta, desenrolado: a ponta esquerda é o que se abre andando para a esquerda de quem olha
+    tac.bar_left = 0; tac.bar_right = 0;
+    if let Some(i) = tac.pie_active {
+        let o = &openings()[i];
+        let rev = o.w().dot(p.right()) < 0.0;
+        let now = tac.pie_now[i];
+        // onde o operador está no arco: o meio do que ele vê agora ou, sem visada pelo vão, a direção dele até a porta
+        let me = now.map_or_else(|| o.phi(o.mid() - eye).clamp(0.0, 180.0), |(lo, hi)| (lo + hi) / 2.0);
+        let (mut low, mut high) = (0u32, 0u32);
+        for (b, v) in tac.pie[i].iter().enumerate() { if *v == 0 { if (b as f32) < me { low += 1; } else { high += 1; } } }
+        (tac.bar_left, tac.bar_right) = if rev { (high, low) } else { (low, high) };
+        let mut sig = 1469598103934665603u64 ^ (i as u64 + 1) ^ ((rev as u64) << 20) ^ (now.map_or(0, |(lo, hi)| ((lo as u64) << 24) | ((hi as u64) << 34)));
+        for (b, v) in tac.pie[i].iter().enumerate() { if *v > 0 { sig = (sig ^ (b as u64 + 7)).wrapping_mul(1099511628211); } }
+        if sig != *bar_sig {
+            *bar_sig = sig;
+            if let Some(data) = images.get_mut(&bar.0).and_then(|img| img.data.as_mut()) {
+                for k in 0..BAR_W {
+                    let b = if rev { BAR_W - 1 - k } else { k };
+                    let col: [u8; 3] = if now.map_or(false, |(lo, hi)| b as f32 >= lo - 0.5 && (b as f32) <= hi + 0.5) { [96, 214, 232] } else if tac.pie[i][b] > 0 { [111, 213, 142] } else { [236, 90, 78] };
+                    data[k * 4..k * 4 + 4].copy_from_slice(&[col[0], col[1], col[2], 255]);
+                }
+            }
+        }
+    }
     // dica: quantos graus a mais da abertura em foco entram no setor inclinando para cada lado
     tac.lean_hint = None;
     if let Some(i) = tac.pie_active {
@@ -261,37 +300,16 @@ pub fn tac_update(
         } }
         out
     };
-    // chão: verde bem leve no que já foi visto, vermelho translúcido no que falta (mais forte onde há linha de tiro para você)
-    if game.tac {
-        let (mut red, mut green) = (vec![0u16; n], vec![0u16; n]);
-        for k in 0..n {
-            if tac.zone_idx[k] < 0 { continue; }
-            if tac.seen[k] > 0 { green[k] = 16; } else { red[k] = if tac.expo[k] > 0 { 88 } else { 46 }; }
-        }
-        let (red, green) = (blur(&red), blur(&green));
-        if let Some(img) = images.get_mut(&tac.overlay) {
-            if let Some(data) = img.data.as_mut() {
-                for k in 0..n {
-                    let (r, g) = (red[k] as f32, green[k] as f32);
-                    let w = (r + g).max(1.0);
-                    data[k * 4..k * 4 + 4].copy_from_slice(&[((225.0 * r + 98.0 * g) / w) as u8, ((62.0 * r + 214.0 * g) / w) as u8, ((50.0 * r + 140.0 * g) / w) as u8, (r + g).min(255.0) as u8]);
-                }
-            }
-        }
-    }
-    // névoa das vistas de cima (vista aérea e minimapa). Com a visão tática ligada ela leva as cores da legenda, em tons
-    // escuros e com borda suave: verde no que já foi visto, vinho no que falta limpar (mais vivo onde há linha de tiro
-    // para você). Sem a visão tática fica neutra. Na demonstração fica translúcida, para acompanhar a casa e o traçado.
-    // O entorno imediato do operador fica sempre visível.
+    // névoa das vistas de cima (vista aérea e minimapa): neutra, sem cores (escura no que ainda não foi visto, meio-tom no
+    // que já foi). Na demonstração fica translúcida, para acompanhar a casa e o traçado. O entorno imediato do operador
+    // fica sempre visível.
     let dark: u16 = if game.demo { 172 } else { 255 };
     let mut raw = vec![0u16; n];
     let (mut fr, mut fg) = (vec![0u16; n], vec![0u16; n]);
     for k in 0..n {
         let (cur, seen, zone) = (tac.cur[k] > 0, tac.seen[k] > 0, tac.zone_idx[k] >= 0);
         raw[k] = if cur { 0 } else if seen { 118.min(dark) } else { dark };
-        if game.tac && zone && !cur {
-            if seen { fg[k] = 255; } else { fr[k] = if tac.expo[k] > 0 { 255 } else { 115 }; }
-        }
+        let _ = zone;
     }
     let (pi, pj) = (((p.pos.x - MAP_X1) * PPM) as i32, ((p.pos.y - MAP_Z1) * PPM) as i32);
     for j in (pj - 9).max(0)..=(pj + 9).min(GH as i32 - 1) { for i in (pi - 9).max(0)..=(pi + 9).min(GW as i32 - 1) {
@@ -309,20 +327,7 @@ pub fn tac_update(
     }
     // o material precisa ser marcado como alterado para passar a usar a textura atualizada
     let _ = mats.get_mut(&tac.fog_mat);
-    if game.tac { let _ = mats.get_mut(&tac.overlay_mat); }
-    // fatia coberta agora (malha exata, para as vistas de cima)
-    if let Some(m) = meshes.get_mut(&tac.wedge_mesh) {
-        let n = wedge.pts.len();
-        let mut pos: Vec<[f32; 3]> = Vec::with_capacity(n + 1);
-        pos.push([eye.x, 0.0, eye.y]);
-        for q in &wedge.pts { pos.push([q.x, 0.0, q.y]); }
-        let mut idx: Vec<u32> = Vec::with_capacity(n * 3);
-        for i in 1..n as u32 { idx.extend_from_slice(&[0, i, i + 1]); }
-        m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 1.0, 0.0]; pos.len()]);
-        m.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32, 0.0]; pos.len()]);
-        m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
-        m.insert_indices(Indices::U32(idx));
-    }
+    let _ = &mut meshes;
     tac.vis = vis; tac.wedge = wedge;
 }
 
@@ -336,73 +341,6 @@ pub fn tac_gizmos(mut gz: Gizmos, mut game: ResMut<Game>, time: Res<Time>, p: Re
         let rot = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
         for r in [0.47f32, 0.485, 0.5] { gz.circle(Isometry3d::new(Vec3::new(p.pos.x, 3.87, p.pos.y), rot), r, Color::srgb(0.38, 0.84, 0.91)).resolution(48); }
     }
-    if !game.tac || game.mode != Mode::Play { return; }
-    for y in [0.06f32, 3.8] {
-    let v3 = |q: Vec2| Vec3::new(q.x, y, q.y);
-    let eye = p.eye2();
-    let w = &tac.wedge;
-    if w.pts.len() < 2 { return; }
-    let cyan = Color::srgb(0.38, 0.84, 0.91);
-    gz.line(v3(eye), v3(w.pts[0]), cyan);
-    gz.line(v3(eye), v3(*w.pts.last().unwrap()), cyan);
-    let arc = |gz: &mut Gizmos, o: Vec2, a0: f32, da: f32, r: f32, col: Color| {
-        let n = ((da.abs() / 0.12).ceil() as usize).max(2);
-        let mut prev = o + Vec2::new(a0.cos(), a0.sin()) * r;
-        for i in 1..=n {
-            let a = a0 + da * i as f32 / n as f32;
-            let q = o + Vec2::new(a.cos(), a.sin()) * r;
-            gz.line(v3(prev), v3(q), col); prev = q;
-        }
-    };
-    arc(&mut gz, eye, w.c - w.h, w.h * 2.0, 1.0, cyan.with_alpha(0.7));
-    let f = p.fwd();
-    let md = level.cast_ray(eye.x, eye.y, f.x, f.y, VIS_RANGE, p.eye.y);
-    gz.line(v3(eye + f * 0.4), v3(eye + f * md), Color::srgba(1.0, 1.0, 1.0, 0.45));
-    // limite de visão de cada quina
-    let amber = Color::srgb(1.0, 0.82, 0.23);
-    let red = Color::srgb(1.0, 0.27, 0.2);
-    for e in &w.edges { gz.line(v3(e.a), v3(e.b), amber); }
-    // leque de 180° de cada abertura: verde = já fatiado, azul = vendo agora, vermelho = falta
-    let green = Color::srgb(0.44, 0.84, 0.56);
-    for (i, o) in openings().iter().enumerate() {
-        let zi = zone_index(o.zone);
-        let any = tac.pie[i].iter().any(|b| *b > 0);
-        let near = eye.distance(o.mid()) < 8.0 && (eye - o.mid()).dot(o.n) < 0.0;
-        if tac.pct[zi] >= 0.95 || !(any || near) || o.door.map_or(false, |d| level.doors[d].open < 0.5) { continue; }
-        let c = o.mid() + o.n * (WALL_T / 2.0);
-        let r = 1.5;
-        for b in (0..180).step_by(3) {
-            let now = tac.pie_now[i].map_or(false, |(lo, hi)| (b as f32) >= lo - 1.5 && (b as f32) <= hi + 1.5);
-            let seen = tac.pie[i][b] > 0 || tac.pie[i][(b + 2).min(179)] > 0;
-            let col = if now { cyan } else if seen { green } else { red };
-            let (p0, p1) = (c + o.dir(b as f32) * r, c + o.dir(b as f32 + 3.0) * r);
-            gz.line(v3(p0), v3(p1), col);
-            if !seen { gz.line(v3(c + o.dir(b as f32 + 1.5) * (r - 0.14)), v3(c + o.dir(b as f32 + 1.5) * r), red.with_alpha(0.7)); }
-        }
-        if let Some((lo, hi)) = tac.pie_now[i] { gz.line(v3(c), v3(c + o.dir(lo) * r), cyan); gz.line(v3(c), v3(c + o.dir(hi) * r), cyan); }
-    }
-    if let Some(z) = tac.corner_zone {
-        let rot = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
-        for k in level.corners.iter().filter(|k| k.zone == z) {
-            let col = if k.seen { Color::srgb(0.38, 0.84, 0.55) } else { red };
-            gz.circle(Isometry3d::new(Vec3::new(k.x, y, k.z), rot), 0.2, col);
-            if !k.seen { gz.circle(Isometry3d::new(Vec3::new(k.x, y, k.z), rot), 0.12 + 0.05 * (time.elapsed_secs() * 6.0).sin(), col); }
-        }
-    }
-    // marcadores de alvo já vistos
-    for t in targets.list.iter().filter(|t| t.seen) {
-        let c = Vec2::new(t.def.x, t.def.z);
-        let s = 0.22;
-        if t.alive {
-            let col = Color::srgb(0.95, 0.7, 0.23);
-            let pts = [c + Vec2::new(0.0, -s), c + Vec2::new(s, 0.0), c + Vec2::new(0.0, s), c + Vec2::new(-s, 0.0)];
-            for i in 0..4 { gz.line(v3(pts[i]), v3(pts[(i + 1) % 4]), col); }
-            gz.line(v3(c + t.fwd * 0.3), v3(c + t.fwd * 0.65), col);
-        } else {
-            let col = if t.def.kind == TKind::Civil { red } else { Color::srgb(0.55, 0.6, 0.62) };
-            gz.line(v3(c + Vec2::new(-s, -s)), v3(c + Vec2::new(s, s)), col);
-            gz.line(v3(c + Vec2::new(s, -s)), v3(c + Vec2::new(-s, s)), col);
-        }
-    }
-    }
+    // (sem linhas de setor, de quina, leques de abertura nem marcadores de alvo: a leitura de ângulos é só a barra da porta)
+    let _ = (&tac, &level, &targets);
 }

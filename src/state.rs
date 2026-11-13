@@ -60,6 +60,9 @@ pub struct Game {
     pub lock: f32,
     /// Granada em cena: onde ela está no chão e quantos segundos faltam para estourar (aviso na tela).
     pub nade: Option<(Vec2, f32)>,
+    /// Onde caíram, neste quadro, os invasores derrubados (o cenário conta para a porta mais próxima) e granadas pedidas
+    /// por quem vai entrar por uma porta que já custou caro (de onde, para onde).
+    pub fell: Vec<Vec2>, pub nade_req: Vec<(Vec3, Vec3)>,
 }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
@@ -89,13 +92,13 @@ pub const MAX_WOUNDS: u8 = 2;
 pub const DOWN_SECS: f32 = 1.3;
 impl Default for Game {
     fn default() -> Self {
-        Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: false, flash: true, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
+        Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: false, flash: false, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
             flag_tac: false, flag_bird: false, flag_bird_back: false, entry: [None; MAX_DOORWAYS], entry_pie: [None; MAX_DOORWAYS], dwell: [0.0; MAX_DOORWAYS], door_side: [None; MAX_DOORS], stats: Stats::default(),
             bird_zoom: 13.0, sens: 1.0, toast: None, hit_t: 0.0, dmg_t: 0.0, ui_dirty: true, tracers: Vec::new(), burst: Vec::new(), shake: 0.0, near_door: None, track: Vec::new(), replay_t: 0.0, replay_next: None,
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
             scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
-            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None }
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new() }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -175,6 +178,41 @@ pub struct Controls {
     pub weapon: Option<usize>, pub weapon_next: bool,
 }
 
+/// Táticas de quem caça o operador (`Brain::tactic`).
+pub const TAC_NONE: u8 = 0;
+/// Indo para o lado do batente, antes de fatiar a porta.
+pub const TAC_STACK: u8 = 1;
+/// Fatiando a porta: cruza o vão devagar, inclinado, de arma apontada para a quina.
+pub const TAC_SLICE: u8 = 2;
+/// Recuando para um ponto fora da vista do operador.
+pub const TAC_RETREAT: u8 = 3;
+/// Abrigado, recompondo-se antes de voltar.
+pub const TAC_HOLD: u8 = 4;
+
+/// Cabeça de quem caça o operador: a tática do momento, a inclinação do corpo e as reações (susto, recuo).
+#[derive(Clone, Default)]
+pub struct Brain {
+    /// Tática e relógio dela; ponto onde ele para ao lado do batente (ou o abrigo), quina em que ele gira e fim do fatiar.
+    pub tactic: u8, pub t: f32, pub anchor: Vec2, pub pivot: Vec2, pub to: Vec2,
+    /// Caminho do recuo, casa a casa.
+    pub path: Vec<Vec2>,
+    /// Inclinação do corpo (radianos, positiva para a direita dele) e para onde ela vai.
+    pub lean: f32, pub lean_to: f32,
+    /// Susto: tempo que resta do tranco; motivo ainda não tratado (1 = tiro rente, 2 = parceiro caiu perto, 3 = ferido);
+    /// intervalo até poder se assustar de novo com o operador aparecendo de surpresa.
+    pub flinch: f32, pub scare: f32, pub startle_cd: f32,
+    /// Vão que ele fatiou por último (índice em `Level::gaps`) e por quanto tempo isso ainda vale; quantas vezes já recuou;
+    /// arma apontada (pose de mira mesmo sem o operador à vista).
+    pub door: i16, pub door_t: f32, pub retreats: u8, pub ready: bool,
+    /// Tempo que ele já passou inclinado na quina com o operador à vista (depois de um segundo, sai de trás da parede).
+    pub peek: f32,
+    /// Vai jogar uma granada pelo vão antes de entrar (porta que já derrubou dois do grupo).
+    pub flush: bool,
+    /// Tiro através da parede: onde ele viu o operador pela última vez, há quanto tempo perdeu a visada, quantas rajadas já
+    /// deu às cegas desde então e intervalo até a próxima; tempo parado depois de uma rajada dessas.
+    pub last: Vec2, pub lost: f32, pub bangs: u8, pub bang_cd: f32, pub hold: f32,
+}
+
 pub struct TargetState {
     pub def: TargetDef, pub alive: bool, pub fall: f32, pub hits: u8, pub seen: bool, pub vis: bool, pub react: f32,
     pub contact: bool, pub contact_t: f32, pub first_facing: Option<bool>, pub fwd: Vec2, pub fall_dir: f32, pub fall_max: f32,
@@ -191,15 +229,19 @@ pub struct TargetState {
     pub hunter: bool, pub pend: f32, pub mind: u8, pub mind_t: f32, pub shield: bool, pub captor: bool, pub alt: bool,
     /// Tempo que resta da subida depois de uma passagem (o invasor sai do vão da escada ou da laje, de baixo para cima).
     pub rise: f32, pub leave: f32, pub via: u8,
+    pub ai: Brain,
 }
 impl TargetState {
     /// Ameaça viva que ainda precisa ser resolvida (quem se rendeu não conta).
+    /// Deslocamento lateral do corpo inclinado à altura `h` (o pé fica no lugar): vale para o olho, a boca da arma e a área de acerto.
+    pub fn lean_at(&self, h: f32) -> Vec2 { Vec2::new(-self.fwd.y, self.fwd.x) * (self.ai.lean.sin() * h) }
     pub fn hostile(&self) -> bool { self.alive && !self.off && !self.def.passive && self.def.kind == TKind::Threat && self.mind != MIND_YIELDED }
     /// Zera o que é próprio de cada partida.
     pub fn clear_run(&mut self) {
         self.alive = true; self.fall = 0.0; self.fall_v = 0.0; self.sw = 0.0; self.swv = 0.0; self.landed = false; self.hits = 0; self.seen = false; self.vis = false; self.react = 0.0;
         self.contact = false; self.first_facing = None; self.goal = None; self.wait = 0.0; self.moving = false; self.stuck = 0.0; self.moved = 0; self.move_cd = 0.0;
         self.alert = 0.0; self.notice = 0.0; self.engaged = false; self.hunter = false; self.pend = 0.0; self.mind = MIND_NONE; self.mind_t = 0.0; self.shield = false; self.captor = false; self.alt = false; self.rise = 0.0; self.leave = 0.0; self.via = 0;
+        self.ai = Brain::default();
     }
 }
 #[derive(Resource, Default)]

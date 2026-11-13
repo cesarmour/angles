@@ -15,6 +15,8 @@ pub enum Cmd {
     Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
     /// Espera um invasor começar a sair do vão de chegada de uma passagem entre andares.
     WaitClimb,
+    /// Espera um invasor começar a fatiar uma porta (parado ao lado do batente); assusta todos os invasores vivos (motivo 1, 2 ou 3).
+    WaitSlice, Scare(u8),
     /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
     Near(bool, usize, f32),
 }
@@ -189,6 +191,22 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         "stairs" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20), Tp(4.4, 0.7, 1.5708, -0.45), Wait(20), Shot("st-1"), Go(2.2, 0.7, None), Shot("st-1b"), Go(0.3, 0.7, None), Wait(70), Snap("desceu"),
             Tp(0.45, 7.45, 3.1416, -0.35), Wait(20), Shot("st-2"), Go(0.6, 8.5, None), Go(3.0, 8.55, None), Tp(3.4, 9.9, 1.037, -0.05), Wait(20), Shot("st-3"),
             Tp(2.6, 8.55, 1.5708, 0.0), Go(0.6, 8.55, None), Go(0.6, 7.4, None), Go(1.0, 7.35, None), Wait(70), Snap("subiu"), Tp(0.8, 0.7, -1.5708, 0.25), Wait(20), Shot("st-4"), Quit],
+        // casa: fotos de vários pontos para conferir paredes, escada e vão (sem invasores por perto)
+        "house" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20),
+            Tp(0.6, 7.4, 3.1416, 0.0), Wait(20), Shot("h-01"), Tp(0.6, 7.4, -1.5708, 0.0), Wait(20), Shot("h-02"), Tp(0.6, 7.4, 3.1416, 0.5), Wait(20), Shot("h-03"),
+            Tp(0.6, 8.5, 0.0, 0.1), Wait(20), Shot("h-04"), Tp(1.6, 8.55, 1.5708, 0.25), Wait(20), Shot("h-05"), Tp(3.4, 9.9, 1.037, -0.05), Wait(20), Shot("h-06"),
+            Tp(3.0, 0.7, 1.5708, -0.3), Wait(20), Shot("h-07"), Tp(2.0, 0.7, 1.5708, -0.2), Wait(20), Shot("h-08"), Tp(0.9, 0.7, 1.5708, 0.0), Wait(20), Shot("h-09"),
+            Tp(0.7, 0.7, 1.2, -0.1), Wait(20), Shot("h-10"), Tp(1.6, 0.7, 3.1416, 0.0), Wait(20), Shot("h-11"), Tp(5.0, 0.7, -1.5708, 0.0), Wait(20), Shot("h-12"),
+            Tp(4.5, 10.5, 0.0, 0.0), Wait(20), Shot("h-13"), Tp(4.5, 10.5, 1.5708, 0.0), Wait(20), Shot("h-14"), Tp(4.5, 10.5, 3.1416, 0.0), Wait(20), Shot("h-15"), Tp(4.5, 10.5, -1.5708, 0.0), Wait(20), Shot("h-16"),
+            Tp(4.0, 15.5, 0.0, 0.0), Wait(20), Shot("h-17"), Tp(7.5, 3.0, 0.0, 0.0), Wait(20), Shot("h-18"), Quit],
+        // invasor fatiando a porta da suíte 2, visto de dentro do quarto; depois, o susto e o recuo vistos do corredor
+        "slice" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20), Tp(7.2, 3.5, 0.245, 0.0), Wait(20), Shot("sl-0"), WaitSlice, Wait(6), Shot("sl-1"), Wait(14), Shot("sl-2"), Wait(14), Shot("sl-3"),
+            Wait(14), Shot("sl-4"), Wait(14), Shot("sl-5"), Wait(20), Shot("sl-6"), Wait(30), Shot("sl-7"), Quit],
+        "scare" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20), Tp(8.6, 0.7, 1.5708, 0.0), Wait(20), WaitClimb, Wait(70), Shot("sc-0"), Scare(3), Wait(10), Shot("sc-1"), Wait(25), Shot("sc-2"),
+            Wait(40), Shot("sc-3"), Wait(240), Shot("sc-4"), Wait(240), Shot("sc-5"), Quit],
+        // a porta da sala A sendo fatiada de três posições, com a visão tática ligada (leitura dos ângulos)
+        "pie" => vec![Wait(90), Start(false), Wait(20), Confirm, Wait(40), Tac(true), Tp(8.6, 5.2, -2.415, -0.12), Wait(45), Shot("pie-1"), Tp(9.6, 5.0, -2.98, -0.12), Wait(45), Shot("pie-2"),
+            Tp(10.8, 5.2, 2.55, -0.12), Wait(45), Shot("pie-3"), Tp(8.0, 4.6, -2.2, -0.08), Wait(45), Shot("pie-4"), Quit],
         "alarm" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(120), Tp(2.0, 12.8, 0.0, 0.0), Wait(1500), Snap("alarme"), Shot("alarm"), Quit],
         // granada: parado fora da vista de ameaças alertadas (um tiro avisa o cômodo) até alguém lançar (CQB_NODEATH=1)
         "nade" => vec![Wait(120), Map(1), Wait(120), Start(true), Wait(120), Near(false, 2, 4.0), Wait(100), Tp(4.6, 7.0, 0.0, 0.0), WaitNade, Wait(60), Shot("nade-air"), Wait(70), Shot("nade-fp"), ViewTo(View::Bird), Wait(25), Shot("nade-top"), Wait(400), Snap("n1"), Shot("nade-after"), Quit],
@@ -238,7 +256,7 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
     bot.queue = q.into();
 }
 
-pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Player>, mut game: ResMut<Game>, targets: Res<Targets>, tac: Res<Tac>, level: Res<Level>,
+pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Player>, mut game: ResMut<Game>, mut targets: ResMut<Targets>, tac: Res<Tac>, level: Res<Level>,
     mut commands: Commands, mut exit: EventWriter<AppExit>, mut reset: EventWriter<ResetGame>, real: Res<Time<Real>>, mut mapreq: ResMut<MapReq>) {
     let demo = game.demo;
     if !bot.active && !demo { return; }
@@ -402,6 +420,8 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
         Cmd::Auto(on) => { bot.auto_card = on; done = true; }
         // espera uma granada entrar em cena
         Cmd::WaitNade => { done = game.nade.is_some() || bot.n > 4000; }
+        Cmd::WaitSlice => { done = targets.list.iter().any(|t| t.alive && !t.off && t.ai.tactic == TAC_SLICE) || bot.n > 4000; }
+        Cmd::Scare(k) => { for t in targets.list.iter_mut().filter(|t| t.hunter && t.alive && !t.off) { t.ai.scare = k as f32; } done = true; }
         Cmd::WaitClimb => { done = targets.list.iter().any(|t| t.alive && !t.off && t.rise > 0.0) || bot.n > 4000; }
         // fica parado por n quadros; recarrega só quando não há invasor de pé (entre as ondas)
         Cmd::Hold(n) => {

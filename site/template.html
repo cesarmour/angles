@@ -1,4 +1,4 @@
-<title>Point of Entry</title>
+<title>Kill House</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Saira+Stencil+One&display=swap">
 <style>
@@ -51,6 +51,18 @@ h1{font-family:var(--display);font-weight:400;font-size:clamp(52px,8.4vw,104px);
 .btn.ghost{background:transparent;color:var(--text);border-color:#6d7676}
 .btn.ghost:hover{border-color:var(--text);background:transparent}
 .meta{color:var(--dim);font-size:16px;letter-spacing:.04em;margin-top:14px}
+.barshot{background:#07080a;border:1px solid var(--line);padding:34px 18px 0}
+.pbar{display:flex;align-items:center;gap:14px;max-width:600px;margin:0 auto 26px;padding:10px 16px;background:#0b0f10;border:1px solid var(--line)}
+.pside{display:grid;justify-items:center;gap:4px;min-width:40px}.pside b{color:var(--red);font-size:21px;line-height:1}
+.pside i{width:0;height:0;border:10px solid transparent}.pside .tl{border-right-color:var(--red);margin-right:10px}.pside .tr{border-left-color:var(--red);margin-left:10px}
+.pmid{flex:1;min-width:0}.ptop{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.ptop span{font-weight:600;font-size:14px;letter-spacing:.06em;color:var(--dim)}.ptop b{font-size:24px;line-height:1;color:var(--green);white-space:nowrap}
+.pseg{display:flex;height:12px;margin:6px 0}.pseg i{display:block}.pmid p{font-size:15px;margin:0;color:var(--text)}
+.cmdbox{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;margin-top:8px;padding:12px 14px;background:#07080a;border:1px solid var(--line)}
+.cmdbox code{white-space:pre-wrap;word-break:break-all;font-size:14px;line-height:1.5;color:var(--text);user-select:all}
+.copy{font:700 14px var(--ui);letter-spacing:.08em;text-transform:uppercase;padding:8px 12px;background:var(--amber);color:#111;border:0;cursor:pointer}
+.copy:hover{background:#ffc75a}
+.why{color:var(--dim);font-size:16px;margin:14px 0 4px}.why b{color:var(--text)}
 
 /* the live board (shaped like the game's tactical panel) */
 .board{background:rgba(10,12,13,.86);border:1px solid var(--line);border-right:3px solid var(--cyan);min-width:0}
@@ -187,7 +199,7 @@ footer .warn{color:var(--text);font-weight:600}
 <!--BODY-->
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#top-of-page"><img src="{{img:icon.png}}" alt="">POINT OF ENTRY</a>
+    <a class="brand" href="#top-of-page"><img src="{{img:icon.png}}" alt="">KILL HOUSE</a>
     <nav aria-label="Sections">
       <a href="#tactical">Tactical view</a>
       <a href="#course">Course</a>
@@ -204,7 +216,7 @@ footer .warn{color:var(--text);font-weight:600}
   <div class="wrap">
     <div class="hero-copy">
       <p class="kicker">CQB fundamentals · Teaching simulator</p>
-      <h1>POINT OF ENTRY</h1>
+      <h1>KILL HOUSE</h1>
       <p class="lede">Clear the room before you walk into it.</p>
       <p class="body">A shoot house with armed threats, hostages and a tactical view that puts numbers on technique: how many degrees of a doorway you have opened, how much of your body the corner shows, and how long you stood in a line of fire.</p>
       <div class="cta">
@@ -236,22 +248,28 @@ footer .warn{color:var(--text);font-weight:600}
 <section class="band" id="tactical">
   <div class="wrap">
     <p class="sign">THE TACTICAL VIEW</p>
-    <h2>Technique, in degrees and centimetres</h2>
-    <p class="intro">Press G and the house shows what you have already seen, what nobody has looked at yet, and what your eyes and gun cover right now. The panel reads the same thing back as numbers that change with every step.</p>
+    <h2>One bar for the doorway in front of you</h2>
+    <p class="intro">Press G and one bar appears at the top of the screen for the doorway you are working. Nothing is painted over the house: no lines on the floor, no panel of numbers. The bar says how much of that doorway you have opened and which way to step to open the rest.</p>
     <div class="split">
-      <figure class="shot">
-        <img src="{{img:tactical.jpg}}" width="1600" height="900" alt="First-person view down a corridor with the tactical panel and minimap on the right; the floor ahead is tinted green where it has been seen.">
-        <figcaption>First person with the tactical view on. Apartment map, entry hall.</figcaption>
+      <figure class="shot barshot">
+        <div class="pbar" role="img" aria-label="The doorway bar: an arrow and 44 degrees on the left, the name Room A door, 116 of 180 degrees, a bar in red, green, cyan, green and red, an arrow and 20 degrees on the right, and the line: step left to open 44 degrees more of this doorway.">
+          <div class="pside"><b>44°</b><i class="tl"></i></div>
+          <div class="pmid">
+            <div class="ptop"><span>ROOM A DOOR</span><b>116° / 180°</b></div>
+            <div class="pseg"><i style="flex:44;background:var(--red)"></i><i style="flex:95;background:var(--green)"></i><i style="flex:13;background:var(--cyan)"></i><i style="flex:8;background:var(--green)"></i><i style="flex:20;background:var(--red)"></i></div>
+            <p>Step left to open 44° more of this doorway.</p>
+          </div>
+          <div class="pside"><b>20°</b><i class="tr"></i></div>
+        </div>
+        <figcaption>The doorway bar, drawn here as it sits at the top of the screen in the game.</figcaption>
       </figure>
       <dl class="reading">
-        <div><dt>Your sector</dt><span class="val c-cyan">70° <span style="color:var(--dim)">/</span> 32°</span>
-          <dd>What eyes and gun cover: 70° at the ready, 32° through the sights. A target outside it has not been identified.</dd></div>
-        <div><dt>Opening: now / cleared</dt><span class="val c-red">42° <span style="color:var(--dim)">/</span> 44°</span>
-          <dd>Every doorway and corner is a 180° fan. The first number is what you see at this instant; the second is what you have cleared so far.</dd></div>
-        <div><dt>Body exposed to the corner</dt><span class="val c-amber">25 cm</span>
-          <dd>Width of torso past the edge. Lean with Q or E toward the open side and the same slice costs you head and gun only.</dd></div>
-        <div><dt>Exposure to uncleared area</dt><span class="val c-red">291°</span>
-          <dd>Degrees around you that open onto floor nobody has checked. Turn your back on it and the coach tells you.</dd></div>
+        <div><dt>Degrees opened</dt><span class="val c-green">116° <span style="color:var(--dim)">/</span> 180°</span>
+          <dd>Every doorway is a 180° fan. The number is how much of it you have already seen into; clear most of it before you step in.</dd></div>
+        <div><dt>The bar</dt><span class="val"><span class="c-red">▮</span><span class="c-green">▮▮▮</span><span class="c-cyan">▮</span><span class="c-green">▮</span><span class="c-red">▮</span></span>
+          <dd>The fan, unrolled. Green is open, cyan is what you see at this instant, red is still closed. It is laid out the way you stand: red on the left opens by stepping left.</dd></div>
+        <div><dt>Which way to step</dt><span class="val c-red">◀ 44° <span style="color:var(--dim)">·</span> 20° ▶</span>
+          <dd>Degrees still closed on each side, an arrow for the side that has some left, and one line under the bar that tells you where to go next.</dd></div>
       </dl>
     </div>
 
@@ -280,7 +298,7 @@ footer .warn{color:var(--text);font-weight:600}
         <li><div><h3><small>Room A, centre door</small>Fatal funnel and near corners</h3><p>Clear what you can from outside, cross the doorway without stopping, check the near corners first.</p></div></li>
         <li><div><h3><small>Room B, corner door</small>Positive identification</h3><p>Armed, or hands up? Confirm what it is and what is behind it before every shot.</p></div></li>
         <li><div><h3><small>Corridor 3</small>Closed door and T-junction</h3><p>Open from the jamb, off the line of fire. Slice both sides of the corridor before you step out.</p></div></li>
-        <li><div><h3><small>Room C</small>Dead space</h3><p>Tall furniture hides floor you cannot see from the door. While any floor is red, the room is not clear.</p></div></li>
+        <li><div><h3><small>Room C</small>Dead space</h3><p>Tall furniture hides floor you cannot see from the door. Until you have moved far enough to see behind it, the room is not clear.</p></div></li>
       </ol>
       <div>
         <figure class="shot">
@@ -343,7 +361,7 @@ footer .warn{color:var(--text);font-weight:600}
       <figure><img src="{{img:map-office.jpg}}" width="960" height="540" alt="Top-down view of the office map"><figcaption><b>OFFICE</b><span>Open-plan floor with low partitions, a corridor and three closed doors.</span></figcaption></figure>
       <figure><img src="{{img:map-warehouse.jpg}}" width="960" height="540" alt="Top-down view of the warehouse map"><figcaption><b>WAREHOUSE</b><span>Big floor with tall shelving rows and dead space, an office, a back corridor and three rooms.</span></figcaption></figure>
       <figure><img src="{{img:map-hallway.jpg}}" width="960" height="540" alt="Top-down view of the hallway map: a long hallway with two rooms on each side and a passage crossing it"><figcaption><b>HALLWAY</b><span>One long hallway, doors facing each other on both sides and a four-way crossing.</span></figcaption></figure>
-      <figure><img src="{{img:map-home.jpg}}" width="960" height="540" alt="Top-down view of the family home: bedrooms and the top of the staircase upstairs, living area with the staircase in its corner in the middle, a yard with a pool below and the street with two gates at the bottom"><figcaption><b>FAMILY HOME</b><span>Two floors drawn side by side and joined by a staircase you walk up and down: bedrooms upstairs, living area and yard below, and the street the intruders come in from. Home defense only.</span></figcaption></figure>
+      <figure><img src="{{img:map-home.jpg}}" width="960" height="540" alt="Top-down view of the family home: bedrooms at the back, a corridor across the middle, the living area, a yard with a pool and the street with two gates at the bottom"><figcaption><b>FAMILY HOME</b><span>One floor, built like a kill house in OSB board: bedrooms with windows at the back, a corridor, the living area, a yard, and the street the intruders come in from. Home defense only.</span></figcaption></figure>
     </div>
   </div>
 </section>
@@ -362,7 +380,7 @@ footer .warn{color:var(--text);font-weight:600}
         <li><div><h3><small>Office</small>Locked door</h3><p>Breaching takes a second and a half and tells everyone inside where you are. Do it from the side of the frame.</p></div></li>
         <li><div><h3><small>Apartment</small>Second look</h3><p>Some armed people give up; some with their hands up are waiting for you to look away.</p></div></li>
         <li><div><h3><small>Office</small>Hostage rescue</h3><p>One hostage, one captor and a clock. Go straight to the problem.</p></div></li>
-        <li><div><h3><small>Family home</small>Home defense</h3><p>Five waves of intruders that come in from the street, through the gates or over the terrace, and hit 95% of their shots. The only way through is a strong point: one way in, a wall at your back, your sights already on the door. Camp too long and a grenade comes in: step out, then take the position back.</p></div></li>
+        <li><div><h3><small>Family home</small>Home defense</h3><p>Five waves of intruders that come in from the street. They stack on the jamb, lean and slice a doorway before they enter, and fall back when hit. A doorway that drops two of them gets a grenade first, and some go round to a window. The walls are OSB and do not stop rounds, theirs or yours. Hold one spot and you lose it: shoot, move, reload between waves.</p></div></li>
         <li><div><h3><small>Warehouse · very hard</small>Walker</h3><p>A walking tank with an infantry escort. Rounds bounce off its front plate, and one hit from its cannon ends the run: break its line of sight and flank it.</p></div></li>
       </ol>
       <div>
@@ -372,7 +390,7 @@ footer .warn{color:var(--text);font-weight:600}
         </figure>
         <ul class="notes">
           <li><b>Three difficulty levels</b> for the course, the free runs and the scenarios; the walker stage has its own, above Hard.</li>
-          <li><b>Threats that move.</b> Intruders and roaming threats find their own way through the building, stairs included.</li>
+          <li><b>Threats that think.</b> Intruders and roaming threats find their own way through the building, slice a doorway before entering, flinch when surprised and fall back to cover when hit.</li>
           <li><b>Rifles and grenades.</b> Threats carry short rifles and fire in bursts; stand still, and one that knows where you are but has no shot throws a grenade.</li>
           <li><b>Ranking</b> for the tutorial, Mission 2, every free-run map and every scenario.</li>
         </ul>
@@ -412,25 +430,29 @@ footer .warn{color:var(--text);font-weight:600}
 <section class="band" id="download">
   <div class="wrap">
     <p class="sign">GET IT</p>
-    <h2>Download for Mac</h2>
+    <h2>Install on Mac</h2>
     <div class="get">
       <ol class="steps">
-        <li><div><b>Download and unzip.</b><span>PointOfEntry-mac.zip, {{size}}. You get one app: Point of Entry.</span></div></li>
-        <li><div><b>Open it once.</b><span>The app is not signed with an Apple developer certificate, so macOS stops the first launch.</span></div></li>
-        <li><div><b>Allow it.</b><span>On macOS 15 or later: System Settings, Privacy &amp; Security, then Open Anyway. On earlier versions: right-click the app and choose Open.</span></div></li>
+        <li><div><b>Open Terminal.</b><span>Press Command and Space, type Terminal, press Return.</span></div></li>
+        <li><div><b>Paste this line and press Return.</b>
+          <span class="cmdbox"><code id="cmd">curl -L {{repo}}/releases/latest/download/KillHouse-mac.zip -o /tmp/KillHouse.zip &amp;&amp; ditto -x -k /tmp/KillHouse.zip ~/Applications &amp;&amp; open ~/Applications/"Kill House.app"</code>
+          <button class="copy" type="button" id="copy-cmd">Copy</button></span></div></li>
+        <li><div><b>That is all.</b><span>The game is now in the Applications folder inside your home folder, and it opens. To play again, open Kill House from there.</span></div></li>
         <li><div><b>Start with the tutorial.</b><span>The six lessons teach every control as you go.</span></div></li>
       </ol>
       <div class="getbox">
-        <h3>Point of Entry {{version}}</h3>
+        <h3>Kill House {{version}}</h3>
         <ul>
           <li>Mac with Apple silicon (M1 or later)</li>
           <li>Keyboard and trackpad or mouse</li>
           <li>Free. Single player, no account, works offline</li>
         </ul>
+        <p class="why"><b>Why a command?</b> Kill House is not signed with a paid Apple developer certificate, so macOS refuses to open the app when it is downloaded with a browser. Fetched this way it opens normally. The line does three things you can read: downloads the zip from GitHub, unzips it, opens the app.</p>
         <div class="cta">
-          <a class="btn" href="{{download}}">Download · {{size}}</a>
+          <a class="btn ghost" href="{{download}}">Zip · {{size}}</a>
           <a class="btn ghost" href="{{repo}}/releases">All versions</a>
         </div>
+        <p class="meta">Downloaded the zip with a browser and macOS will not open it? In Terminal type <code>xattr -cr</code> and a space, drag the app into the window, press Return.</p>
         <p class="meta">Prefer to build it? Rust and one command: <code>cargo run --release</code></p>
       </div>
     </div>
@@ -592,5 +614,14 @@ footer .warn{color:var(--text);font-weight:600}
   document.addEventListener('visibilitychange',sync);
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){if(!running)draw()});
   sync();
+})();
+
+(function(){
+  var b=document.getElementById('copy-cmd'),c=document.getElementById('cmd'); if(!b||!c) return;
+  b.addEventListener('click',function(){
+    var t=c.textContent,done=function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1800)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){sel()})}else{sel()}
+    function sel(){var r=document.createRange();r.selectNodeContents(c);var g=window.getSelection();g.removeAllRanges();g.addRange(r);try{document.execCommand('copy');done()}catch(e){}}
+  });
 })();
 </script>

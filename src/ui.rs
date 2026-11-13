@@ -28,7 +28,7 @@ pub struct Diagrams(pub Vec<Handle<Image>>);
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
-    AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8),
+    AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieArrowL, PieArrowR,
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
     Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound, DiffBtn(u8),
     Scenarios, Ranking, ScnBest(u8), RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
@@ -62,7 +62,7 @@ fn screen(tag: Tag) -> (Node, BackgroundColor, Tag, GlobalZIndex) {
      BackgroundColor(SCREEN), tag, GlobalZIndex(5))
 }
 
-pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut images: ResMut<Assets<Image>>, mini: Res<crate::player::MiniTex>, portrait: Res<crate::operator::PortraitTex>) {
+pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut images: ResMut<Assets<Image>>, mini: Res<crate::player::MiniTex>, portrait: Res<crate::operator::PortraitTex>, bar: Res<crate::tactical::PieBarTex>) {
     let f = UiFonts {
         bold: fonts.add(Font::try_from_bytes(art::FONT_BOLD.to_vec()).expect("fonte")),
         semi: fonts.add(Font::try_from_bytes(art::FONT_SEMI.to_vec()).expect("fonte")),
@@ -88,24 +88,25 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             BackgroundColor(PANEL), BorderColor(CYAN), Tag::TacPanel)).with_children(|p| {
             p.spawn(txt("TACTICAL VIEW", &f.semi, 13.0, CYAN));
             let mut row = |p: &mut ChildSpawnerCommands, label: &str, ltag: Option<Tag>, vtag: Tag, note: Option<Tag>| {
-                p.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::FlexEnd, ..default() }).with_children(|r| {
-                    r.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|c| {
-                        let mut e = c.spawn(txt(label, &f.body, 12.5, MUTE));
+                p.spawn((Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, min_height: Val::Px(38.0),
+                    padding: UiRect::top(Val::Px(4.0)), border: UiRect::top(Val::Px(1.0)), ..default() }, BorderColor(BONE.with_alpha(0.10)))).with_children(|r| {
+                    r.spawn(Node { flex_direction: FlexDirection::Column, flex_shrink: 1.0, ..default() }).with_children(|c| {
+                        let mut e = c.spawn((txt(label, &f.semi, 13.0, BONE.with_alpha(0.82)), TextLayout::new_with_no_wrap()));
                         if let Some(t) = ltag { e.insert(t); }
                         if let Some(t) = note { c.spawn((txt("", &f.body, 11.0, MUTE), t)); }
                     });
-                    r.spawn((txt("0", &f.bold, 25.0, BONE), TextLayout::new_with_no_wrap(), Node { flex_shrink: 0.0, margin: UiRect::left(Val::Px(8.0)), ..default() }, vtag));
+                    r.spawn((txt("0", &f.bold, 23.0, BONE), TextLayout::new_with_no_wrap(), Node { flex_shrink: 0.0, margin: UiRect::left(Val::Px(8.0)), ..default() }, vtag));
                 });
             };
-            row(p, "YOUR SECTOR (EYES AND GUN)", None, Tag::TacFov, Some(Tag::TacFovNote));
-            row(p, "OPENING: NOW / CLEARED (OF 180°)", None, Tag::TacCorner, Some(Tag::TacCornerNote));
-            row(p, "BODY EXPOSED TO THE CORNER", None, Tag::TacBody, None);
+            row(p, "YOUR SECTOR", None, Tag::TacFov, Some(Tag::TacFovNote));
+            row(p, "DOORWAY · NOW / CLEARED", None, Tag::TacCorner, Some(Tag::TacCornerNote));
+            row(p, "BODY PAST THE CORNER", None, Tag::TacBody, None);
             row(p, "ZONE", Some(Tag::TacZoneName), Tag::TacZone, None);
-            row(p, "EXPOSURE TO UNCLEARED AREA", None, Tag::TacExpo, None);
+            row(p, "EXPOSED TO UNCLEARED AREA", None, Tag::TacExpo, None);
         });
-        h.spawn((Node { width: Val::Px(320.0), height: Val::Px(320.0), border: UiRect::all(Val::Px(1.0)), display: Display::None, ..default() }, ImageNode::new(mini.0.clone()), BorderColor(CYAN.with_alpha(0.6)), Tag::MiniFrame));
-        h.spawn((Node { width: Val::Px(320.0), padding: UiRect::all(Val::Px(6.0)), column_gap: Val::Px(10.0), flex_wrap: FlexWrap::Wrap, display: Display::None, ..default() }, BackgroundColor(PANEL), Tag::Legend)).with_children(|l| {
-            for (c, s) in [(CYAN, "covering now"), (GOOD, "seen"), (BAD, "not clear"), (AMBER, "corner limit")] {
+        h.spawn((Node { width: Val::Px(320.0), height: Val::Px(320.0), border: UiRect::all(Val::Px(1.0)), display: Display::None, ..default() }, ImageNode::new(mini.0.clone()), BorderColor(BONE.with_alpha(0.18)), Tag::MiniFrame));
+        h.spawn((Node { width: Val::Px(320.0), padding: UiRect::all(Val::Px(6.0)), column_gap: Val::Px(12.0), justify_content: JustifyContent::SpaceBetween, display: Display::None, ..default() }, BackgroundColor(PANEL), Tag::Legend)).with_children(|l| {
+            for (c, s) in [(CYAN, "covering now"), (GOOD, "seen"), (BAD, "not seen yet"), (AMBER, "corner limit")] {
                 l.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(4.0), ..default() }).with_children(|i| {
                     i.spawn((Node { width: Val::Px(9.0), height: Val::Px(9.0), ..default() }, BackgroundColor(c)));
                     i.spawn(txt(s, &f.body, 11.0, MUTE));
@@ -189,6 +190,31 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             });
         });
         for k in 0..7u8 { h.spawn((txt("", &f.bold, 20.0, BAD), Node { display: Display::None, ..abs() }, TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) }, Tag::Label(k))); }
+        // barra da porta em foco, fixa no alto da tela: a única leitura de ângulos. Nome da abertura e graus já fatiados em
+        // cima, a barra das 180 fatias no meio (verde = já aberta, ciano = vendo agora, vermelho = falta), uma frase embaixo
+        // e, nas pontas, quantos graus faltam de cada lado com a seta de para onde andar
+        let tri = |images: &mut Assets<Image>, left: bool| images.add(art::svg_image(&format!("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><polygon points='{}' fill='#ec5a4e'/></svg>", if left { "4,16 26,3 26,29" } else { "28,16 6,3 6,29" }), 64, 64, false));
+        let (tri_l, tri_r) = (tri(&mut images, true), tri(&mut images, false));
+        h.spawn((Node { width: Val::Percent(100.0), top: Val::Px(14.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::PieBar)).with_children(|c| {
+            c.spawn((Node { align_items: AlignItems::Center, column_gap: Val::Px(14.0), padding: UiRect::axes(Val::Px(16.0), Val::Px(9.0)), ..default() }, BackgroundColor(PANEL))).with_children(|r| {
+                let side = |r: &mut ChildSpawnerCommands, num: Tag, arrow: Tag, img: Handle<Image>| {
+                    r.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, width: Val::Px(44.0), row_gap: Val::Px(2.0), ..default() }).with_children(|s| {
+                        s.spawn((txt("", &f.bold, 21.0, BAD), TextLayout::new_with_no_wrap(), num));
+                        s.spawn((Node { width: Val::Px(20.0), height: Val::Px(20.0), ..default() }, ImageNode::new(img), arrow));
+                    });
+                };
+                side(r, Tag::PieLeft, Tag::PieArrowL, tri_l);
+                r.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(430.0), row_gap: Val::Px(5.0), ..default() }).with_children(|m| {
+                    m.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::FlexEnd, ..default() }).with_children(|t| {
+                        t.spawn((txt("", &f.semi, 14.0, BONE.with_alpha(0.8)), TextLayout::new_with_no_wrap(), Tag::PieName));
+                        t.spawn((txt("", &f.bold, 24.0, BONE), TextLayout::new_with_no_wrap(), Tag::PieDeg));
+                    });
+                    m.spawn((Node { width: Val::Px(430.0), height: Val::Px(12.0), ..default() }, ImageNode::new(bar.0.clone())));
+                    m.spawn((txt("", &f.body, 15.0, BONE), TextLayout::new_with_no_wrap(), Tag::PieHint));
+                });
+                side(r, Tag::PieRight, Tag::PieArrowR, tri_r);
+            });
+        });
     });
 
     /* ---------- telas ---------- */
@@ -239,7 +265,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         s.spawn((txt("A teaching tool for fundamentals. Real technique is learned with a qualified instructor, as a team, in a controlled environment.", &f.body, 13.0, MUTE), Node { max_width: Val::Px(640.0), ..default() }));
     });
     commands.spawn(screen(Tag::Credits)).with_children(|s| {
-        s.spawn(txt("POINT OF ENTRY", &f.semi, 14.0, AMBER));
+        s.spawn(txt("KILL HOUSE", &f.semi, 14.0, AMBER));
         s.spawn(txt("CREDITS", &f.bold, 54.0, BONE));
         s.spawn((txt(CREDITS, &f.body, 15.5, BONE), Node { max_width: Val::Px(980.0), ..default() }));
         s.spawn(Node::default()).with_children(|b| button(b, &f, "BACK · ESC", Act::Back, true));
@@ -309,7 +335,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     });
     // cenários: cada linha é um botão que começa o cenário, com o que ele treina e a melhor marca do jogador
     commands.spawn(screen(Tag::Scenarios)).with_children(|s| {
-        s.spawn(txt("POINT OF ENTRY", &f.semi, 14.0, AMBER));
+        s.spawn(txt("KILL HOUSE", &f.semi, 14.0, AMBER));
         s.spawn(txt("SCENARIOS", &f.bold, 54.0, BONE));
         s.spawn((txt("Each scenario drills one tactic. They use the difficulty chosen on the menu; scores and times go to the ranking.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
         s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(7.0), max_width: Val::Px(1180.0), ..default() }).with_children(|l| {
@@ -328,7 +354,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     });
     // ranking: as três melhores partidas de cada tabela (mais pontos primeiro; no empate, menos tempo)
     commands.spawn(screen(Tag::Ranking)).with_children(|s| {
-        s.spawn(txt("POINT OF ENTRY", &f.semi, 14.0, AMBER));
+        s.spawn(txt("KILL HOUSE", &f.semi, 14.0, AMBER));
         s.spawn(txt("RANKING", &f.bold, 54.0, BONE));
         s.spawn((txt("Best three runs on each board: more points first, then less time. Stored on this computer.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
         s.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), max_width: Val::Px(1240.0), ..default() }, Tag::RankList));
@@ -510,15 +536,9 @@ pub fn update_ui(
     let active_cam = cams.iter().find(|(c, _)| c.is_active && c.order == 0);
     let project = |pos: Vec3| -> Option<Vec2> { active_cam.and_then(|(c, g)| c.world_to_viewport(g, pos).ok()).map(|v| v / scale) };
     let wp = if play && !game.demo { waypoint(&ctx) } else { None };
-    // rótulos das aberturas em foco: graus já fatiados de 180
-    let mut pies: Vec<(usize, Vec2)> = Vec::new();
-    if game.tac && play {
-        for (i, o) in openings().iter().enumerate() {
-            let near = p.eye2().distance(o.mid()) < 8.0 && (p.eye2() - o.mid()).dot(o.n) < 0.0;
-            if tac.pct[zone_index(o.zone)] < 0.95 && near && o.door.map_or(true, |d| level.doors[d].open > 0.5) { pies.push((i, o.mid() + o.n * 0.9)); }
-        }
-        pies.truncate(if bird { 4 } else { 2 });
-    }
+    // sem rótulos nem medidores presos às portas: a leitura de ângulos é só a barra do alto
+    let pies: Vec<(usize, Vec2)> = Vec::new();
+    let pie_on = game.tac && play && tac.pie_active.is_some();
 
     // operador 3D à direita do menu e da avaliação: só aparece se sobrar largura para o texto ao lado dele
     let portrait_menu = uw >= 72.0 + 702.0 + PORTRAIT_PAD;
@@ -561,8 +581,10 @@ pub fn update_ui(
             Tag::Pause => show(&mut node, game.mode == Mode::Pause),
             Tag::Debrief => show(&mut node, game.mode == Mode::Debrief),
             Tag::Portrait => show(&mut node, (game.mode == Mode::Menu && portrait_menu) || (game.mode == Mode::Debrief && portrait_db)),
-            Tag::TacPanel => show(&mut node, game.tac),
-            Tag::MiniFrame | Tag::Legend => show(&mut node, game.tac && !bird),
+            // o painel de medidas e a legenda de cores saíram: ficam a barra da porta em foco e o minimapa (só com o radar)
+            Tag::TacPanel | Tag::Legend => show(&mut node, false),
+            Tag::MiniFrame => show(&mut node, game.tac && !bird),
+            Tag::PieBar => { show(&mut node, pie_on); let (l, r) = if uw < 1336.0 { (Val::Px(408.0), Val::Px(348.0)) } else { (Val::Px(0.0), Val::Px(0.0)) }; if node.padding.left != l { node.padding.left = l; node.padding.right = r; } }
             Tag::Prompt => show(&mut node, play && (game.near_door.is_some() || game.breach.is_some())),
             Tag::Lock => show(&mut node, play && (game.lock > 0.03 || game.nade.map_or(false, |(q, _)| q.distance(p.pos) < 9.0))),
             Tag::Replay => show(&mut node, game.mode == Mode::Replay),
@@ -614,13 +636,10 @@ pub fn update_ui(
                 let mut pos: Option<Vec2> = None;
                 if k < pies.len() {
                     let q = pies[k].1;
-                    pos = project(Vec3::new(q.x, if bird { 0.0 } else { 1.75 }, q.y));
+                    if bird { pos = project(Vec3::new(q.x, 0.0, q.y)); }
                 } else if k == 5 && play && !game.free && game.route_visible() {
                     let pts = ideal_points(game.lesson);
                     if let Some((q, _)) = pts.get(game.guide_i) { pos = project(Vec3::new(q.x, if bird { 0.0 } else { 0.3 }, q.y)); }
-                } else if k == 6 && bird && game.tac && play {
-                    let f = p.fwd();
-                    pos = project(Vec3::new(p.eye.x + f.x * 1.6, 0.0, p.eye.z + f.y * 1.6));
                 }
                 match pos { Some(v) if v.x > 0.0 && v.y > 0.0 && v.x < uw && v.y < uh => { show(&mut node, true); node.left = Val::Px(v.x + 6.0); node.top = Val::Px(v.y - 12.0); } _ => show(&mut node, false) }
             }
@@ -781,6 +800,11 @@ pub fn update_ui(
     let lesson = &LESSONS[game.lesson.min(5)];
     for (tag, mut im) in imgs.iter_mut() {
         if *tag == Tag::CardImg && game.mode == Mode::Card { let h = &diagrams.0[game.lesson.min(5)]; if im.image != *h { im.image = h.clone(); } }
+        // seta da barra da porta: só aparece do lado em que ainda falta abrir
+        if *tag == Tag::PieArrowL || *tag == Tag::PieArrowR {
+            let a = if (if *tag == Tag::PieArrowL { tac.bar_left } else { tac.bar_right }) > 0 { 1.0 } else { 0.0 };
+            if im.color.alpha() != a { im.color = Color::WHITE.with_alpha(a); }
+        }
     }
     let score_grade = || {
         let sc = scenario::final_score(&game, &targets);
@@ -881,6 +905,15 @@ pub fn update_ui(
                 } else if k == 5 {
                     if let Some((q, _)) = ideal_points(game.lesson).get(game.guide_i) { set(&mut t, &format!("{:.1} m", q.distance(p.pos))); col.0 = AMBER; }
                 } else if k == 6 { set(&mut t, &format!("{}°", tac.hfov.to_degrees().round() as i32)); col.0 = CYAN; }
+            }
+            Tag::PieName => if let Some(i) = tac.pie_active { set(&mut t, &openings()[i].name.to_uppercase()); },
+            Tag::PieDeg => if let Some(i) = tac.pie_active { let d = tac.pie_deg(i); set(&mut t, &format!("{}° / 180°", d.round() as i32)); col.0 = if d >= 140.0 { GOOD } else if d >= 90.0 { AMBER } else { BONE }; },
+            Tag::PieLeft => set(&mut t, &if tac.bar_left > 0 { format!("{}°", tac.bar_left) } else { String::new() }),
+            Tag::PieRight => set(&mut t, &if tac.bar_right > 0 { format!("{}°", tac.bar_right) } else { String::new() }),
+            Tag::PieHint => {
+                let (l, r) = (tac.bar_left, tac.bar_right);
+                set(&mut t, &if l == 0 && r == 0 { "This doorway is fully sliced.".to_string() }
+                    else if l >= r { format!("Step left to open {}° more of this doorway.", l) } else { format!("Step right to open {}° more of this doorway.", r) });
             }
             Tag::DbGrade if game.mode == Mode::Debrief => { let (_, (g, c)) = score_grade(); set(&mut t, g); col.0 = c; }
             Tag::DbScore if game.mode == Mode::Debrief => { let (sc, _) = score_grade(); set(&mut t, &format!("{} POINTS  ·  {}  ·  {}", sc, scenario::fmt_time(game.time), diff_label(scenario::run_diff(&game)))); }

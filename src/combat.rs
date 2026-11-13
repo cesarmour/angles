@@ -81,7 +81,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         let mut t = TargetState {
             def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
             fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
-            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false, rise: 0.0, leave: 0.0, via: 0,
+            goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false, rise: 0.0, leave: 0.0, via: 0, ai: Brain::default(),
         };
         place_target(level, &mut t);
         list.push(t);
@@ -140,7 +140,7 @@ pub fn place_target(level: &Level, t: &mut TargetState) {
     t.fall_max = if sp >= top + 0.1 { FRAC_PI_2 - 0.03 } else { ((sp - 0.06) / top).clamp(0.1, 1.0).asin() };
 }
 
-struct Hit { t: f32, point: Vec3, normal: Vec3, target: Option<(usize, u8)>, through: Vec<(usize, f32, Vec3)>, metal: bool }
+struct Hit { t: f32, point: Vec3, normal: Vec3, target: Option<(usize, u8)>, through: Vec<(usize, f32, Vec3)>, metal: bool, wall: bool }
 
 fn ray_aabb(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<(f32, Vec3)> {
     let (mut tmin, mut tmax, mut n) = (0.0f32, f32::INFINITY, Vec3::ZERO);
@@ -160,17 +160,17 @@ fn raycast(level: &Level, targets: &Targets, o: Vec3, d: Vec3) -> Option<Hit> {
     let mut best: Option<Hit> = None;
     let mut through: Vec<(usize, f32, Vec3)> = Vec::new();
     let mut consider = |h: Hit| { if h.t > 0.0 && best.as_ref().map_or(true, |b| h.t < b.t) { best = Some(h); } };
-    if d.y < -1e-5 { let t = -o.y / d.y; consider(Hit { t, point: o + d * t, normal: Vec3::Y, target: None, through: Vec::new(), metal: false }); }
-    if d.y > 1e-5 { let t = (WALL_H - o.y) / d.y; consider(Hit { t, point: o + d * t, normal: Vec3::NEG_Y, target: None, through: Vec::new(), metal: false }); }
+    if d.y < -1e-5 { let t = -o.y / d.y; consider(Hit { t, point: o + d * t, normal: Vec3::Y, target: None, through: Vec::new(), metal: false, wall: false }); }
+    if d.y > 1e-5 { let t = (WALL_H - o.y) / d.y; consider(Hit { t, point: o + d * t, normal: Vec3::NEG_Y, target: None, through: Vec::new(), metal: false, wall: false }); }
     let nw = level.walls.len();
     for (si, b) in level.solids.iter().enumerate().filter(|(_, b)| b.on) {
         if let Some((t, n)) = ray_aabb(o, d, Vec3::new(b.x1, 0.0, b.z1), Vec3::new(b.x2, b.h, b.z2)) {
             let metal = b.kind == SolidKind::Door || (si >= nw && si < nw + level.props.len() && matches!(level.props[si - nw].kind, PropKind::Barrel | PropKind::Locker | PropKind::Shelf | PropKind::Table));
-            consider(Hit { t, point: o + d * t, normal: n, target: None, through: Vec::new(), metal });
+            consider(Hit { t, point: o + d * t, normal: n, target: None, through: Vec::new(), metal, wall: si < nw });
         }
     }
     for b in &level.lintels {
-        if let Some((t, n)) = ray_aabb(o, d, Vec3::new(b.x1, DOOR_H, b.z1), Vec3::new(b.x2, WALL_H, b.z2)) { consider(Hit { t, point: o + d * t, normal: n, target: None, through: Vec::new(), metal: false }); }
+        if let Some((t, n)) = ray_aabb(o, d, Vec3::new(b.x1, DOOR_H, b.z1), Vec3::new(b.x2, WALL_H, b.z2)) { consider(Hit { t, point: o + d * t, normal: n, target: None, through: Vec::new(), metal: false, wall: true }); }
     }
     for (i, tg) in targets.list.iter().enumerate() {
         if !tg.alive { continue; }
@@ -186,11 +186,12 @@ fn raycast(level: &Level, targets: &Targets, o: Vec3, d: Vec3) -> Option<Hit> {
             let t = (base - o).dot(n) / den;
             if t <= 0.0 { continue; }
             let q = o + d * t;
-            let lx = ((q.x - base.x) * hn.y - (q.z - base.z) * hn.x).abs();
-            // o mech é mais largo e mais alto que uma pessoa
+            // corpo inclinado: a área de acerto acompanha (o pé fica no lugar); nos degraus, a altura conta a partir do piso dele
+            let (lo, floor) = (tg.lean_at(q.y), crate::map::ramp_h(tg.def.x, tg.def.z));
+            let lx = ((q.x - base.x - lo.x) * hn.y - (q.z - base.z - lo.y) * hn.x).abs();
             // o mech é mais largo e mais alto que uma pessoa, e comprido: visto de lado, a área de acerto cobre do focinho à cauda
-            let zone = if is_mech(&tg.def) { if lx <= 0.45 + 0.6 * (1.0 - hn.dot(tg.fwd).abs()) && (0.05..=2.0).contains(&q.y) { 2 } else { 0 } } else { fig_zone(lx, q.y) };
-            if zone != 0 { consider(Hit { t, point: q, normal: n, target: Some((i, zone)), through: Vec::new(), metal: false }); }
+            let zone = if is_mech(&tg.def) { if lx <= 0.45 + 0.6 * (1.0 - hn.dot(tg.fwd).abs()) && (0.05..=2.0).contains(&q.y) { 2 } else { 0 } } else { fig_zone(lx, q.y - floor) };
+            if zone != 0 { consider(Hit { t, point: q, normal: n, target: Some((i, zone)), through: Vec::new(), metal: false, wall: false }); }
             continue;
         }
         let n = Vec3::new(tg.fwd.x, 0.0, tg.fwd.y);
@@ -205,7 +206,7 @@ fn raycast(level: &Level, targets: &Targets, o: Vec3, d: Vec3) -> Option<Hit> {
         if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) { continue; }
         let zone = art::target_zone(u, v);
         if zone == 0 { continue; }
-        consider(Hit { t, point: q, normal: if den < 0.0 { n } else { -n }, target: Some((i, zone)), through: Vec::new(), metal: false });
+        consider(Hit { t, point: q, normal: if den < 0.0 { n } else { -n }, target: Some((i, zone)), through: Vec::new(), metal: false, wall: false });
     }
     if let Some(b) = best.as_mut() { b.through = through.into_iter().filter(|x| x.1 < b.t).collect(); }
     best
@@ -358,7 +359,23 @@ pub fn combat(
             dir = (dir + right * ra.cos() * rr + up * ra.sin() * rr).normalize();
             let o = if bird { Vec3::new(p.eye.x, 1.2, p.eye.z) } else { p.eye };
             let mut end = o + dir * 60.0;
-            if let Some(h) = raycast(&level, &targets, o, dir) {
+            let mut shot_at: Option<(usize, bool)> = None;
+            let mut hit = raycast(&level, &targets, o, dir);
+            // OSB não para projétil: se o tiro pega numa parede da kill house e há alguém logo atrás dela, atravessa (uma parede só)
+            if soft_walls() {
+                if let Some((entry, n)) = hit.as_ref().filter(|h| h.wall).map(|h| (h.point, h.normal)) {
+                    if let Some(h2) = raycast(&level, &targets, entry + dir * 0.23, dir).filter(|h2| h2.target.is_some() && h2.t < 8.0) {
+                        let rot = Quat::from_rotation_arc(Vec3::Z, n) * Quat::from_rotation_z(rand01(game.time * 5.1) * TAU);
+                        let e = commands.spawn((Mesh3d(fx.quad.clone()), MeshMaterial3d(fx.decal_mat.clone()), Transform::from_translation(entry + n * 0.004).with_rotation(rot).with_scale(Vec3::splat(0.15)), NotShadowCaster, Decal)).id();
+                        fx.decals.push_back(e);
+                        chips(&mut commands, &fx, &mut smats, entry, n, game.time);
+                        puff(&mut commands, &fx, &mut smats, entry + dir * 0.22, dir, 3, Color::srgb(0.5, 0.42, 0.3), 1.6, 0.14);
+                        sfx.write(Sfx::Impact(entry));
+                        hit = Some(h2);
+                    }
+                }
+            }
+            if let Some(h) = hit {
                 end = h.point;
                 for (ti, _, q) in h.through.iter() { let t = &mut targets.list[*ti]; paper_mark(&mut commands, &fx, t, *q, game.time + 3.0); t.swv -= 1.2; sfx.write(Sfx::Paper(*q)); }
                 if let Some((ti, zone)) = h.target {
@@ -389,6 +406,7 @@ pub fn combat(
                         if mech && !frontal { game.ui_dirty = true; }
                         if t.hits >= if mech { crate::scenario::MECH_HP } else { 2 } {
                             t.alive = false; t.fall_v = 1.0; game.stats.threats_down += 1;
+                            if t.hunter { game.fell.push(Vec2::new(t.def.x, t.def.z)); }
                             if p.zone != zone_index(t.def.zone) { game.outside_kills += 1; }
                             if t.hunter && t.first_facing != Some(false) && crate::scenario::is(&game, crate::scenario::Kind::Rear) { game.scn_b += 1; }
                             if !t.def.passive && !game.demo {
@@ -399,6 +417,7 @@ pub fn combat(
                             // derrubada antes de o contato ser avaliado: quem atirou viu primeiro
                             if t.first_facing.is_none() { t.first_facing = Some(true); }
                         }
+                        shot_at = Some((ti, !t.alive));
                     }
                 } else {
                     let rot = Quat::from_rotation_arc(Vec3::Z, h.normal) * Quat::from_rotation_z(rand01(game.time * 5.1) * TAU);
@@ -412,6 +431,21 @@ pub fn combat(
                         chips(&mut commands, &fx, &mut smats, h.point, h.normal, game.time);
                     }
                     sfx.write(if h.metal { Sfx::Metal(h.point) } else { Sfx::Impact(h.point) });
+                }
+            }
+            // quem caça o operador reage ao disparo: tiro que passa rente assusta, tiro que acerta sem derrubar faz recuar e
+            // ver um parceiro cair abala quem está perto
+            {
+                let seg = end - o;
+                let len2 = seg.length_squared().max(1e-6);
+                let fallen = shot_at.filter(|h| h.1).map(|h| Vec2::new(targets.list[h.0].def.x, targets.list[h.0].def.z));
+                for (j, t) in targets.list.iter_mut().enumerate() {
+                    if !t.hunter || !t.alive || t.off { continue; }
+                    if let Some((hi, killed)) = shot_at { if hi == j { if !killed { t.ai.scare = 3.0; } continue; } }
+                    let c = Vec3::new(t.def.x, 1.2, t.def.z);
+                    let k = ((c - o).dot(seg) / len2).clamp(0.0, 1.0);
+                    if (o + seg * k - c).length() < 0.7 { t.ai.scare = t.ai.scare.max(1.0); }
+                    if let Some(f) = fallen { if f.distance(Vec2::new(t.def.x, t.def.z)) < 8.0 && level.los(f.x, f.y, 1.2, t.def.x, t.def.z, 1.4) { t.ai.scare = t.ai.scare.max(2.0); } }
                 }
             }
             let mz = if bird { p.eye + dir * 0.5 - Vec3::Y * 0.1 } else { muzzle.single().map(|g| g.translation()).unwrap_or(o + dir * 0.8) };
@@ -493,11 +527,16 @@ pub fn combat(
         if t.mind == MIND_YIELDED || t.mind == MIND_FAKE { t.engaged = false; t.react = 0.0; continue; }
         // trocando de andar (subindo a escada ou a escada de mão): está com as mãos ocupadas, não atira
         if t.rise > 0.0 || t.leave > 0.0 { t.engaged = false; t.react = 0.0; continue; }
+        // recuando para um abrigo: corre, não atira
+        if t.ai.tactic == TAC_RETREAT { t.engaged = false; t.react = 0.0; continue; }
         // invasor da defesa da casa: mais rápido que qualquer nível de dificuldade
         let (react_t, follow_t) = if defense && t.hunter { (crate::scenario::INV_REACT, crate::scenario::INV_FOLLOW) } else { (react_t, follow_t) };
         // mech: sempre em alerta, gira devagar e o canhão demora a disparar
         let mech = is_mech(&t.def);
         let (react_t, follow_t, turn) = if mech { (crate::scenario::MECH_LOCK, 0.9, crate::scenario::MECH_TURN) } else { (react_t, follow_t, TURN) };
+        // inclinado na quina, espiando: demora um pouco mais para reagir e acerta menos (só a cabeça e a arma dele estão para fora)
+        let leaning = t.ai.lean.abs() > 0.1;
+        let (react_t, follow_t) = if leaning { ((react_t * 2.2).max(0.95), (follow_t * 2.2).max(0.6)) } else { (react_t, follow_t) };
         if mech { t.alert = ALERT_SECS; }
         let tp = Vec2::new(t.def.x, t.def.z);
         let dv = p.pos - tp;
@@ -517,8 +556,10 @@ pub fn combat(
         // linha de tiro: para o corpo inteiro, ou só para a cabeça que aparece na quina (mais difícil de ver e de acertar)
         let (mut rate, mut body) = (0.0, false);
         if d < 20.0 && !noreact && !dying && game.down_t <= 0.0 {
-            if level.los(t.def.x, t.def.z, 1.4, p.pos.x, p.pos.y, head - 0.25) { rate = 1.0; body = true; }
-            else if level.los(t.def.x, t.def.z, 1.4, p.eye.x, p.eye.z, p.eye.y) { rate = 0.6; }
+            // quem está inclinado na quina vê (e atira) de onde a cabeça dele está, não do pé
+            let eye = tp + t.lean_at(1.4);
+            if level.los(eye.x, eye.y, 1.4, p.pos.x, p.pos.y, head - 0.25) { rate = 1.0; body = true; }
+            else if level.los(eye.x, eye.y, 1.4, p.eye.x, p.eye.z, p.eye.y) { rate = 0.6; }
         }
         if rate > 0.0 {
             if dir.dot(t.fwd) > 0.15 { t.alert = ALERT_SECS; }
@@ -530,7 +571,12 @@ pub fn combat(
         } else { t.notice = (t.notice - dt * 0.25).max(0.0); }
         // papelão não gira nem ouve: só conta quem está na frente dele
         if easy { t.alert = 0.0; t.notice = 0.0; }
+        let was = t.engaged;
         t.engaged = rate > 0.0 && if easy { dir.dot(t.fwd) > 0.15 } else { t.alert > 0.0 };
+        // susto: quem vinha andando de arma baixa e dá de cara com o operador a poucos metros leva um tranco antes de reagir
+        // (quem já vinha fatiando a porta, de arma apontada, não)
+        t.ai.startle_cd = (t.ai.startle_cd - dt).max(0.0);
+        if t.engaged && !was && t.hunter && !mech && !t.ai.ready && d < 6.0 && t.ai.startle_cd <= 0.0 { t.ai.flinch = 0.38; t.ai.startle_cd = 6.0; t.react = 0.0; }
         if t.engaged {
             exposed = true;
             if !t.contact { t.contact = true; t.contact_t = game.time; areas.push(t.def.zone); areas.push(zones()[p.zone].id); }
@@ -540,7 +586,7 @@ pub fn combat(
             let off = ang_diff(dir.x.atan2(dir.y), cur);
             let step = off.clamp(-turn * dt, turn * dt);
             t.fwd = Vec2::new((cur + step).sin(), (cur + step).cos());
-            if easy { t.fwd = Vec2::new(cur.sin(), cur.cos()); t.react += dt * rate; } else if (off - step).abs() < 0.3 { t.react += dt * rate; }
+            if easy { t.fwd = Vec2::new(cur.sin(), cur.cos()); t.react += dt * rate; } else if (off - step).abs() < 0.3 && t.ai.flinch <= 0.0 { t.react += dt * rate; }
             if mech { game.lock = game.lock.max((t.react / react_t).clamp(0.0, 1.0)); }
             if t.react >= react_t {
                 t.react = react_t - follow_t;
@@ -562,7 +608,7 @@ pub fn combat(
                 // boca do fuzil na pose de mira: 0,69 m à frente do corpo, um pouco à direita dele, a 1,38 m do chão
                 // (medido na conversão do boneco); o canhão do mech fica mais alto
                 let flat = Vec3::new(aim.x - t.def.x, 0.0, aim.z - t.def.z).normalize_or_zero();
-                let mz = if mech { Vec3::new(t.def.x, 1.45, t.def.z) + flat * 0.72 } else { enemy_muzzle(t.def.x, t.def.z, flat) };
+                let mz = if mech { Vec3::new(t.def.x, 1.45, t.def.z) + flat * 0.72 } else { let l = t.lean_at(1.38); enemy_muzzle(t.def.x + l.x, t.def.z + l.y, flat) };
                 let to = (aim - mz).normalize_or_zero();
                 puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
                 puff(&mut commands, &fx, &mut smats, mz + to * 0.1, to, 2, Color::srgb(0.2, 0.2, 0.19), 1.6, 0.09);
@@ -579,6 +625,7 @@ pub fn combat(
                 if diff == 2 || very_hard { chance = 0.95; }
                 if defense && t.hunter { chance = crate::scenario::INV_HIT; }
                 if mech { chance = 0.95; }
+                if leaning { chance = chance.min(0.55); }
                 // meio segundo de folga depois de um tiro levado: duas ameaças atirando juntas não abatem o operador de uma vez
                 if game.dmg_t > if diff == 2 || defense { 0.95 } else { 0.8 } { chance = 0.0; }
                 if rand01(game.time * 53.1 + i as f32 * 9.7 + game.stats.shots as f32) < chance {
@@ -606,6 +653,47 @@ pub fn combat(
                 }
             }
         } else { t.react = (t.react - dt * 0.5).max(0.0); }
+        // tiro através do OSB: quem viu o operador e perdeu a visada dá até duas rajadas às cegas, através da parede, em
+        // cima do último lugar onde o viu. Só acerta se o operador continuar ali: parede de OSB esconde, não protege
+        if t.engaged { t.ai.last = p.pos; t.ai.lost = 0.0; t.ai.bangs = 0; } else { t.ai.lost += dt; }
+        t.ai.bang_cd = (t.ai.bang_cd - dt).max(0.0);
+        if soft_walls() && !easy && !mech && !t.engaged && rate == 0.0 && t.contact && t.ai.bangs < 2 && t.ai.bang_cd <= 0.0 && (0.5..4.0).contains(&t.ai.lost)
+            && t.ai.flinch <= 0.0 && !noreact && !dying && game.down_t <= 0.0 && !game.demo {
+            let v = t.ai.last - tp;
+            let dist = v.length();
+            if (1.0..9.0).contains(&dist) && !level.los(tp.x, tp.y, 1.3, t.ai.last.x, t.ai.last.y, 1.1) {
+                let f = v / dist;
+                t.fwd = f; t.ai.bangs += 1; t.ai.bang_cd = 0.9; t.ai.hold = 0.75;
+                let flat = Vec3::new(f.x, 0.0, f.y);
+                let l = t.lean_at(1.38);
+                let mz = enemy_muzzle(t.def.x + l.x, t.def.z + l.y, flat);
+                let to = (Vec3::new(t.ai.last.x, 1.1, t.ai.last.y) - mz).normalize_or_zero();
+                sfx.write(Sfx::EnemyShot(Vec3::new(t.def.x + f.x * 0.25, 1.3, t.def.z + f.y * 0.25)));
+                shots_now.push(tp);
+                puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
+                enemy_casing(&mut commands, &fx, &mut smats, mz, to, game.time * 2.3 + i as f32);
+                game.burst.push((0.1, mz, to)); game.burst.push((0.2, mz, to));
+                // onde o projétil sai da parede, do lado do operador: lascas e poeira; o traço segue além do ponto visado
+                let s1 = level.cast_ray(mz.x, mz.z, f.x, f.y, dist + 2.0, 1.2);
+                let exit = mz + to * (s1 + 0.22);
+                chips(&mut commands, &fx, &mut smats, exit, to, game.time + i as f32);
+                puff(&mut commands, &fx, &mut smats, exit, to, 4, Color::srgb(0.5, 0.42, 0.3), 1.8, 0.16);
+                sfx.write(Sfx::Impact(exit));
+                game.tracers.push((mz, mz + to * (dist + 1.5), 0.1));
+                let rel = p.pos - Vec2::new(mz.x, mz.z);
+                let along = rel.dot(f);
+                let on_line = (rel - f * along).length() < 0.38 && along > s1 && along < dist + 1.5;
+                if script { println!("BOT PAREDE {} atirou pela parede em ({:.1},{:.1}) t={:.1} operador_na_linha={}", t.def.id, t.ai.last.x, t.ai.last.y, game.time, on_line); }
+                if on_line && game.dmg_t <= 0.8 && rand01(game.time * 41.3 + i as f32 * 7.9) < 0.6 {
+                    game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
+                    sfx.write(Sfx::Hurt);
+                    let why = "You were hit through the wall. OSB hides you but does not stop rounds: once they have seen you, move off that spot.";
+                    game.wounds += 1;
+                    if game.wounds >= MAX_WOUNDS && !nodeath { game.down_t = DOWN_SECS; game.down_why = why.to_string(); game.toast = None; }
+                    else { let msg = format!("Hit {} of {} (simulated). {}", game.wounds, MAX_WOUNDS, why); game.toast(&msg, 2, 6.5); }
+                }
+            }
+        }
         if t.contact && t.first_facing.is_none() && game.time - t.contact_t > 0.35 { t.first_facing = Some(t.seen); }
     }
     for (mz, md) in missed {

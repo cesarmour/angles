@@ -1,12 +1,20 @@
-# Point of Entry
+# Kill House
 
 A teaching simulator for close-quarters battle (CQB) fundamentals, built with Rust and Bevy 0.16.
 A shoot house with IPSC-style cardboard targets, a six-lesson tutorial, first-person and top-down views,
-a tactical view that shows your sector and how much of each doorway's 180° fan you have opened,
+a tactical view with one bar for the doorway in front of you (how much of its 180° fan you have opened, and which way to step),
 an ideal route with a demo mode, live technique feedback, scoring, odds of success and badges.
 Four maps (training house, apartment, office, warehouse); enemy and hostage positions are random on every run.
 
 > A teaching tool for fundamentals. Real technique is learned with a qualified instructor, as a team, in a controlled environment.
+
+## Install (macOS, Apple silicon)
+Paste this line in Terminal. It downloads the latest release to `~/Applications` and opens it:
+
+    curl -L https://github.com/cesarmour/point-of-entry/releases/latest/download/KillHouse-mac.zip -o /tmp/KillHouse.zip && ditto -x -k /tmp/KillHouse.zip ~/Applications && open ~/Applications/"Kill House.app"
+
+The app is not signed with an Apple developer certificate, so macOS refuses to open it when the zip is downloaded
+with a browser. If you did that, type `xattr -cr` and a space in Terminal, drag the app into the window and press Return.
 
 ## Controls
 W A S D move · mouse look · left button fire · Space or right button aim (Z locks the aim) · Q / E lean · C or Ctrl crouch ·
@@ -15,7 +23,7 @@ T ideal route (always / tip / off) · O hide the lesson box · H review the less
 
 ## Build and run (macOS)
     cargo run --release
-    cargo build --release && ./bundle.sh     # makes dist/Point of Entry.app
+    cargo build --release && ./bundle.sh     # makes dist/Kill House.app
 
 ## Automatic tests (scripted operator, no mouse needed)
     ./run.sh run 2      # runs the six lessons along the ideal route and prints the state of each one
@@ -23,8 +31,8 @@ T ideal route (always / tip / off) · O hide the lesson box · H review the less
     ./run.sh guns       # the two weapons: ready, aiming, firing, switching and reloading
     CQB_NODEATH=1 ./run.sh walker   # scenario 9: rounds bounce off the mech's front plate, then hits from behind (CQB_NOREACT=1 to see it go down)
     CQB_NODEATH=1 ./run.sh nade    # an alerted threat without a line of fire throws a grenade at the stationary operator; `alarm` shows a room's threats leaving their posts to attack
-    CQB_NODEATH=1 ./run.sh climb   # home defense: an intruder coming up the staircase, then the stairs from the living room, the yard ladder and the balcony entry
-    CQB_NODEATH=1 CQB_NOREACT=1 ./run.sh stairs   # the operator walks down the staircase to the ground floor and back up
+    CQB_NODEATH=1 CQB_NOREACT=1 ./run.sh slice   # home defense: an intruder stacks on the jamb, leans and slices a bedroom door; `scare` forces the flinch and the retreat to cover
+    cargo test --release home_map_routes   # no window: checks the family home data, the routes, the windows and the window post
     ./run.sh scns       # opens each of the eight scenarios (briefing card and first frame), then the scenario and ranking screens
     ./run.sh lock       # locked door: breach; `rescue` (CQB_CLOCK=5), `mind` (surrender / false surrender), `rear` (roaming threat), `shield`, `tops`
     CQB_POS="12.3,5.6,9.3,0.7" CQB_BOTLAG=250 ./run.sh hold   # home defense: scripted operator holds a position (x,z,look x,z), 250 ms reaction; CQB_WAVE=n starts at wave n; CQB_FLEE="x,z;x,z" is the path the operator runs when a grenade lands

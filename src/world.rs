@@ -60,6 +60,8 @@ pub struct Mats {
     pub locker: Handle<StandardMaterial>, pub barrel: Handle<StandardMaterial>, pub fabric: Handle<StandardMaterial>, pub steel: Handle<StandardMaterial>,
     pub gun: Handle<StandardMaterial>, pub poly: Handle<StandardMaterial>, pub glove: Handle<StandardMaterial>, pub sleeve: Handle<StandardMaterial>,
     pub brass: Handle<StandardMaterial>, pub cloth: Handle<StandardMaterial>, pub gear: Handle<StandardMaterial>, pub invisible: Handle<StandardMaterial>,
+    /// Kill house de madeira: chapa de OSB (uma chapa de 1,22 m por repetição) e sarrafo da estrutura.
+    pub ply: Handle<StandardMaterial>, pub lumber: Handle<StandardMaterial>,
 }
 
 fn tex(asset: &AssetServer, name: &str, kind: &str, srgb: bool) -> Handle<Image> {
@@ -101,6 +103,8 @@ pub fn build_mats(asset: &AssetServer, mats: &mut Assets<StandardMaterial>) -> M
         cloth: mats.add(flat(Color::srgb(0.20, 0.23, 0.15), 0.95, 0.0)),
         gear: mats.add(flat(Color::srgb(0.07, 0.08, 0.07), 0.85, 0.0)),
         invisible: mats.add(flat(Color::BLACK, 1.0, 0.0)),
+        ply: mats.add(pbr(asset, "killosb", Color::linear_rgb(env_f("CQB_PLY", 1.0), env_f("CQB_PLY", 1.0), env_f("CQB_PLY", 1.0)), 1.0, 1.0)),
+        lumber: mats.add(flat(Color::srgb(0.88, 0.77, 0.57), 0.85, 0.0)),
     }
 }
 
@@ -212,13 +216,55 @@ pub fn map_switch(
     if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT MAPA {} {}: {} problema(s) {:?}", i, map().name, errs.len(), errs); }
 }
 
+/// Largura da chapa de compensado da kill house.
+const SHEET: f32 = 1.22;
+
+/// Estrutura de sarrafo aparente das paredes da kill house, como numa parede de OSB de verdade: só de um lado (o outro
+/// lado é a chapa lisa, com as juntas à vista). Guias em cima e embaixo, montantes em pé a cada meia chapa e uma travessa
+/// a meia altura. Os montantes ficam 2 mm à frente das travessas, para nenhuma face coincidir com outra.
+fn framing(walls: &[crate::map::Solid]) -> Vec<B3> {
+    let mut v = Vec::new();
+    let inside = |x: f32, z: f32, skip: usize| walls.iter().enumerate().any(|(j, w)| j != skip && x > w.x1 && x < w.x2 && z > w.z1 && z < w.z2);
+    for (i, w) in walls.iter().enumerate() {
+        let along_x = w.x2 - w.x1 >= w.z2 - w.z1;
+        let (a, b, _n0, n1) = if along_x { (w.x1, w.x2, w.z1, w.z2) } else { (w.z1, w.z2, w.x1, w.x2) };
+        if b - a < 0.25 { continue; }
+        let (face, sgn) = (n1, 1.0f32);
+        // ponta enterrada em outra parede (canto de cômodo): a face visível começa depois da meia espessura dela
+        let buried = |u: f32| { let f = face + sgn * 0.01; if along_x { inside(u, f, i) } else { inside(f, u, i) } };
+        let ua = if buried(a + 0.02) { a + WALL_T / 2.0 } else { a };
+        let ub = if buried(b - 0.02) { b - WALL_T / 2.0 } else { b };
+        if ub - ua < 0.2 { continue; }
+        let mut put = |u0: f32, u1: f32, y0: f32, y1: f32, depth: f32| {
+            let (f0, f1) = (face, face + depth);
+            v.push(if along_x { b3(u0, y0, f0, u1, y1, f1) } else { b3(f0, y0, u0, f1, y1, u1) });
+        };
+        put(ua, ub, 0.001, 0.045, 0.038);
+        put(ua, ub, SHEET - 0.0225, SHEET + 0.0225, 0.038);
+        put(ua, ub, WALL_H - 0.047, WALL_H - 0.002, 0.038);
+        put(ua, ua + 0.045, 0.0, WALL_H, 0.04);
+        put(ub - 0.045, ub, 0.0, WALL_H, 0.04);
+        // montantes do meio: a cada meia chapa (61 cm), em posições fixas no mundo
+        let step = SHEET / 2.0;
+        let mut k = ((ua + 0.2) / step).ceil();
+        loop {
+            let u = k * step;
+            if u > ub - 0.2 { break; }
+            put(u - 0.0225, u + 0.0225, 0.0, WALL_H, 0.04);
+            k += 1.0;
+        }
+    }
+    v
+}
+
 /// Monta o cenário do mapa atual: piso, paredes, batentes, móveis, portas, placas e luminárias.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, images: &mut Assets<Image>, asset: &AssetServer, level: &Level, m: &Mats) {
     // piso e forro
     // (com o vão da escada do andar de cima aberto, quando o mapa tem um)
     let floor: Vec<B3> = match map().pit {
-        Some((x1, z1, x2, z2, _)) => vec![b3(MAP_X1, -0.1, MAP_Z1, MAP_X2, 0.0, z1), b3(MAP_X1, -0.1, z2, MAP_X2, 0.0, MAP_Z2), b3(MAP_X1, -0.1, z1, x1, 0.0, z2), b3(x2, -0.1, z1, MAP_X2, 0.0, z2)],
+        // o piso para 3 cm antes do vão: esse espaço é do forro do vão (duas faces no mesmo plano piscam)
+        Some((x1, z1, x2, z2, _)) => vec![b3(MAP_X1, -0.1, MAP_Z1, MAP_X2, 0.0, z1 - 0.03), b3(MAP_X1, -0.1, z2 + 0.03, MAP_X2, 0.0, MAP_Z2), b3(MAP_X1, -0.1, z1 - 0.03, x1 - 0.03, 0.0, z2 + 0.03), b3(x2, -0.1, z1 - 0.03, MAP_X2, 0.0, z2 + 0.03)],
         None => vec![b3(MAP_X1, -0.1, MAP_Z1, MAP_X2, 0.0, MAP_Z2)],
     };
     sb(&mut *commands, &mut *meshes, &floor, 0.4, &m.floor);
@@ -228,10 +274,16 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
     let band = 1.05;
     let lo: Vec<B3> = level.walls.iter().map(|w| b3(w.x1, 0.0, w.z1, w.x2, band, w.z2)).collect();
     let hi: Vec<B3> = level.walls.iter().map(|w| b3(w.x1, band, w.z1, w.x2, WALL_H, w.z2)).collect();
-    sb(&mut *commands, &mut *meshes, &lo, 1.0, &m.wall_lo);
-    sb(&mut *commands, &mut *meshes, &hi, 1.0, &m.wall_hi);
+    // a casa é uma kill house de madeira: compensado de cima a baixo, sem faixa de pintura
+    let ply = map_index() == 5;
+    let (w_lo, w_hi) = if ply { (&m.ply, &m.ply) } else { (&m.wall_lo, &m.wall_hi) };
+    // cada repetição da textura é uma chapa de 1,22 m: as juntas das chapas caem sempre no mesmo lugar do mundo
+    let ws = if ply { 1.0 / SHEET } else { 1.0 };
+    sb(&mut *commands, &mut *meshes, &lo, ws, w_lo);
+    sb(&mut *commands, &mut *meshes, &hi, ws, w_hi);
+    if ply { sb(&mut *commands, &mut *meshes, &framing(&level.walls), 1.0, &m.lumber); }
     let lint: Vec<B3> = level.lintels.iter().map(|w| b3(w.x1, DOOR_H, w.z1, w.x2, WALL_H, w.z2)).collect();
-    let e = sb(&mut *commands, &mut *meshes, &lint, 1.0, &m.wall_hi);
+    let e = sb(&mut *commands, &mut *meshes, &lint, ws, w_hi);
     commands.entity(e).insert(RenderLayers::layer(L_FP));
     // a luz vem de cima do forro (mais uniforme); este bloqueador só existe para as sombras
     let blk: Vec<B3> = level.walls.iter().chain(level.lintels.iter()).map(|w| b3(w.x1, WALL_H, w.z1, w.x2, 4.9, w.z2)).collect();
@@ -249,8 +301,9 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
             heads.push(b3(g.c - t, DOOR_H - w, g.a, g.c + t, DOOR_H + 0.01, g.b));
         }
     }
-    sb(&mut *commands, &mut *meshes, &jambs, 1.0, &m.frame);
-    let e = sb(&mut *commands, &mut *meshes, &heads, 1.0, &m.frame);
+    let jm = if ply { &m.lumber } else { &m.frame };
+    sb(&mut *commands, &mut *meshes, &jambs, 1.0, jm);
+    let e = sb(&mut *commands, &mut *meshes, &heads, 1.0, jm);
     commands.entity(e).insert(RenderLayers::layer(L_FP));
 
     // mobília: modelos 3D do Poly Haven (CC0); a barricada de compensado continua sendo construída aqui
@@ -298,11 +351,29 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
                 let mut posts = Vec::new();
                 let n = ((w / 0.62).round() as usize).max(1);
                 for i in 0..=n { let x = p.x1 + 0.03 + (w - 0.06) * i as f32 / n as f32; posts.push(b3(x - 0.025, 0.0, mz - 0.025, x + 0.025, top(x) + 0.06, mz + 0.025)); }
-                sb(&mut *commands, &mut *meshes, &posts, 1.0, &m.frame);
+                sb(&mut *commands, &mut *meshes, &posts, 1.0, if map_index() == 5 { &m.lumber } else { &m.frame });
                 let mut panes = Vec::new();
                 for i in 0..n { let (xa, xb) = (p.x1 + 0.03 + (w - 0.06) * i as f32 / n as f32, p.x1 + 0.03 + (w - 0.06) * (i + 1) as f32 / n as f32); panes.push(b3(xa + 0.03, 0.02, mz - 0.006, xb - 0.03, top((xa + xb) / 2.0), mz + 0.006)); }
-                let e = sb(&mut *commands, &mut *meshes, &panes, 1.0, &glass);
-                commands.entity(e).insert(NotShadowCaster);
+                if map_index() == 5 {
+                    // duas réguas de sarrafo acompanhando a subida, no lugar do vidro
+                    for i in 0..n {
+                        let (xa, xb) = (p.x1 + 0.03 + (w - 0.06) * i as f32 / n as f32, p.x1 + 0.03 + (w - 0.06) * (i + 1) as f32 / n as f32);
+                        for (k, drop) in [0.0f32, 0.45].into_iter().enumerate() {
+                            let (pa, pb) = (Vec3::new(xa, top(xa) - drop, mz), Vec3::new(xb, top(xb) - drop, mz));
+                            let d = pb - pa;
+                            commands.spawn((Mesh3d(meshes.add(Cuboid::new(0.036 - k as f32 * 0.004, 0.085, d.length() + 0.02))), MeshMaterial3d(m.lumber.clone()),
+                                Transform::from_translation((pa + pb) / 2.0).looking_to(d.normalize(), Vec3::Y), NotShadowCaster, MapEntity));
+                        }
+                    }
+                } else {
+                    let e = sb(&mut *commands, &mut *meshes, &panes, 1.0, &glass);
+                    commands.entity(e).insert(NotShadowCaster);
+                }
+            }
+            // peitoril de janela: meia parede de OSB no vão, com uma régua de sarrafo em cima
+            PropKind::Sill => {
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1, 0.0, p.z1, p.x2, p.h - 0.04, p.z2)], 1.0 / SHEET, &m.ply);
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1 - 0.015, p.h - 0.04, p.z1 - 0.03, p.x2 + 0.015, p.h, p.z2 + 0.03)], 1.0, &m.lumber);
             }
             PropKind::Cover => {
                 // nenhuma face de uma peça coincide com a de outra (faces no mesmo plano piscam): as chapas param
@@ -364,14 +435,19 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
             let mut y = 0.28;
             while y < WALL_H - 0.05 { ladders.push(b3(cx - 0.19, y, z - 0.012, cx + 0.19, y + 0.028, z + 0.012)); y += 0.3; }
         }
-        sb(&mut *commands, &mut *meshes, &steps, 1.0, &granite);
-        sb(&mut *commands, &mut *meshes, &nosing, 1.0, &pale);
+        if ply {
+            sb(&mut *commands, &mut *meshes, &steps, 1.0 / SHEET, &m.ply);
+            sb(&mut *commands, &mut *meshes, &nosing, 1.0, &m.lumber);
+        } else {
+            sb(&mut *commands, &mut *meshes, &steps, 1.0, &granite);
+            sb(&mut *commands, &mut *meshes, &nosing, 1.0, &pale);
+        }
         for (pa, pb) in rails {
             let d = pb - pa;
-            commands.spawn((Mesh3d(meshes.add(Cuboid::new(0.05, 0.07, d.length()))), MeshMaterial3d(white.clone()),
+            commands.spawn((Mesh3d(meshes.add(Cuboid::new(0.045, 0.09, d.length()))), MeshMaterial3d(if ply { m.lumber.clone() } else { white.clone() }),
                 Transform::from_translation((pa + pb) / 2.0).looking_to(d.normalize(), Vec3::Y), NotShadowCaster, MapEntity));
         }
-        sb(&mut *commands, &mut *meshes, &lining, 0.6, &m.wall_lo);
+        sb(&mut *commands, &mut *meshes, &lining, if ply { 1.0 / SHEET } else { 0.6 }, if ply { &m.ply } else { &m.wall_lo });
         sb(&mut *commands, &mut *meshes, &ladders, 1.0, &m.frame);
         sb(&mut *commands, &mut *meshes, &holes, 1.0, &dark);
     }

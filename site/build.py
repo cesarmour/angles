@@ -11,11 +11,11 @@ Change VERSION / SIZE below when a new release goes out.
 import base64, mimetypes, pathlib, re
 
 HERE = pathlib.Path(__file__).parent
-VERSION = "0.9.2"
-SIZE = "91 MB"
+VERSION = "0.10.0"
+SIZE = "92 MB"
 REPO = "https://github.com/cesarmour/point-of-entry"
-DOWNLOAD = f"{REPO}/releases/download/v{VERSION}/PointOfEntry-mac.zip"
-DESCRIPTION = ("Point of Entry is a free CQB teaching simulator for Mac: a shoot house with armed threats, hostages "
+DOWNLOAD = f"{REPO}/releases/download/v{VERSION}/KillHouse-mac.zip"
+DESCRIPTION = ("Kill House is a free CQB teaching simulator for Mac: a shoot house with armed threats, hostages "
                "and a tactical view that measures slicing the pie in degrees and centimetres.")
 
 
@@ -43,7 +43,7 @@ def main() -> None:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="{DESCRIPTION}">
-<meta property="og:title" content="Point of Entry">
+<meta property="og:title" content="Kill House">
 <meta property="og:description" content="{DESCRIPTION}">
 <meta property="og:type" content="website">
 <link rel="icon" type="image/png" href="{icon}">
