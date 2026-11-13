@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Angles · usage</title>
+<style>
+body{margin:0;background:#0c0e0f;color:#ece8df;font:16px/1.5 -apple-system,system-ui,sans-serif;padding:24px 16px}
+main{max-width:980px;margin:0 auto}
+h1{font-size:28px;margin:0 0 4px}
+h2{font-size:18px;margin:28px 0 8px;color:#f4b53f;letter-spacing:.08em;text-transform:uppercase}
+p{color:#a3abaa}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
+.k div{background:#14181a;border:1px solid #2c3336;padding:14px}
+.k b{display:block;font-size:30px}
+.k span{color:#a3abaa;font-size:13px}
+.t{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:7px 10px;border-bottom:1px solid #2c3336;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:#a3abaa;font-weight:600;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<h1>Angles · usage</h1>
+<p>Anonymous counts sent by the game. One player = one installation.</p>
+<div class="k" id="k"></div>
+<h2>By day</h2>
+<div class="t"><table id="days"></table></div>
+<h2>By stage, all days</h2>
+<div class="t"><table id="boards"></table></div>
+<h2>Ranked runs by board</h2>
+<div class="t"><table id="scores"></table></div>
+</main>
+<script>
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+fetch('/api/stats').then(function(r){return r.json()}).then(function(d){
+  var days=d.days||[], sum=function(f){return days.reduce(function(a,x){return a+(x[f]||0)},0)}, today=days[days.length-1]||{};
+  document.getElementById('k').innerHTML=[['Players, all time',d.players_total],['Players, latest day',today.players||0],['Times opened',sum('launches')],['Runs started',sum('runs_started')],['Runs finished',sum('runs_finished')],['Hours played',(sum('minutes')/60).toFixed(1)]]
+    .map(function(x){return '<div><b>'+x[1]+'</b><span>'+x[0]+'</span></div>'}).join('');
+  document.getElementById('days').innerHTML='<tr><th>Day</th><th>Players</th><th>New</th><th>Opened</th><th>Started</th><th>Finished</th><th>Minutes</th><th>Versions</th></tr>'+
+    days.slice().reverse().map(function(x){return '<tr><td>'+x.date+'</td><td>'+x.players+'</td><td>'+x.new_players+'</td><td>'+x.launches+'</td><td>'+x.runs_started+'</td><td>'+x.runs_finished+'</td><td>'+x.minutes+'</td><td>'+esc(Object.keys(x.versions||{}).join(', '))+'</td></tr>'}).join('');
+  var b={};
+  days.forEach(function(x){Object.keys(x.boards||{}).forEach(function(n){var o=b[n]||(b[n]={start:0,end:0,passed:0});o.start+=x.boards[n].start;o.end+=x.boards[n].end;o.passed+=x.boards[n].passed})});
+  document.getElementById('boards').innerHTML='<tr><th>Stage</th><th>Started</th><th>Finished</th><th>Passed</th><th>Finish rate</th></tr>'+
+    Object.keys(b).map(function(n){var o=b[n];return '<tr><td>'+esc(n)+'</td><td>'+o.start+'</td><td>'+o.end+'</td><td>'+o.passed+'</td><td>'+(o.start?Math.round(100*o.end/o.start)+'%':'-')+'</td></tr>'}).join('');
+  var s=d.scores_by_board||{};
+  document.getElementById('scores').innerHTML='<tr><th>Board</th><th>Runs</th></tr>'+
+    Object.keys(s).filter(function(n){return n.indexOf('__')!==0}).map(function(n){return '<tr><td>'+esc(n)+'</td><td>'+s[n]+'</td></tr>'}).join('');
+}).catch(function(){document.getElementById('k').textContent='Could not load.'});
+</script>
+</body>
+</html>

@@ -352,7 +352,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     commands.spawn(screen(Tag::Ranking)).with_children(|s| {
         s.spawn(txt("ANGLES · KILL HOUSE", &f.semi, 14.0, AMBER));
         s.spawn(txt("RANKING", &f.bold, 54.0, BONE));
-        s.spawn((txt("Best three runs on each board: more points first, then less time. Stored on this computer.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
+        s.spawn((txt("World ranking of everyone who plays, and your own best runs. More points first, then less time. Every finished run is sent with your callsign; nothing personal is sent.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
         s.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), max_width: Val::Px(1240.0), ..default() }, Tag::RankList));
         s.spawn(Node::default()).with_children(|b| button(b, &f, "BACK · ESC", Act::Back, true));
     });
@@ -530,7 +530,7 @@ fn set(text: &mut Text, s: &str) { if text.0 != s { text.0 = s.to_string(); } }
 
 #[allow(clippy::too_many_arguments)]
 pub fn update_ui(
-    time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac: Res<Tac>, targets: Res<Targets>, level: Res<Level>, (fonts, diagrams, rk, prog): (Res<UiFonts>, Res<Diagrams>, Res<Ranking>, Res<crate::course::Progress>),
+    time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac: Res<Tac>, targets: Res<Targets>, level: Res<Level>, (fonts, diagrams, rk, prog, net): (Res<UiFonts>, Res<Diagrams>, Res<Ranking>, Res<crate::course::Progress>, Res<crate::net::Net>),
     mut commands: Commands, mut ui_scale: ResMut<UiScale>, windows: Query<&Window, With<PrimaryWindow>>,
     mut texts: Query<(&Tag, &mut Text, &mut TextColor)>, mut nodes: Query<(Entity, &Tag, &mut Node)>, mut bgs: Query<(&Tag, &mut BackgroundColor)>, mut imgs: Query<(&Tag, &mut ImageNode)>,
     cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, mut live_t: Local<f32>,
@@ -578,8 +578,26 @@ pub fn update_ui(
                 for m in MAPS.iter().filter(|m| m.pick) { boards.push(format!("Free run · {}", m.name)); }
                 for sc in SCENARIOS.iter() { boards.push(sc.name.to_string()); }
                 for b in rk.boards() { if !boards.contains(&b) { boards.push(b); } }
+                for b in net.boards() { if !boards.contains(&b) && !b.starts_with("__") { boards.push(b); } }
                 let mut any = false;
                 commands.entity(e).with_children(|l| {
+                    // codinome com que as partidas entram no ranking mundial: digita-se aqui mesmo
+                    l.spawn(txt(&format!("CALLSIGN  {}_      type to change it (letters and numbers, up to 12)", net.name), &fonts.semi, 16.0, AMBER));
+                    // ranking mundial: os cinco melhores de cada tabela
+                    let mut world_any = false;
+                    for b in &boards {
+                        let top = net.top(b);
+                        if top.is_empty() { continue; }
+                        if !world_any { world_any = true; l.spawn(txt("WORLD", &fonts.bold, 22.0, BONE)); }
+                        l.spawn(Node { column_gap: Val::Px(14.0), align_items: AlignItems::Baseline, border: UiRect::top(Val::Px(1.0)), padding: UiRect::top(Val::Px(3.0)), ..default() }).insert(BorderColor(Color::srgba(0.9, 0.9, 0.86, 0.16))).with_children(|r| {
+                            r.spawn((txt(&b.to_uppercase(), &fonts.semi, 15.0, BONE), Node { width: Val::Px(250.0), flex_shrink: 0.0, ..default() }));
+                            for (k, (name, score, time)) in top.iter().enumerate() {
+                                r.spawn((txt(&format!("{} {}  {} pts  {}", k + 1, name, score, scenario::fmt_time(*time)), &fonts.body, 14.0, if *name == net.name { AMBER } else if k == 0 { BONE } else { MUTE }), Node { width: Val::Px(190.0), flex_shrink: 0.0, ..default() }));
+                            }
+                        });
+                    }
+                    if !world_any { l.spawn(txt(if net.on { "WORLD   loading, or no runs yet (needs internet)." } else { "WORLD   off on this computer." }, &fonts.body, 15.0, MUTE)); }
+                    l.spawn(txt("THIS COMPUTER", &fonts.bold, 22.0, BONE));
                     for b in &boards {
                         let top = rk.top(b, 3);
                         if top.is_empty() { continue; }

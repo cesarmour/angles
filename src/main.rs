@@ -8,6 +8,7 @@ mod chatter;
 mod gi;
 mod lessons;
 mod map;
+mod net;
 mod maps;
 mod operator;
 mod player;
@@ -98,6 +99,7 @@ fn main() {
         .init_resource::<lessons::Checkpoint>()
         .init_resource::<scenario::Nav>()
         .insert_resource(scenario::Ranking::load())
+        .insert_resource(net::Net::load())
         .insert_resource(course::Progress::load())
         .init_resource::<state::MapReq>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -122,6 +124,7 @@ fn main() {
         .add_systems(Update, course::voice_system.after(course::course_system).before(ui::update_ui))
         .add_systems(Update, chatter::chatter_system.after(combat::combat))
         .add_systems(Update, audio::music_system)
+        .add_systems(Update, net::net_system.before(ui::update_ui))
         .add_systems(Update, operator::hands_setup)
         .add_systems(Update, scenario::grenade_system.after(scenario::scenario_system).before(lessons::update_lessons))
         .add_systems(PostUpdate, operator::hands_pose.after(bevy::app::Animation).before(bevy::transform::TransformSystem::TransformPropagate))

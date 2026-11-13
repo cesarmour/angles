@@ -206,6 +206,7 @@ footer .warn{color:var(--text);font-weight:600}
       <a href="#debrief">Debrief</a>
       <a href="#maps">Maps</a>
       <a href="#scenarios">Scenarios</a>
+      <a href="#ranking">Ranking</a>
       <a href="#download">Download</a>
     </nav>
   </div>
@@ -414,6 +415,16 @@ footer .warn{color:var(--text);font-weight:600}
   </div>
 </section>
 
+<section class="band" id="ranking" hidden>
+  <div class="wrap">
+    <p class="sign">WORLD RANKING</p>
+    <h2>Everyone who plays</h2>
+    <p style="max-width:760px">Every finished run goes to a permanent world ranking under the callsign the player chose in the game. More points first; on a tie, less time.</p>
+    <div id="rank-list" style="display:grid;gap:18px;margin-top:22px"></div>
+    <p class="meta" style="margin-top:18px">The game sends the score, the time and the callsign, plus anonymous usage counts (it was opened, a stage started, a stage ended). No name, no e-mail, no personal data. To switch it off, create an empty file called <code>offline</code> in <code>~/Library/Application Support/Angles</code>.</p>
+  </div>
+</section>
+
 <section class="band" id="download">
   <div class="wrap">
     <p class="sign">GET IT</p>
@@ -607,5 +618,20 @@ footer .warn{color:var(--text);font-weight:600}
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){sel()})}else{sel()}
     function sel(){var r=document.createRange();r.selectNodeContents(c);var g=window.getSelection();g.removeAllRanges();g.addRange(r);try{document.execCommand('copy');done()}catch(e){}}
   });
+})();
+</script>
+<script>
+(function(){
+  var sec=document.getElementById('ranking'),box=document.getElementById('rank-list'); if(!sec||!box||!window.fetch) return;
+  function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  function tm(t){t=Math.round(t);return Math.floor(t/60)+':'+('0'+(t%60)).slice(-2)}
+  fetch('https://angles-kz.vercel.app/api/scores?n=5').then(function(r){return r.json()}).then(function(d){
+    var names=Object.keys(d.boards||{}); if(!names.length) return;
+    box.innerHTML=names.map(function(b){
+      return '<div style="border-top:1px solid var(--line);padding-top:10px"><b style="letter-spacing:.08em;text-transform:uppercase">'+esc(b)+'</b><ol style="margin:8px 0 0;padding-left:22px">'+
+        d.boards[b].map(function(r){return '<li><b>'+esc(r.name)+'</b> · '+r.score+' pts · '+tm(r.time)+'</li>'}).join('')+'</ol></div>';
+    }).join('');
+    sec.hidden=false;
+  }).catch(function(){});
 })();
 </script>

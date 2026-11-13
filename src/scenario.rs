@@ -1223,13 +1223,16 @@ pub fn run_diff(game: &Game) -> u8 { if is(game, Kind::Walker) { 3 } else { diff
 pub fn fmt_time(t: f32) -> String { format!("{}:{:02}", (t / 60.0) as i32, (t % 60.0) as i32) }
 
 /// Ao chegar à avaliação (ou ao cair na defesa da casa, onde vale quantos invasores foram derrubados), a partida entra no ranking.
-pub fn rank_system(mut game: ResMut<Game>, targets: Res<Targets>, mut rk: ResMut<Ranking>) {
+pub fn rank_system(mut game: ResMut<Game>, targets: Res<Targets>, mut rk: ResMut<Ranking>, net: Res<crate::net::Net>) {
     if game.ranked || game.demo { return; }
     let done = game.mode == Mode::Debrief || (game.mode == Mode::Down && is(&game, Kind::Defense));
     if !done { return; }
     game.ranked = true;
     let (score, b) = (final_score(&game, &targets), board(&game));
     game.rank = Some(rk.add(&b, score, game.time, run_diff(&game)));
+    // ranking mundial e contagem de uso (em segundo plano; sem internet nada muda)
+    net.submit(&b, score, game.time, run_diff(&game));
+    net.event("end", Some(&b), score >= 60, game.time);
     game.ui_dirty = true;
     if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT RANKING {}: {} pts em {} -> {:?}", b, score, fmt_time(game.time), game.rank); }
 }
