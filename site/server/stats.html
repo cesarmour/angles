@@ -26,8 +26,6 @@ th{color:#a3abaa;font-weight:600;font-size:13px}
 <main>
 <h1>Angles · usage</h1>
 <p>Anonymous counts sent by the game. One player = one installation.</p>
-<form id="f"><div id="gate" hidden><label for="pw">Password</label><br><input id="pw" type="password" autocomplete="current-password" style="font:inherit;padding:9px 11px;margin:6px 8px 0 0;background:#14181a;color:inherit;border:1px solid #2c3336;min-width:220px"><button style="font:inherit;font-weight:700;padding:9px 16px;background:#f4b53f;color:#111;border:0;cursor:pointer">Open</button><p id="msg"></p></div></form>
-<div id="dash" hidden>
 <div class="k" id="k"></div>
 <h2>By day</h2>
 <div class="t"><table id="days"></table></div>
@@ -35,21 +33,10 @@ th{color:#a3abaa;font-weight:600;font-size:13px}
 <div class="t"><table id="boards"></table></div>
 <h2>Ranked runs by board</h2>
 <div class="t"><table id="scores"></table></div>
-</div>
 </main>
 <script>
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-var KEY='';
-try{KEY=localStorage.getItem('angles-stats-key')||''}catch(e){}
-function load(){
-  fetch('/api/stats',{headers:{'x-angles-key':KEY}}).then(function(r){
-    if(r.status===401){return r.json().then(function(e){ask(e.error==='not-configured'?'The dashboard password has not been set on the server yet.':(KEY?'Wrong password.':''));throw 0})}
-    document.getElementById('gate').hidden=true;document.getElementById('dash').hidden=false;return r.json()
-  }).then(show).catch(function(x){if(x!==0)document.getElementById('msg').textContent='Could not load.'});
-}
-function ask(m){document.getElementById('gate').hidden=false;document.getElementById('dash').hidden=true;document.getElementById('msg').textContent=m}
-document.getElementById('f').addEventListener('submit',function(e){e.preventDefault();KEY=document.getElementById('pw').value;try{localStorage.setItem('angles-stats-key',KEY)}catch(x){}load()});
-function show(d){
+fetch('/api/stats').then(function(r){return r.json()}).then(function(d){
   var days=d.days||[], sum=function(f){return days.reduce(function(a,x){return a+(x[f]||0)},0)}, today=days[days.length-1]||{};
   document.getElementById('k').innerHTML=[['Players, all time',d.players_total],['Players, latest day',today.players||0],['Times opened',sum('launches')],['Runs started',sum('runs_started')],['Runs finished',sum('runs_finished')],['Hours played',(sum('minutes')/60).toFixed(1)]]
     .map(function(x){return '<div><b>'+x[1]+'</b><span>'+x[0]+'</span></div>'}).join('');
@@ -62,8 +49,7 @@ function show(d){
   var s=d.scores_by_board||{};
   document.getElementById('scores').innerHTML='<tr><th>Board</th><th>Runs</th></tr>'+
     Object.keys(s).filter(function(n){return n.indexOf('__')!==0}).map(function(n){return '<tr><td>'+esc(n)+'</td><td>'+s[n]+'</td></tr>'}).join('');
-}
-load();
+}).catch(function(){document.getElementById('k').textContent='Could not load.'});
 </script>
 </body>
 </html>
