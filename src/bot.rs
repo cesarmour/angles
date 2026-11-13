@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
+    HideBox, Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
     /// Espera um invasor começar a sair do vão de chegada de uma passagem entre andares.
     WaitClimb,
     /// Espera um invasor começar a fatiar uma porta (parado ao lado do batente); assusta todos os invasores vivos (motivo 1, 2 ou 3).
@@ -192,6 +192,25 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
             Tp(0.45, 7.45, 3.1416, -0.35), Wait(20), Shot("st-2"), Go(0.6, 8.5, None), Go(3.0, 8.55, None), Tp(3.4, 9.9, 1.037, -0.05), Wait(20), Shot("st-3"),
             Tp(2.6, 8.55, 1.5708, 0.0), Go(0.6, 8.55, None), Go(0.6, 7.4, None), Go(1.0, 7.35, None), Wait(70), Snap("subiu"), Tp(0.8, 0.7, -1.5708, 0.25), Wait(20), Shot("st-4"), Quit],
         // casa: fotos de vários pontos para conferir paredes, escada e vão (sem invasores por perto)
+        // capturas para o site: menu, o arco diante de uma porta, vista de cima, os dois invasores, a refém, a casa e as telas
+        "site" => vec![Wait(220), Shot("01-menu"),
+            Start(false), Wait(20), Confirm, Wait(40), Tp(8.6, 5.2, -2.415, -0.12), Wait(50), Shot("02-arc-a"), Tp(9.6, 5.0, -2.98, -0.12), Wait(50), Shot("03-arc-b"),
+            ViewTo(View::Bird), Wait(70), Shot("04-top"), ViewTo(View::Fp),
+            Start(true), Wait(150), Near(false, 1, 3.2), Wait(60), Shot("05-threat-a"), Near(false, 0, 3.4), Wait(60), Shot("06-threat-b"), Near(false, 2, 3.4), Wait(60), Shot("06-threat-c"), Near(true, 0, 3.0), Wait(100), Shot("07-hostage"),
+            Scn(7), Wait(150), Shot("08-card"), Confirm, Wait(30), Tp(5.0, 7.0, 1.5708, 0.0), Wait(50), Shot("09-home-fp"), Tp(3.85, 9.6, 3.1416, 0.0), Wait(50), Shot("09-home-fp2"),
+            Tp(7.0, 9.0, 0.0, 0.0), ViewTo(View::Bird), Wait(90), Shot("10-home-top"), ViewTo(View::Fp),
+            Screen(Mode::Scenarios), Wait(50), Shot("11-course"), Screen(Mode::Ranking), Wait(50), Shot("12-ranking"), Quit],
+        // capturas limpas para o site (CQB_NOREACT=1 CQB_NODEATH=1): sem a caixa de objetivos e sem ninguém atirando
+        "site2" => vec![Wait(200), Start(false), Wait(20), Confirm, Wait(30), HideBox,
+            Tp(8.6, 5.2, -2.415, -0.12), Wait(50), Shot("arc-1"), Tp(9.6, 5.0, -2.98, -0.12), Wait(50), Shot("arc-2"), Tp(10.8, 5.2, 2.55, -0.12), Wait(50), Shot("arc-3"),
+            ViewTo(View::Bird), Wait(70), Shot("top-1"), ViewTo(View::Fp),
+            Start(true), Wait(150), HideBox, Near(false, 0, 3.4), Wait(50), Shot("threat-0"), Near(false, 1, 3.2), Wait(50), Shot("threat-1"), Near(false, 2, 3.4), Wait(50), Shot("threat-2"), Near(false, 3, 3.2), Wait(50), Shot("threat-3"),
+            Near(true, 0, 2.9), Wait(100), Shot("hostage-0"), Near(true, 1, 2.9), Wait(100), Shot("hostage-1"),
+            Scn(7), Wait(150), Confirm, Wait(30), HideBox, Tp(3.85, 9.6, 3.1416, 0.0), Wait(50), Shot("door-1"), Tp(5.0, 7.0, 1.5708, 0.0), Wait(50), Shot("door-2"), Tp(2.2, 10.4, 2.6, 0.0), Wait(50), Shot("door-3"),
+            Tp(7.0, 9.0, 0.0, 0.0), ViewTo(View::Bird), Wait(90), Shot("top-home"), Quit],
+        // ameaças reagindo (sem CQB_NOREACT): várias capturas logo que elas veem o operador, antes do aviso de tiro levado
+        "site3" => vec![Wait(200), Start(true), Wait(150), HideBox, Near(false, 1, 3.4), Wait(14), Shot("aim-1a"), Wait(8), Shot("aim-1b"), Wait(8), Shot("aim-1c"), Near(false, 0, 3.6), Wait(14), Shot("aim-0a"), Wait(8), Shot("aim-0b"), Wait(8), Shot("aim-0c"),
+            Near(false, 3, 3.4), Wait(14), Shot("aim-3a"), Wait(8), Shot("aim-3b"), Quit],
         "house" => vec![Wait(120), Scn(7), Wait(150), Confirm, Wait(20),
             Tp(0.6, 7.4, 3.1416, 0.0), Wait(20), Shot("h-01"), Tp(0.6, 7.4, -1.5708, 0.0), Wait(20), Shot("h-02"), Tp(0.6, 7.4, 3.1416, 0.5), Wait(20), Shot("h-03"),
             Tp(0.6, 8.5, 0.0, 0.1), Wait(20), Shot("h-04"), Tp(1.6, 8.55, 1.5708, 0.25), Wait(20), Shot("h-05"), Tp(3.4, 9.9, 1.037, -0.05), Wait(20), Shot("h-06"),
@@ -381,6 +400,7 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
         Cmd::Lean(v, n) => { bot.hold_lean = v; c.lean = v; done = bot.n >= n; }
         Cmd::Crouch(n) => { bot.hold_crouch = n > 0; c.crouch_hold = bot.hold_crouch; done = bot.n >= n; }
         Cmd::Tac(b) => { if game.tac != b { c.tac = true; } done = true; }
+        Cmd::HideBox => { game.hide_box = true; game.ui_dirty = true; done = true; }
         Cmd::ViewTo(v) => { if game.view != v { c.view = true; } done = true; }
         Cmd::Flash(b) => { if game.flash != b { c.flash = true; } done = true; }
         Cmd::Shot(name) => {

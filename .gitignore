@@ -9,3 +9,4 @@ site/artifact.html
 __pycache__/
 assets/local/
 previews/
+site/mock/
