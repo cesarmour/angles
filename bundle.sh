@@ -8,7 +8,9 @@ APP="$DIR/dist/Angles.app"
 rm -rf "$APP/Contents/MacOS/assets" "$APP/Contents/_CodeSignature"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 cp "$DIR/target/release/ponto-de-entrada" "$APP/Contents/MacOS/ponto-de-entrada"
+# texturas, modelos e as falas do instrutor (só os .wav; o roteiro em texto já vai dentro do executável)
 rsync -a --delete "$DIR/assets/tex" "$DIR/assets/models" "$APP/Contents/Resources/assets/"
+mkdir -p "$APP/Contents/Resources/assets/voice" && rsync -a --delete --include="*.wav" --exclude="*" "$DIR/assets/voice/" "$APP/Contents/Resources/assets/voice/"
 cp "$DIR/assets/icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -21,8 +23,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>ponto-de-entrada</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.10.1</string>
-  <key>CFBundleVersion</key><string>14</string>
+  <key>CFBundleShortVersionString</key><string>0.11.0</string>
+  <key>CFBundleVersion</key><string>15</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.simulation-games</string>

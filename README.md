@@ -1,6 +1,6 @@
 # Angles
 
-Current version: **Kill House** (0.10.1).
+Current version: **Kill House** (0.11.0).
 
 A teaching simulator for close-quarters battle (CQB) fundamentals, built with Rust and Bevy 0.16.
 A shoot house with IPSC-style cardboard targets, a six-lesson tutorial, first-person and top-down views,
@@ -11,8 +11,7 @@ Four maps (training house, apartment, office, warehouse); enemy and hostage posi
 > A teaching tool for fundamentals. Real technique is learned with a qualified instructor, as a team, in a controlled environment.
 
 ## Install (macOS, Apple silicon)
-Download `Angles-mac.zip` from the latest release, unzip it and open Angles. The app is signed and notarized by Apple.
-Or paste this line in Terminal; it downloads the latest release to `~/Applications` and opens it:
+Paste this line in Terminal; it downloads the latest release to `~/Applications` and opens it (the app is signed; Apple's notarization is in review, so a zip downloaded with a browser is still blocked by macOS):
 
     curl -L https://github.com/cesarmour/point-of-entry/releases/latest/download/Angles-mac.zip -o /tmp/Angles.zip && ditto -x -k /tmp/Angles.zip ~/Applications && open ~/Applications/Angles.app
 

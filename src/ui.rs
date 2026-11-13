@@ -32,7 +32,7 @@ pub struct Diagrams(pub Vec<Handle<Image>>);
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
-    AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieVerb,
+    AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieVerb, Subtitle, SubText,
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
     Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound, DiffBtn(u8),
     Scenarios, Ranking, ScnBest(u8), StageBtn(u8), CourseNext, RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
@@ -198,6 +198,12 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             });
         });
         for k in 0..7u8 { h.spawn((txt("", &f.bold, 20.0, BAD), Node { display: Display::None, ..abs() }, TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) }, Tag::Label(k))); }
+        // legenda da fala do instrutor: embaixo, no centro, com uma sombra leve atrás do texto
+        h.spawn((Node { width: Val::Percent(100.0), bottom: Val::Px(118.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, GlobalZIndex(20), Tag::Subtitle)).with_children(|c| {
+            c.spawn((Node { max_width: Val::Px(760.0), padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)))).with_children(|b| {
+                b.spawn((Text::new(""), TextFont { font: f.hr.clone(), font_size: 19.0, ..default() }, TextColor(BONE), TextLayout::new_with_justify(JustifyText::Center), Tag::SubText));
+            });
+        });
         // arco da porta em foco, pendurado no alto da tela: a única leitura de ângulos. O desenho (trilho, trecho aberto,
         // o que falta, o que se vê agora, régua e agulha) vem pronto numa textura; aqui ficam os textos: os graus abertos no
         // meio, o que falta de cada lado nas pontas e, embaixo, a ordem de para onde andar. Sem caixa atrás.
@@ -590,6 +596,7 @@ pub fn update_ui(
             Tag::TacPanel | Tag::Legend => show(&mut node, false),
             Tag::MiniFrame => show(&mut node, game.tac && !bird),
             Tag::PieBar => show(&mut node, pie_on),
+            Tag::Subtitle => show(&mut node, game.sub.is_some()),
             Tag::Prompt => show(&mut node, play && (game.near_door.is_some() || game.breach.is_some())),
             Tag::Lock => show(&mut node, play && (game.lock > 0.03 || game.nade.map_or(false, |(q, _)| q.distance(p.pos) < 9.0))),
             Tag::Replay => show(&mut node, game.mode == Mode::Replay),
@@ -913,6 +920,7 @@ pub fn update_ui(
                     if let Some((q, _)) = ideal_points(game.lesson).get(game.guide_i) { set(&mut t, &format!("{:.1} m", q.distance(p.pos))); col.0 = AMBER; }
                 } else if k == 6 { set(&mut t, &format!("{}°", tac.hfov.to_degrees().round() as i32)); col.0 = CYAN; }
             }
+            Tag::SubText => if let Some((s, _)) = &game.sub { set(&mut t, s); },
             Tag::PieDeg => if let Some(i) = tac.pie_active { set(&mut t, &format!("{}°", tac.pie_deg(i).round() as i32)); },
             // o que falta de cada lado: o lado com mais graus fica forte, o outro esmaecido; lado já aberto não mostra nada
             Tag::PieLeft => { let (l, r) = (tac.bar_left, tac.bar_right); set(&mut t, &if l > 0 { format!("‹ {}°", l) } else { String::new() }); col.0 = HUD_AMBER.with_alpha(if l >= r { 1.0 } else { 0.55 }); }

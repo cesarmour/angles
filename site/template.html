@@ -248,28 +248,20 @@ footer .warn{color:var(--text);font-weight:600}
 <section class="band" id="tactical">
   <div class="wrap">
     <p class="sign">THE TACTICAL VIEW</p>
-    <h2>One bar for the doorway in front of you</h2>
-    <p class="intro">Press G and one bar appears at the top of the screen for the doorway you are working. Nothing is painted over the house: no lines on the floor, no panel of numbers. The bar says how much of that doorway you have opened and which way to step to open the rest.</p>
+    <h2>One arc for the doorway in front of you</h2>
+    <p class="intro">Press G and one arc appears at the top of the screen for the doorway you are working: a protractor for its 180 degrees. Nothing is painted over the house, and there is no panel of numbers. The arc says how much of that doorway you have opened and which way to step to open the rest.</p>
     <div class="split">
-      <figure class="shot barshot">
-        <div class="pbar" role="img" aria-label="The doorway bar: an arrow and 44 degrees on the left, the name Room A door, 116 of 180 degrees, a bar in red, green, cyan, green and red, an arrow and 20 degrees on the right, and the line: step left to open 44 degrees more of this doorway.">
-          <div class="pside"><b>44°</b><i class="tl"></i></div>
-          <div class="pmid">
-            <div class="ptop"><span>ROOM A DOOR</span><b>116° / 180°</b></div>
-            <div class="pseg"><i style="flex:44;background:var(--red)"></i><i style="flex:95;background:var(--green)"></i><i style="flex:13;background:var(--cyan)"></i><i style="flex:8;background:var(--green)"></i><i style="flex:20;background:var(--red)"></i></div>
-            <p>Step left to open 44° more of this doorway.</p>
-          </div>
-          <div class="pside"><b>20°</b><i class="tr"></i></div>
-        </div>
-        <figcaption>The doorway bar, drawn here as it sits at the top of the screen in the game.</figcaption>
+      <figure class="shot">
+        <img src="{{img:arc.jpg}}" width="1200" height="500" alt="The doorway arc: a half circle hanging from the top of the screen like a protractor. Most of it is solid teal, both ends are dashed amber, a short white section with a thin needle marks what is in view, the number 116 degrees sits in the middle, 44 and 20 degrees at the ends, and below it the line: step left to open 44 degrees more.">
+        <figcaption>The doorway arc, close up. It hangs from the top of the screen while you work a doorway.</figcaption>
       </figure>
       <dl class="reading">
-        <div><dt>Degrees opened</dt><span class="val c-green">116° <span style="color:var(--dim)">/</span> 180°</span>
-          <dd>Every doorway is a 180° fan. The number is how much of it you have already seen into; clear most of it before you step in.</dd></div>
-        <div><dt>The bar</dt><span class="val"><span class="c-red">▮</span><span class="c-green">▮▮▮</span><span class="c-cyan">▮</span><span class="c-green">▮</span><span class="c-red">▮</span></span>
-          <dd>The fan, unrolled. Green is open, cyan is what you see at this instant, red is still closed. It is laid out the way you stand: red on the left opens by stepping left.</dd></div>
-        <div><dt>Which way to step</dt><span class="val c-red">◀ 44° <span style="color:var(--dim)">·</span> 20° ▶</span>
-          <dd>Degrees still closed on each side, an arrow for the side that has some left, and one line under the bar that tells you where to go next.</dd></div>
+        <div><dt>Degrees opened</dt><span class="val c-green">116°</span>
+          <dd>Every doorway is a 180° fan. The number in the middle is how much of it you have already seen into; open most of it before you step in.</dd></div>
+        <div><dt>The arc</dt><span class="val"><span class="c-amber">┄</span><span class="c-green">━━━</span><span style="color:#fff">━</span><span class="c-green">━</span><span class="c-amber">┄</span></span>
+          <dd>Solid teal is open, the white section with the needle is what you see at this instant, dashed amber is still closed. It is laid out the way you stand: amber on the left opens by stepping left.</dd></div>
+        <div><dt>Which way to step</dt><span class="val c-amber">‹ 44° <span style="color:var(--dim)">·</span> 20° ›</span>
+          <dd>Degrees still closed on each side, and one line under the arc that tells you where to go next. The instructor says it out loud too, with subtitles.</dd></div>
       </dl>
     </div>
 
@@ -309,7 +301,7 @@ footer .warn{color:var(--text);font-weight:600}
           <li><b>Ideal route on the floor.</b> Always on, a tip that fades after 8 seconds, or off.</li>
           <li><b>Live coaching.</b> Six technique warnings, from stopping in a doorway to turning your back on uncleared floor.</li>
           <li><b>Replay</b> after every lesson.</li>
-          <li><b>Mission 2</b> runs the house in reverse. <b>Free run</b> gives no instructions at all.</li>
+          <li><b>The instructor</b> talks you through every stage, out loud and in subtitles.</li>
         </ul>
       </div>
     </div>
@@ -354,23 +346,23 @@ footer .warn{color:var(--text);font-weight:600}
   <div class="wrap">
     <p class="sign">THE HOUSES</p>
     <h2>Six maps, never the same twice</h2>
-    <p class="intro">The training house carries the six lessons. Four more are free runs: threats and no-shoot targets are placed at random in every room, every time. The family home is the one you defend.</p>
+    <p class="intro">Every map is the same kind of place: a kill house in OSB board with the framing showing. The training house carries the first lessons, four more carry the middle of the course with targets placed at random every time, and the family home is the final exam.</p>
     <div class="maps">
       <figure><img src="{{img:map-house.jpg}}" width="960" height="540" alt="Top-down view of the training house"><figcaption><b>TRAINING HOUSE</b><span>The tutorial shoot house: six lessons, Mission 2 and free run.</span></figcaption></figure>
       <figure><img src="{{img:map-apartment.jpg}}" width="960" height="540" alt="Top-down view of the apartment map"><figcaption><b>APARTMENT</b><span>Tight rooms off a central corridor, two closed doors.</span></figcaption></figure>
       <figure><img src="{{img:map-office.jpg}}" width="960" height="540" alt="Top-down view of the office map"><figcaption><b>OFFICE</b><span>Open-plan floor with low partitions, a corridor and three closed doors.</span></figcaption></figure>
       <figure><img src="{{img:map-warehouse.jpg}}" width="960" height="540" alt="Top-down view of the warehouse map"><figcaption><b>WAREHOUSE</b><span>Big floor with tall shelving rows and dead space, an office, a back corridor and three rooms.</span></figcaption></figure>
       <figure><img src="{{img:map-hallway.jpg}}" width="960" height="540" alt="Top-down view of the hallway map: a long hallway with two rooms on each side and a passage crossing it"><figcaption><b>HALLWAY</b><span>One long hallway, doors facing each other on both sides and a four-way crossing.</span></figcaption></figure>
-      <figure><img src="{{img:map-home.jpg}}" width="960" height="540" alt="Top-down view of the family home: bedrooms at the back, a corridor across the middle, the living area, a yard with a pool and the street with two gates at the bottom"><figcaption><b>FAMILY HOME</b><span>One floor, built like a kill house in OSB board: bedrooms with windows at the back, a corridor, the living area, a yard, and the street the intruders come in from. Home defense only.</span></figcaption></figure>
+      <figure><img src="{{img:map-home.jpg}}" width="960" height="540" alt="Top-down view of the family home: bedrooms at the back, a corridor across the middle, the living area, a yard with a pool and the street with two gates at the bottom"><figcaption><b>FAMILY HOME</b><span>One floor, built like the rest of the kill house in OSB board: bedrooms with windows at the back, a corridor, the living area, a yard, and the street the intruders come in from. Home defense only.</span></figcaption></figure>
     </div>
   </div>
 </section>
 
 <section class="band" id="scenarios">
   <div class="wrap">
-    <p class="sign">SCENARIOS</p>
-    <h2>Nine scenarios, one tactic each</h2>
-    <p class="intro">After the course, each scenario drills one idea on one map. Scores and times go to a ranking kept on your computer: more points first, then less time.</p>
+    <p class="sign">THE COURSE</p>
+    <h2>Five phases, nine stages</h2>
+    <p class="intro">Cardboard, doors, hallways, opposition, final exam. Each stage teaches one thing about angles and movement, and passing it opens the next. Scores and times go to a ranking kept on your computer.</p>
     <div class="split flip">
       <ol class="course">
         <li><div><h3><small>Training house</small>Hostage shield</h3><p>Three threats stand behind a hostage. Step sideways until the shot is clean, then fire.</p></div></li>
@@ -381,18 +373,13 @@ footer .warn{color:var(--text);font-weight:600}
         <li><div><h3><small>Apartment</small>Second look</h3><p>Some armed people give up; some with their hands up are waiting for you to look away.</p></div></li>
         <li><div><h3><small>Office</small>Hostage rescue</h3><p>One hostage, one captor and a clock. Go straight to the problem.</p></div></li>
         <li><div><h3><small>Family home</small>Home defense</h3><p>Five waves of intruders that come in from the street. They stack on the jamb, lean and slice a doorway before they enter, and fall back when hit. A doorway that drops two of them gets a grenade first, and some go round to a window. The walls are OSB and do not stop rounds, theirs or yours. Hold one spot and you lose it: shoot, move, reload between waves.</p></div></li>
-        <li><div><h3><small>Warehouse · very hard</small>Walker</h3><p>A walking tank with an infantry escort. Rounds bounce off its front plate, and one hit from its cannon ends the run: break its line of sight and flank it.</p></div></li>
       </ol>
       <div>
-        <figure class="shot">
-          <img src="{{img:walker.jpg}}" width="1600" height="900" alt="First-person view down a lane between shelving rows: a two-legged walking tank and two armed men at the far end, with a red CANNON LOCK warning on screen.">
-          <figcaption>Walker, the very hard stage: the cannon needs one second on you, and the warning counts it.</figcaption>
-        </figure>
         <ul class="notes">
-          <li><b>Three difficulty levels</b> for the course, the free runs and the scenarios; the walker stage has its own, above Hard.</li>
+          <li><b>No difficulty menu.</b> The phase decides: cardboard that never fires back at first, people who think at the end.</li>
           <li><b>Threats that think.</b> Intruders and roaming threats find their own way through the building, slice a doorway before entering, flinch when surprised and fall back to cover when hit.</li>
           <li><b>Rifles and grenades.</b> Threats carry short rifles and fire in bursts; stand still, and one that knows where you are but has no shot throws a grenade.</li>
-          <li><b>Ranking</b> for the tutorial, Mission 2, every free-run map and every scenario.</li>
+          <li><b>Ranking</b> for every stage, and any stage already open can be run again.</li>
         </ul>
       </div>
     </div>
@@ -430,12 +417,15 @@ footer .warn{color:var(--text);font-weight:600}
 <section class="band" id="download">
   <div class="wrap">
     <p class="sign">GET IT</p>
-    <h2>Download for Mac</h2>
+    <h2>Install on Mac</h2>
     <div class="get">
       <ol class="steps">
-        <li><div><b>Download and unzip.</b><span>Angles-mac.zip, {{size}}. You get one app: Angles.</span></div></li>
-        <li><div><b>Open it.</b><span>The app is signed and notarized by Apple. The first time, macOS asks whether you want to open an app downloaded from the internet: choose Open.</span></div></li>
-        <li><div><b>Start with the tutorial.</b><span>The six lessons teach every control as you go.</span></div></li>
+        <li><div><b>Open Terminal.</b><span>Press Command and Space, type Terminal, press Return.</span></div></li>
+        <li><div><b>Paste this line and press Return.</b>
+          <span class="cmdbox"><code id="cmd">curl -L {{repo}}/releases/latest/download/Angles-mac.zip -o /tmp/Angles.zip &amp;&amp; ditto -x -k /tmp/Angles.zip ~/Applications &amp;&amp; open ~/Applications/Angles.app</code>
+          <button class="copy" type="button" id="copy-cmd">Copy</button></span></div></li>
+        <li><div><b>That is all.</b><span>The game is now in the Applications folder inside your home folder, and it opens. To play again, open Angles from there.</span></div></li>
+        <li><div><b>Start the course.</b><span>Five phases, from cardboard targets to a team that thinks.</span></div></li>
       </ol>
       <div class="getbox">
         <h3>Angles · Kill House {{version}}</h3>
@@ -444,13 +434,11 @@ footer .warn{color:var(--text);font-weight:600}
           <li>Keyboard and trackpad or mouse</li>
           <li>Free. Single player, no account, works offline</li>
         </ul>
+        <p class="why"><b>Why a command?</b> Angles is signed by its developer, and Apple's notarization is still in review. Until it is approved, macOS refuses to open the app when the zip is downloaded with a browser; fetched this way it opens normally.</p>
         <div class="cta">
-          <a class="btn" href="{{download}}">Download · {{size}}</a>
+          <a class="btn ghost" href="{{download}}">Zip · {{size}}</a>
           <a class="btn ghost" href="{{repo}}/releases">All versions</a>
         </div>
-        <p class="meta">Prefer Terminal? One line downloads and opens it:</p>
-        <span class="cmdbox"><code id="cmd">curl -L {{repo}}/releases/latest/download/Angles-mac.zip -o /tmp/Angles.zip &amp;&amp; ditto -x -k /tmp/Angles.zip ~/Applications &amp;&amp; open ~/Applications/Angles.app</code>
-        <button class="copy" type="button" id="copy-cmd">Copy</button></span>
         <p class="meta">Prefer to build it? Rust and one command: <code>cargo run --release</code></p>
       </div>
     </div>

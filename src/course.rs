@@ -66,3 +66,63 @@ pub fn course_system(game: Res<Game>, targets: Res<Targets>, mut pr: ResMut<Prog
     };
     if passed && i == pr.done { pr.done = (i + 1).min(STAGES.len()); pr.save(); }
 }
+
+/* ---------- voz do instrutor ---------- */
+
+/// Roteiro do instrutor: identificador da fala e o texto (que também é a legenda). O áudio de cada fala está em
+/// assets/voice/<identificador>.wav.
+const SCRIPT: &str = include_str!("../assets/voice/script.tsv");
+fn line(id: &str) -> Option<&'static str> { SCRIPT.lines().find_map(|l| l.split_once('\t').filter(|(k, _)| *k == id).map(|(_, t)| t)) }
+
+#[derive(Default)]
+pub struct VoiceState { until: f32, clock: f32, last_mode: Option<Mode>, hits: u32, civ: u32, nade: bool, stall: f32, deg: f32, door: Option<usize>, said_open: Option<usize>, hint_cd: f32, passed: bool, done_seen: usize }
+
+/// Fala do instrutor nos momentos que ensinam: a instrução de cada etapa no cartão, para que lado andar quando o aluno
+/// para com a porta pela metade, a porta aberta, tiro levado, refém atingido, granada, e o resultado da etapa.
+/// Uma fala por vez; cada uma aparece também como legenda.
+#[allow(clippy::too_many_arguments)]
+pub fn voice_system(time: Res<Time<Real>>, mut game: ResMut<Game>, pr: Res<Progress>, tac: Res<crate::tactical::Tac>, asset: Res<AssetServer>, mut commands: Commands, mut st: Local<VoiceState>) {
+    let dt = time.delta_secs().min(0.1);
+    st.clock += dt;
+    st.hint_cd = (st.hint_cd - dt).max(0.0);
+    if let Some((_, t)) = game.sub.as_mut() { *t -= dt; if *t <= 0.0 { game.sub = None; } }
+    let mut say: Option<String> = None;
+    let mode = game.mode;
+    let entered = st.last_mode != Some(mode);
+    st.last_mode = Some(mode);
+    if let Some(i) = pr.current {
+        if entered && mode == Mode::Card { say = Some(format!("stage{}", i + 1)); st.hits = 0; st.civ = 0; st.said_open = None; }
+        if entered && mode == Mode::Debrief {
+            let passed = pr.done > st.done_seen || pr.done > i;
+            say = Some(if pr.done >= STAGES.len() && pr.done > st.done_seen { "course_done" } else if passed { "stage_passed" } else { "stage_failed" }.to_string());
+            st.passed = passed;
+        }
+    }
+    st.done_seen = pr.done;
+    if mode == Mode::Play && !game.demo {
+        if game.stats.civ_hit > st.civ { say = Some("hostage_hit".into()); }
+        else if game.stats.hits_taken > st.hits { say = Some("hit".into()); }
+        else if game.nade.is_some() && !st.nade { say = Some("grenade".into()); }
+        st.civ = game.stats.civ_hit; st.hits = game.stats.hits_taken; st.nade = game.nade.is_some();
+        // porta em foco: aberta de vez, ou o aluno parado com ela pela metade
+        if let Some(d) = tac.pie_active {
+            let deg = tac.pie_deg(d);
+            if st.door != Some(d) { st.door = Some(d); st.deg = deg; st.stall = 0.0; }
+            if deg > st.deg + 1.0 { st.deg = deg; st.stall = 0.0; } else { st.stall += dt; }
+            if say.is_none() && deg >= 150.0 && st.said_open != Some(d) { st.said_open = Some(d); say = Some("door_open".into()); }
+            else if say.is_none() && game.tac && st.stall > 3.5 && st.hint_cd <= 0.0 && deg < 140.0 && (tac.bar_left > 0 || tac.bar_right > 0) {
+                say = Some(if tac.bar_left >= tac.bar_right { "step_left" } else { "step_right" }.to_string());
+                st.hint_cd = 9.0; st.stall = 0.0;
+            }
+        } else { st.door = None; }
+    }
+    let Some(id) = say else { return };
+    // não atropela a fala anterior, a não ser para avisos que não podem esperar
+    let urgent = matches!(id.as_str(), "grenade" | "hostage_hit" | "hit") || id.starts_with("stage");
+    if st.clock < st.until && !urgent { return; }
+    let Some(text) = line(&id) else { return };
+    let secs = 1.0 + text.len() as f32 * 0.062;
+    st.until = st.clock + secs;
+    game.sub = Some((text.to_string(), secs + 0.4)); game.ui_dirty = true;
+    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>(format!("voice/{id}.wav"))), PlaybackSettings { mode: bevy::audio::PlaybackMode::Despawn, volume: bevy::audio::Volume::Linear(0.9), ..default() }));
+}

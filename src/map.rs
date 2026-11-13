@@ -151,7 +151,7 @@ pub fn slots() -> &'static [Slot] { map().slots }
 pub fn is_mech(def: &TargetDef) -> bool { def.id.starts_with('M') }
 pub fn zone_index(id: &str) -> usize { zones().iter().position(|z| z.id == id).unwrap_or(0) }
 /// Paredes de OSB (a kill house de madeira): escondem, mas não param projétil.
-pub fn soft_walls() -> bool { map_index() == 5 }
+pub fn soft_walls() -> bool { true }
 pub fn zone_at(x: f32, z: f32) -> Option<usize> { zones().iter().position(|q| x >= q.x1 && x < q.x2 && z >= q.z1 && z < q.z2) }
 
 pub const WARM: [f32; 3] = [1.0, 0.89, 0.75];

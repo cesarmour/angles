@@ -63,6 +63,8 @@ pub struct Game {
     /// Onde caíram, neste quadro, os invasores derrubados (o cenário conta para a porta mais próxima) e granadas pedidas
     /// por quem vai entrar por uma porta que já custou caro (de onde, para onde).
     pub fell: Vec<Vec2>, pub nade_req: Vec<(Vec3, Vec3)>,
+    /// Legenda da fala do instrutor que está tocando (texto e segundos que restam).
+    pub sub: Option<(String, f32)>,
 }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
@@ -98,7 +100,7 @@ impl Default for Game {
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
             scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
-            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new() }
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo

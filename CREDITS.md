@@ -16,6 +16,12 @@ A teaching tool for close-quarters battle fundamentals. Real technique is learne
 
 - Oriented Strand Board (walls of the family home), by Dimitrios Savva. Sheet seams added and gloss removed with `tools/prep_osb.py`.
 
+## Instructor voice
+Generated with ElevenLabs (voice "Brian") from the script in `assets/voice/script.tsv`.
+
+## Arc font
+Barlow Condensed, by Jeremy Tribby, SIL Open Font License 1.1 (`assets/fonts/OFL-BarlowCondensed.txt`).
+
 ## Sounds — Freesound.org (all CC0 1.0)
 | File | Author | Source |
 |---|---|---|

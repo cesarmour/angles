@@ -278,7 +278,8 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
     let lo: Vec<B3> = level.walls.iter().map(|w| b3(w.x1, 0.0, w.z1, w.x2, band, w.z2)).collect();
     let hi: Vec<B3> = level.walls.iter().map(|w| b3(w.x1, band, w.z1, w.x2, WALL_H, w.z2)).collect();
     // a casa é uma kill house de madeira: compensado de cima a baixo, sem faixa de pintura
-    let ply = map_index() == 5;
+    // todos os mapas são a mesma kill house: paredes de OSB com sarrafo aparente
+    let ply = true;
     let (w_lo, w_hi) = if ply { (&m.ply, &m.ply) } else { (&m.wall_lo, &m.wall_hi) };
     // cada repetição da textura é uma chapa de 1,22 m: as juntas das chapas caem sempre no mesmo lugar do mundo
     let ws = if ply { OSB_UV } else { 1.0 };
