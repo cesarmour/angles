@@ -60,7 +60,7 @@ pub struct Mats {
     pub locker: Handle<StandardMaterial>, pub barrel: Handle<StandardMaterial>, pub fabric: Handle<StandardMaterial>, pub steel: Handle<StandardMaterial>,
     pub gun: Handle<StandardMaterial>, pub poly: Handle<StandardMaterial>, pub glove: Handle<StandardMaterial>, pub sleeve: Handle<StandardMaterial>,
     pub brass: Handle<StandardMaterial>, pub cloth: Handle<StandardMaterial>, pub gear: Handle<StandardMaterial>, pub invisible: Handle<StandardMaterial>,
-    /// Kill house de madeira: chapa de OSB (uma chapa de 1,22 m por repetição) e sarrafo da estrutura.
+    /// Kill house de madeira: chapa de OSB (textura do Poly Haven, duas chapas de 1,22 m por repetição) e sarrafo da estrutura.
     pub ply: Handle<StandardMaterial>, pub lumber: Handle<StandardMaterial>,
 }
 
@@ -218,6 +218,9 @@ pub fn map_switch(
 
 /// Largura da chapa de compensado da kill house.
 const SHEET: f32 = 1.22;
+/// Escala da textura de OSB (Poly Haven, 2,5 m de chapa fotografada): duas chapas de 1,22 m por repetição, com a junta
+/// de cada chapa escurecida na própria textura (`tools/prep_osb.py`).
+const OSB_UV: f32 = 1.0 / (2.0 * SHEET);
 
 /// Estrutura de sarrafo aparente das paredes da kill house, como numa parede de OSB de verdade: só de um lado (o outro
 /// lado é a chapa lisa, com as juntas à vista). Guias em cima e embaixo, montantes em pé a cada meia chapa e uma travessa
@@ -278,7 +281,7 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
     let ply = map_index() == 5;
     let (w_lo, w_hi) = if ply { (&m.ply, &m.ply) } else { (&m.wall_lo, &m.wall_hi) };
     // cada repetição da textura é uma chapa de 1,22 m: as juntas das chapas caem sempre no mesmo lugar do mundo
-    let ws = if ply { 1.0 / SHEET } else { 1.0 };
+    let ws = if ply { OSB_UV } else { 1.0 };
     sb(&mut *commands, &mut *meshes, &lo, ws, w_lo);
     sb(&mut *commands, &mut *meshes, &hi, ws, w_hi);
     if ply { sb(&mut *commands, &mut *meshes, &framing(&level.walls), 1.0, &m.lumber); }
@@ -372,7 +375,7 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
             }
             // peitoril de janela: meia parede de OSB no vão, com uma régua de sarrafo em cima
             PropKind::Sill => {
-                sb(&mut *commands, &mut *meshes, &[b3(p.x1, 0.0, p.z1, p.x2, p.h - 0.04, p.z2)], 1.0 / SHEET, &m.ply);
+                sb(&mut *commands, &mut *meshes, &[b3(p.x1, 0.0, p.z1, p.x2, p.h - 0.04, p.z2)], OSB_UV, &m.ply);
                 sb(&mut *commands, &mut *meshes, &[b3(p.x1 - 0.015, p.h - 0.04, p.z1 - 0.03, p.x2 + 0.015, p.h, p.z2 + 0.03)], 1.0, &m.lumber);
             }
             PropKind::Cover => {
@@ -436,7 +439,7 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
             while y < WALL_H - 0.05 { ladders.push(b3(cx - 0.19, y, z - 0.012, cx + 0.19, y + 0.028, z + 0.012)); y += 0.3; }
         }
         if ply {
-            sb(&mut *commands, &mut *meshes, &steps, 1.0 / SHEET, &m.ply);
+            sb(&mut *commands, &mut *meshes, &steps, OSB_UV, &m.ply);
             sb(&mut *commands, &mut *meshes, &nosing, 1.0, &m.lumber);
         } else {
             sb(&mut *commands, &mut *meshes, &steps, 1.0, &granite);
@@ -447,7 +450,7 @@ pub fn spawn_map(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut 
             commands.spawn((Mesh3d(meshes.add(Cuboid::new(0.045, 0.09, d.length()))), MeshMaterial3d(if ply { m.lumber.clone() } else { white.clone() }),
                 Transform::from_translation((pa + pb) / 2.0).looking_to(d.normalize(), Vec3::Y), NotShadowCaster, MapEntity));
         }
-        sb(&mut *commands, &mut *meshes, &lining, if ply { 1.0 / SHEET } else { 0.6 }, if ply { &m.ply } else { &m.wall_lo });
+        sb(&mut *commands, &mut *meshes, &lining, if ply { OSB_UV } else { 0.6 }, if ply { &m.ply } else { &m.wall_lo });
         sb(&mut *commands, &mut *meshes, &ladders, 1.0, &m.frame);
         sb(&mut *commands, &mut *meshes, &holes, 1.0, &dark);
     }

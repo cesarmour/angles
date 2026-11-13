@@ -14,6 +14,8 @@ A teaching tool for close-quarters battle fundamentals. Real technique is learne
 - Textures: Concrete Floor Worn 001, Concrete Block Wall, Concrete Wall 008, Painted Concrete, Plywood, Metal Plate, Blue Metal Plate, Green Metal Rust, Rusty Painted Metal
 - Models: Barrel 01, Sofa 01, Wooden Table 01, Ammo Box, Cardboard Box 01, Korean Fire Extinguisher 01, Metal Office Desk, Mounted Fluorescent Lights, Steel Frame Shelves 01, Vintage Cabinet 01, Wooden Military Crate
 
+- Oriented Strand Board (walls of the family home), by Dimitrios Savva. Sheet seams added and gloss removed with `tools/prep_osb.py`.
+
 ## Sounds — Freesound.org (all CC0 1.0)
 | File | Author | Source |
 |---|---|---|
