@@ -265,7 +265,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         s.spawn((txt("A teaching tool for fundamentals. Real technique is learned with a qualified instructor, as a team, in a controlled environment.", &f.body, 13.0, MUTE), Node { max_width: Val::Px(640.0), ..default() }));
     });
     commands.spawn(screen(Tag::Credits)).with_children(|s| {
-        s.spawn(txt("KILL HOUSE", &f.semi, 14.0, AMBER));
+        s.spawn(txt("ANGLES · KILL HOUSE", &f.semi, 14.0, AMBER));
         s.spawn(txt("CREDITS", &f.bold, 54.0, BONE));
         s.spawn((txt(CREDITS, &f.body, 15.5, BONE), Node { max_width: Val::Px(980.0), ..default() }));
         s.spawn(Node::default()).with_children(|b| button(b, &f, "BACK · ESC", Act::Back, true));
@@ -335,7 +335,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     });
     // cenários: cada linha é um botão que começa o cenário, com o que ele treina e a melhor marca do jogador
     commands.spawn(screen(Tag::Scenarios)).with_children(|s| {
-        s.spawn(txt("KILL HOUSE", &f.semi, 14.0, AMBER));
+        s.spawn(txt("ANGLES · KILL HOUSE", &f.semi, 14.0, AMBER));
         s.spawn(txt("SCENARIOS", &f.bold, 54.0, BONE));
         s.spawn((txt("Each scenario drills one tactic. They use the difficulty chosen on the menu; scores and times go to the ranking.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
         s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(7.0), max_width: Val::Px(1180.0), ..default() }).with_children(|l| {
@@ -354,7 +354,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     });
     // ranking: as três melhores partidas de cada tabela (mais pontos primeiro; no empate, menos tempo)
     commands.spawn(screen(Tag::Ranking)).with_children(|s| {
-        s.spawn(txt("KILL HOUSE", &f.semi, 14.0, AMBER));
+        s.spawn(txt("ANGLES · KILL HOUSE", &f.semi, 14.0, AMBER));
         s.spawn(txt("RANKING", &f.bold, 54.0, BONE));
         s.spawn((txt("Best three runs on each board: more points first, then less time. Stored on this computer.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
         s.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), max_width: Val::Px(1240.0), ..default() }, Tag::RankList));

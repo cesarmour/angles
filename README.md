@@ -1,4 +1,6 @@
-# Kill House
+# Angles
+
+Current version: **Kill House** (0.10.1).
 
 A teaching simulator for close-quarters battle (CQB) fundamentals, built with Rust and Bevy 0.16.
 A shoot house with IPSC-style cardboard targets, a six-lesson tutorial, first-person and top-down views,
@@ -9,12 +11,10 @@ Four maps (training house, apartment, office, warehouse); enemy and hostage posi
 > A teaching tool for fundamentals. Real technique is learned with a qualified instructor, as a team, in a controlled environment.
 
 ## Install (macOS, Apple silicon)
-Paste this line in Terminal. It downloads the latest release to `~/Applications` and opens it:
+Download `Angles-mac.zip` from the latest release, unzip it and open Angles. The app is signed and notarized by Apple.
+Or paste this line in Terminal; it downloads the latest release to `~/Applications` and opens it:
 
-    curl -L https://github.com/cesarmour/point-of-entry/releases/latest/download/KillHouse-mac.zip -o /tmp/KillHouse.zip && ditto -x -k /tmp/KillHouse.zip ~/Applications && open ~/Applications/"Kill House.app"
-
-The app is not signed with an Apple developer certificate, so macOS refuses to open it when the zip is downloaded
-with a browser. If you did that, type `xattr -cr` and a space in Terminal, drag the app into the window and press Return.
+    curl -L https://github.com/cesarmour/point-of-entry/releases/latest/download/Angles-mac.zip -o /tmp/Angles.zip && ditto -x -k /tmp/Angles.zip ~/Applications && open ~/Applications/Angles.app
 
 ## Controls
 W A S D move · mouse look · left button fire · Space or right button aim (Z locks the aim) · Q / E lean · C or Ctrl crouch ·
@@ -23,7 +23,7 @@ T ideal route (always / tip / off) · O hide the lesson box · H review the less
 
 ## Build and run (macOS)
     cargo run --release
-    cargo build --release && ./bundle.sh     # makes dist/Kill House.app
+    cargo build --release && ./bundle.sh     # makes dist/Angles.app
 
 ## Automatic tests (scripted operator, no mouse needed)
     ./run.sh run 2      # runs the six lessons along the ideal route and prints the state of each one

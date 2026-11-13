@@ -1,4 +1,4 @@
-<title>Kill House</title>
+<title>Angles</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Saira+Stencil+One&display=swap">
 <style>
@@ -199,7 +199,7 @@ footer .warn{color:var(--text);font-weight:600}
 <!--BODY-->
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#top-of-page"><img src="{{img:icon.png}}" alt="">KILL HOUSE</a>
+    <a class="brand" href="#top-of-page"><img src="{{img:icon.png}}" alt="">ANGLES</a>
     <nav aria-label="Sections">
       <a href="#tactical">Tactical view</a>
       <a href="#course">Course</a>
@@ -216,7 +216,7 @@ footer .warn{color:var(--text);font-weight:600}
   <div class="wrap">
     <div class="hero-copy">
       <p class="kicker">CQB fundamentals · Teaching simulator</p>
-      <h1>KILL HOUSE</h1>
+      <h1>ANGLES</h1>
       <p class="lede">Clear the room before you walk into it.</p>
       <p class="body">A shoot house with armed threats, hostages and a tactical view that puts numbers on technique: how many degrees of a doorway you have opened, how much of your body the corner shows, and how long you stood in a line of fire.</p>
       <div class="cta">
@@ -430,29 +430,27 @@ footer .warn{color:var(--text);font-weight:600}
 <section class="band" id="download">
   <div class="wrap">
     <p class="sign">GET IT</p>
-    <h2>Install on Mac</h2>
+    <h2>Download for Mac</h2>
     <div class="get">
       <ol class="steps">
-        <li><div><b>Open Terminal.</b><span>Press Command and Space, type Terminal, press Return.</span></div></li>
-        <li><div><b>Paste this line and press Return.</b>
-          <span class="cmdbox"><code id="cmd">curl -L {{repo}}/releases/latest/download/KillHouse-mac.zip -o /tmp/KillHouse.zip &amp;&amp; ditto -x -k /tmp/KillHouse.zip ~/Applications &amp;&amp; open ~/Applications/"Kill House.app"</code>
-          <button class="copy" type="button" id="copy-cmd">Copy</button></span></div></li>
-        <li><div><b>That is all.</b><span>The game is now in the Applications folder inside your home folder, and it opens. To play again, open Kill House from there.</span></div></li>
+        <li><div><b>Download and unzip.</b><span>Angles-mac.zip, {{size}}. You get one app: Angles.</span></div></li>
+        <li><div><b>Open it.</b><span>The app is signed and notarized by Apple. The first time, macOS asks whether you want to open an app downloaded from the internet: choose Open.</span></div></li>
         <li><div><b>Start with the tutorial.</b><span>The six lessons teach every control as you go.</span></div></li>
       </ol>
       <div class="getbox">
-        <h3>Kill House {{version}}</h3>
+        <h3>Angles · Kill House {{version}}</h3>
         <ul>
           <li>Mac with Apple silicon (M1 or later)</li>
           <li>Keyboard and trackpad or mouse</li>
           <li>Free. Single player, no account, works offline</li>
         </ul>
-        <p class="why"><b>Why a command?</b> Kill House is not signed with a paid Apple developer certificate, so macOS refuses to open the app when it is downloaded with a browser. Fetched this way it opens normally. The line does three things you can read: downloads the zip from GitHub, unzips it, opens the app.</p>
         <div class="cta">
-          <a class="btn ghost" href="{{download}}">Zip · {{size}}</a>
+          <a class="btn" href="{{download}}">Download · {{size}}</a>
           <a class="btn ghost" href="{{repo}}/releases">All versions</a>
         </div>
-        <p class="meta">Downloaded the zip with a browser and macOS will not open it? In Terminal type <code>xattr -cr</code> and a space, drag the app into the window, press Return.</p>
+        <p class="meta">Prefer Terminal? One line downloads and opens it:</p>
+        <span class="cmdbox"><code id="cmd">curl -L {{repo}}/releases/latest/download/Angles-mac.zip -o /tmp/Angles.zip &amp;&amp; ditto -x -k /tmp/Angles.zip ~/Applications &amp;&amp; open ~/Applications/Angles.app</code>
+        <button class="copy" type="button" id="copy-cmd">Copy</button></span>
         <p class="meta">Prefer to build it? Rust and one command: <code>cargo run --release</code></p>
       </div>
     </div>

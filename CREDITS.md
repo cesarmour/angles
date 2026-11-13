@@ -1,4 +1,4 @@
-# Kill House — credits
+# Angles — credits
 
 A teaching tool for close-quarters battle fundamentals. Real technique is learned with a qualified instructor, as a team, in a controlled environment.
 

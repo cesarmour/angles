@@ -72,7 +72,7 @@ fn main() {
         .insert_resource(scenario::Ranking::load())
         .init_resource::<state::MapReq>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window { title: "Kill House".into(), resolution: { let r = WindowResolution::new(world::env_f("CQB_W", 1440.0), world::env_f("CQB_H", 810.0)); match std::env::var("CQB_SCALE").ok().and_then(|s| s.parse::<f32>().ok()) { Some(sc) => r.with_scale_factor_override(sc), None => r } }, present_mode: if std::env::var("CQB_NOVSYNC").is_ok() { PresentMode::AutoNoVsync } else { PresentMode::AutoVsync }, ..default() }),
+            primary_window: Some(Window { title: "Angles".into(), resolution: { let r = WindowResolution::new(world::env_f("CQB_W", 1440.0), world::env_f("CQB_H", 810.0)); match std::env::var("CQB_SCALE").ok().and_then(|s| s.parse::<f32>().ok()) { Some(sc) => r.with_scale_factor_override(sc), None => r } }, present_mode: if std::env::var("CQB_NOVSYNC").is_ok() { PresentMode::AutoNoVsync } else { PresentMode::AutoVsync }, ..default() }),
             ..default()
         }).set(AssetPlugin { file_path: asset_dir(), ..default() }).set(bevy::pbr::PbrPlugin { use_gpu_instance_buffer_builder: std::env::var("CQB_CPUB").is_err(), ..default() }))
         .add_plugins(TemporalAntiAliasPlugin)
