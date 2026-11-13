@@ -3,6 +3,7 @@ mod art;
 mod audio;
 mod bot;
 mod combat;
+mod course;
 mod gi;
 mod lessons;
 mod map;
@@ -71,6 +72,7 @@ fn main() {
         .init_resource::<lessons::Checkpoint>()
         .init_resource::<scenario::Nav>()
         .insert_resource(scenario::Ranking::load())
+        .insert_resource(course::Progress::load())
         .init_resource::<state::MapReq>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window { title: "Angles".into(), resolution: { let r = WindowResolution::new(world::env_f("CQB_W", 1440.0), world::env_f("CQB_H", 810.0)); match std::env::var("CQB_SCALE").ok().and_then(|s| s.parse::<f32>().ok()) { Some(sc) => r.with_scale_factor_override(sc), None => r } }, present_mode: if std::env::var("CQB_NOVSYNC").is_ok() { PresentMode::AutoNoVsync } else { PresentMode::AutoVsync }, ..default() }),
@@ -90,6 +92,7 @@ fn main() {
         .add_systems(Update, lessons::checkpoint_system.after(lessons::replay_system).before(ui::update_ui))
         .add_systems(Update, scenario::scenario_system.after(combat::combat).before(lessons::update_lessons))
         .add_systems(Update, scenario::rank_system.after(lessons::update_lessons).before(ui::update_ui))
+        .add_systems(Update, course::course_system.after(scenario::rank_system).before(ui::update_ui))
         .add_systems(Update, operator::hands_setup)
         .add_systems(Update, scenario::grenade_system.after(scenario::scenario_system).before(lessons::update_lessons))
         .add_systems(PostUpdate, operator::hands_pose.after(bevy::app::Animation).before(bevy::transform::TransformSystem::TransformPropagate))

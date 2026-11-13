@@ -31,10 +31,10 @@ pub enum Tag {
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieArrowL, PieArrowR,
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
     Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound, DiffBtn(u8),
-    Scenarios, Ranking, ScnBest(u8), RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
+    Scenarios, Ranking, ScnBest(u8), StageBtn(u8), CourseNext, RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry, Diff(u8), Scn(u8), Scenarios, Ranking }
+pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry, Diff(u8), Scn(u8), Scenarios, Ranking, Stage(u8), Continue }
 #[derive(Event)]
 pub struct ResetGame { pub free: bool, pub mission2: bool, pub scn: Option<usize> }
 
@@ -222,43 +222,24 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     commands.spawn((ImageNode::new(portrait.0.clone()), Node { position_type: PositionType::Absolute, right: Val::Px(10.0), bottom: Val::Px(0.0), width: Val::Px(540.0), height: Val::Px(810.0), display: Display::None, ..default() },
         GlobalZIndex(6), bevy::ui::FocusPolicy::Pass, Tag::Portrait));
     commands.spawn(screen(Tag::Menu)).with_children(|s| {
-        s.spawn(txt("CLOSE-QUARTERS BATTLE SIMULATOR · TUTORIAL", &f.semi, 14.0, AMBER));
-        s.spawn((txt("POINT OF ", &f.bold, 104.0, BONE), TextLayout::new_with_no_wrap())).with_children(|t| { t.spawn((TextSpan::new("ENTRY"), TextFont { font: f.bold.clone(), font_size: 104.0 * FS, ..default() }, TextColor(AMBER))); });
-        s.spawn((txt("A shoot house with armed threats and hostages, and six short lessons on how to enter a room: see first, expose little and fire only at what you have identified.", &f.body, 19.0, BONE), Node { max_width: Val::Px(640.0), ..default() }));
+        s.spawn(txt("CLOSE-QUARTERS BATTLE · THE KILL HOUSE COURSE", &f.semi, 14.0, AMBER));
+        s.spawn((txt("ANG", &f.bold, 104.0, BONE), TextLayout::new_with_no_wrap())).with_children(|t| { t.spawn((TextSpan::new("LES"), TextFont { font: f.bold.clone(), font_size: 104.0 * FS, ..default() }, TextColor(AMBER))); });
+        s.spawn((txt("A course in five phases, taught inside a kill house. Every stage teaches one thing about angles: how much of a doorway you have opened, and where to stand to open the rest.", &f.body, 19.0, BONE), Node { max_width: Val::Px(640.0), ..default() }));
         s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(10.0), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|r| {
-            button(r, &f, "START TUTORIAL", Act::Start, true);
-            button(r, &f, "MISSION 2 · REVERSE ROUTE", Act::Mission2, false);
-            button(r, &f, "FREE RUN", Act::Free, false);
-            button(r, &f, "SCENARIOS", Act::Scenarios, false);
+            button(r, &f, "CONTINUE COURSE · ENTER", Act::Continue, true);
+            button(r, &f, "COURSE AND PRACTICE", Act::Scenarios, false);
             button(r, &f, "RANKING", Act::Ranking, false);
             button(r, &f, "CREDITS", Act::Credits, false);
             button(r, &f, "QUIT GAME", Act::Quit, false);
         });
-        // escolha do mapa para o percurso livre (o tutorial e a missão 2 usam sempre a casa de treino)
-        s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(8.0), flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, ..default() }).with_children(|r| {
-            r.spawn((txt("MAP FOR FREE RUN", &f.semi, 13.0, CYAN), Node { min_width: Val::Px(118.0), ..default() }));
-            for (i, m) in MAPS.iter().enumerate().filter(|(_, m)| m.pick) {
-                // cinco mapas numa linha só: botões sem número e com menos margem
-                r.spawn((Button, Node { padding: UiRect::axes(Val::Px(11.0), Val::Px(7.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(CYAN), BackgroundColor(Color::NONE), Act::Map(i as u8)))
-                    .with_children(|b| { b.spawn((txt(&m.name.to_uppercase(), &f.bold, 15.0, BONE), Tag::MapBtn(i as u8))); });
-            }
-        });
-        // dificuldade: vale para o tutorial, a missão 2 e o percurso livre
-        s.spawn(Node { column_gap: Val::Px(10.0), row_gap: Val::Px(8.0), flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, ..default() }).with_children(|r| {
-            r.spawn((txt("DIFFICULTY", &f.semi, 13.0, CYAN), Node { min_width: Val::Px(118.0), ..default() }));
-            for (i, name) in DIFF_NAMES.iter().enumerate() {
-                r.spawn((Button, Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(7.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(CYAN), BackgroundColor(Color::NONE), Act::Diff(i as u8)))
-                    .with_children(|b| { b.spawn((txt(name, &f.bold, 16.0, BONE), Tag::DiffBtn(i as u8))); });
-            }
-        });
-        s.spawn((txt("", &f.body, 13.0, MUTE), Node { max_width: Val::Px(700.0), ..default() }, Tag::MapNote));
+        // a próxima etapa do aluno e as cinco fases do curso
+        s.spawn((txt("", &f.semi, 15.0, CYAN), Tag::CourseNext));
         s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), margin: UiRect::top(Val::Px(10.0)), ..default() }).with_children(|l| {
-            for (i, (a, b)) in [("FUNDAMENTALS", "movement, aiming, leaning, crouching and the two views"), ("SLICING THE PIE", "going around a corner in an arc"), ("FATAL FUNNEL", "centre door and near corners"),
-                ("POSITIVE ID", "armed is a threat, hands up and unarmed is a hostage"), ("CLOSED DOOR AND T", "open from the side, clear both sides"), ("DEAD SPACE", "what tall furniture hides")].iter().enumerate() {
+            for (i, (a, b)) in crate::course::PHASES.iter().enumerate() {
                 l.spawn(Node { column_gap: Val::Px(10.0), align_items: AlignItems::Baseline, ..default() }).with_children(|r| {
                     r.spawn(txt(&format!("{}", i + 1), &f.bold, 19.0, AMBER));
                     r.spawn(txt(a, &f.semi, 19.0, BONE));
-                    r.spawn(txt(b, &f.body, 14.0, MUTE));
+                    r.spawn((txt(b, &f.body, 14.0, MUTE), Node { max_width: Val::Px(520.0), ..default() }));
                 });
             }
         });
@@ -336,16 +317,21 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     // cenários: cada linha é um botão que começa o cenário, com o que ele treina e a melhor marca do jogador
     commands.spawn(screen(Tag::Scenarios)).with_children(|s| {
         s.spawn(txt("ANGLES · KILL HOUSE", &f.semi, 14.0, AMBER));
-        s.spawn(txt("SCENARIOS", &f.bold, 54.0, BONE));
-        s.spawn((txt("Each scenario drills one tactic. They use the difficulty chosen on the menu; scores and times go to the ranking.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
-        s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(7.0), max_width: Val::Px(1180.0), ..default() }).with_children(|l| {
-            for (i, sc) in SCENARIOS.iter().enumerate() {
+        s.spawn(txt("THE COURSE", &f.bold, 54.0, BONE));
+        s.spawn((txt("Five phases, nine stages. Passing a stage opens the next one; any stage already open can be run again for a better mark.", &f.body, 15.0, MUTE), Node { max_width: Val::Px(900.0), ..default() }));
+        s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), max_width: Val::Px(1180.0), ..default() }).with_children(|l| {
+            let mut phase = usize::MAX;
+            for (i, st) in crate::course::STAGES.iter().enumerate() {
+                if st.phase != phase {
+                    phase = st.phase;
+                    l.spawn((txt(&format!("PHASE {} · {}", phase + 1, crate::course::PHASES[phase].0), &f.semi, 13.0, AMBER), Node { margin: UiRect::top(Val::Px(6.0)), ..default() }));
+                }
                 l.spawn(Node { column_gap: Val::Px(14.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
-                    r.spawn((Button, Node { width: Val::Px(250.0), flex_shrink: 0.0, padding: UiRect::axes(Val::Px(14.0), Val::Px(7.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(match sc.kind { Kind::Walker => BAD, Kind::Defense => AMBER, _ => CYAN }), BackgroundColor(Color::NONE), Act::Scn(i as u8)))
-                        .with_children(|b| { b.spawn(txt(&format!("{} · {}", i + 1, sc.name.to_uppercase()), &f.bold, 17.0, BONE)); });
+                    r.spawn((Button, Node { width: Val::Px(250.0), flex_shrink: 0.0, padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(CYAN), BackgroundColor(Color::NONE), Act::Stage(i as u8)))
+                        .with_children(|b| { b.spawn((txt(&format!("{} · {}", i + 1, st.title.to_uppercase()), &f.bold, 17.0, BONE), Tag::StageBtn(i as u8))); });
                     r.spawn(Node { flex_direction: FlexDirection::Column, flex_shrink: 1.0, ..default() }).with_children(|c| {
-                        c.spawn(txt(&format!("{}{}", &sc.blurb[..1].to_uppercase(), &sc.blurb[1..]), &f.body, 14.5, BONE));
-                        c.spawn((txt("", &f.body, 12.0, MUTE), Tag::ScnBest(i as u8)));
+                        c.spawn(txt(st.teaches, &f.body, 14.5, BONE));
+                        if let crate::course::What::Scn(k) = st.what { c.spawn((txt("", &f.body, 12.0, MUTE), Tag::ScnBest(k as u8))); }
                     });
                 });
             }
@@ -365,14 +351,14 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
 }
 
 /// Cliques nos botões e teclas de confirmação/pausa.
-pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>, mut ck: ResMut<Checkpoint>, mut p: ResMut<Player>, mut back: Local<Mode>) {
+pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>, mut ck: ResMut<Checkpoint>, mut p: ResMut<Player>, mut back: Local<Mode>, mut prog: ResMut<crate::course::Progress>) {
     // durante a demonstração só existe uma ação: sair dela
     if game.demo { if c.pause || c.confirm { game.demo_end = true; } return; }
     let mut act: Option<Act> = None;
     for (i, a) in &q { if *i == Interaction::Pressed { act = Some(*a); } }
     match game.mode {
         Mode::Card if c.confirm => act = Some(Act::CardGo),
-        Mode::Menu if c.confirm => act = Some(Act::Start),
+        Mode::Menu if c.confirm => act = Some(Act::Continue),
         Mode::Play if c.pause => { game.mode = Mode::Pause; game.ui_dirty = true; return; }
         Mode::Pause if c.pause => act = Some(Act::Resume),
         Mode::Credits | Mode::Scenarios | Mode::Ranking if c.pause || c.confirm => act = Some(Act::Back),
@@ -402,6 +388,23 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
         Act::Credits => { game.mode = Mode::Credits; }
         Act::Scenarios => { game.mode = Mode::Scenarios; }
         Act::Ranking => { *back = game.mode; game.mode = Mode::Ranking; }
+        // curso: a etapa define o tipo de alvo (papelão ou oposição) e o conteúdo (as seis lições ou um cenário)
+        Act::Continue | Act::Stage(_) => {
+            let i = match a { Act::Stage(i) => i as usize, _ => prog.done.min(crate::course::STAGES.len() - 1) };
+            if !prog.unlocked(i) { return; }
+            let st = &crate::course::STAGES[i];
+            prog.current = Some(i);
+            set_difficulty(st.diff);
+            match st.what {
+                crate::course::What::Tutorial => { set_force_figs(false); if map_index() != 0 || figs_built() != want_figs() { mapreq.0 = Some(0); } reset.write(ResetGame { free: false, mission2: false, scn: None }); }
+                crate::course::What::Scn(k) => {
+                    let sc = &SCENARIOS[k];
+                    set_force_figs(sc.figs);
+                    if map_index() != sc.map || figs_built() != want_figs() { mapreq.0 = Some(sc.map); }
+                    reset.write(ResetGame { free: true, mission2: false, scn: Some(k) });
+                }
+            }
+        }
         // cenário: monta o mapa dele (com bonecos, se o cenário exigir) e começa pelo cartão de instruções
         Act::Scn(i) => {
             let sc = &SCENARIOS[i as usize];
@@ -510,7 +513,7 @@ fn set(text: &mut Text, s: &str) { if text.0 != s { text.0 = s.to_string(); } }
 
 #[allow(clippy::too_many_arguments)]
 pub fn update_ui(
-    time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac: Res<Tac>, targets: Res<Targets>, level: Res<Level>, (fonts, diagrams, rk): (Res<UiFonts>, Res<Diagrams>, Res<Ranking>),
+    time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac: Res<Tac>, targets: Res<Targets>, level: Res<Level>, (fonts, diagrams, rk, prog): (Res<UiFonts>, Res<Diagrams>, Res<Ranking>, Res<crate::course::Progress>),
     mut commands: Commands, mut ui_scale: ResMut<UiScale>, windows: Query<&Window, With<PrimaryWindow>>,
     mut texts: Query<(&Tag, &mut Text, &mut TextColor)>, mut nodes: Query<(Entity, &Tag, &mut Node)>, mut bgs: Query<(&Tag, &mut BackgroundColor)>, mut imgs: Query<(&Tag, &mut ImageNode)>,
     cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, mut live_t: Local<f32>,
@@ -837,6 +840,13 @@ pub fn update_ui(
                 Some((q, left)) => format!("GRENADE  ·  {:.1} s  ·  {} m  ·  GET A WALL BETWEEN YOU AND IT", left, q.distance(p.pos).round() as i32),
                 None => format!("CANNON LOCK {}%  ·  BREAK LINE OF SIGHT", (game.lock * 20.0).round() as i32 * 5) }),
             Tag::DownTitle if game.mode == Mode::Down => set(&mut t, if game.down_title.is_empty() { "OPERATOR DOWN" } else { &game.down_title }),
+            // curso: etapa trancada fica apagada; no menu, qual é a próxima etapa do aluno
+            Tag::StageBtn(i) if game.mode == Mode::Scenarios => { col.0 = if prog.unlocked(i as usize) { if (i as usize) < prog.done { GOOD } else { BONE } } else { MUTE.with_alpha(0.45) }; }
+            Tag::CourseNext if game.mode == Mode::Menu => {
+                let n = crate::course::STAGES.len();
+                set(&mut t, &if prog.done >= n { "COURSE COMPLETE · every stage is open for practice".to_string() }
+                    else { let st = &crate::course::STAGES[prog.done]; format!("NEXT · STAGE {} OF {} · PHASE {} {} · {}", prog.done + 1, n, st.phase + 1, crate::course::PHASES[st.phase].0, st.title.to_uppercase()) });
+            }
             Tag::ScnBest(i) if game.mode == Mode::Scenarios => {
                 let sc = &SCENARIOS[i as usize];
                 let best = rk.top(sc.name, 1).first().map(|r| format!("best {} pts in {} ({})", r.score, scenario::fmt_time(r.time), diff_label(r.diff).to_lowercase())).unwrap_or_else(|| "no run yet".to_string());
