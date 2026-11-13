@@ -13,6 +13,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Resource)]
 pub struct Net {
     pub id: String, pub name: String, pub on: bool, dir: Option<std::path::PathBuf>,
+    /// O jogador já escolheu um codinome (existe callsign.txt)? Sem isso, o menu pede o nome na primeira abertura.
+    pub named: bool,
     /// Resposta do ranking mundial (JSON) e a colocação da última partida enviada, quando chegam.
     pub world: Arc<Mutex<Option<serde_json::Value>>>, rank: Arc<Mutex<Option<(u64, u64)>>>, fresh: Arc<Mutex<bool>>,
 }
@@ -33,8 +35,10 @@ impl Net {
             if let Some(d) = &dir { let _ = std::fs::create_dir_all(d); let _ = std::fs::write(d.join("install.txt"), &s); }
             s
         });
-        let name = read("callsign.txt").map(|t| clean_name(&t)).filter(|t| !t.is_empty()).unwrap_or_else(|| "OPERATOR".to_string());
-        Net { id, name, on, dir, world: Arc::new(Mutex::new(None)), rank: Arc::new(Mutex::new(None)), fresh: Arc::new(Mutex::new(false)) }
+        let saved = read("callsign.txt").map(|t| clean_name(&t)).filter(|t| !t.is_empty());
+        let named = saved.is_some() || !on;
+        let name = saved.unwrap_or_else(|| "OPERATOR".to_string());
+        Net { id, name, on, dir, named, world: Arc::new(Mutex::new(None)), rank: Arc::new(Mutex::new(None)), fresh: Arc::new(Mutex::new(false)) }
     }
     fn save_name(&self) { if let Some(d) = &self.dir { let _ = std::fs::create_dir_all(d); let _ = std::fs::write(d.join("callsign.txt"), &self.name); } }
     fn post(&self, path: &'static str, body: serde_json::Value, rank: Option<Arc<Mutex<Option<(u64, u64)>>>>) {
@@ -83,7 +87,7 @@ impl Net {
 pub fn clean_name(t: &str) -> String { t.to_uppercase().chars().filter(|c| c.is_ascii_alphanumeric() || *c == ' ' || *c == '-' || *c == '_').take(12).collect::<String>().trim_start().to_string() }
 
 #[derive(Default)]
-pub struct NetState { launched: bool, started: bool, last_time: f32, last_mode: Option<Mode> }
+pub struct NetState { launched: bool, started: bool, last_time: f32, last_mode: Option<Mode>, grace: u8 }
 
 /// Avisos de uso (abriu, começou uma etapa), busca do ranking mundial ao abrir a tela dele, edição do codinome ali,
 /// e o aviso da colocação mundial quando o servidor responde.
@@ -97,20 +101,30 @@ pub fn net_system(mut game: ResMut<Game>, mut net: ResMut<Net>, mut keys: EventR
     }
     let entered = st.last_mode != Some(game.mode);
     st.last_mode = Some(game.mode);
-    if game.mode == Mode::Ranking {
-        if entered { net.fetch(); }
-        let mut changed = false;
+    // digitar o codinome: na tela de ranking, ou no menu enquanto o jogador ainda não escolheu um
+    let ask = game.mode == Mode::Menu && !net.named;
+    if game.mode == Mode::Ranking && entered { net.fetch(); }
+    // com a tela da frase na frente, as teclas só servem para pular a frase
+    if (game.mode == Mode::Ranking || ask) && game.quote_t <= 0.0 {
+        let (mut changed, mut confirm) = (false, false);
         for k in keys.read() {
             if !k.state.is_pressed() { continue; }
             match &k.logical_key {
-                Key::Character(s) => { let t = clean_name(&format!("{}{}", net.name, s)); if t != net.name { net.name = t; changed = true; } }
+                // o primeiro toque no menu substitui o nome de fábrica em vez de emendar nele
+                Key::Character(s) => { let base = if ask && net.name == "OPERATOR" { String::new() } else { net.name.clone() }; let t = clean_name(&format!("{base}{s}")); if t != net.name { net.name = t; changed = true; } }
                 Key::Space => { if net.name.len() < 12 && !net.name.is_empty() { net.name.push(' '); changed = true; } }
                 Key::Backspace => { if net.name.pop().is_some() { changed = true; } }
+                Key::Enter => confirm = true,
                 _ => {}
             }
         }
-        if changed { net.save_name(); game.ui_dirty = true; }
+        if changed { if !ask { net.save_name(); } game.ui_dirty = true; }
+        if ask && confirm && !net.name.trim().is_empty() { net.name = net.name.trim().to_string(); net.named = true; net.save_name(); st.grace = 20; game.ui_dirty = true; }
     } else { keys.clear(); }
+    // o Enter que confirma o nome não pode também começar o curso: o menu fica "ocupado" por alguns quadros
+    st.grace = st.grace.saturating_sub(1);
+    let naming = ask || st.grace > 0;
+    if game.naming != naming { game.naming = naming; game.ui_dirty = true; }
     let fresh = { let mut f = net.fresh.lock().unwrap(); std::mem::replace(&mut *f, false) };
     if fresh {
         game.ui_dirty = true;
@@ -132,7 +146,7 @@ mod tests {
     #[test]
     fn live_roundtrip() {
         if std::env::var("ANGLES_NET_TEST").is_err() { return; }
-        let net = Net { id: "abcdef0123456789".into(), name: "RUSTTEST".into(), on: true, dir: None, world: Arc::new(Mutex::new(None)), rank: Arc::new(Mutex::new(None)), fresh: Arc::new(Mutex::new(false)) };
+        let net = Net { id: "abcdef0123456789".into(), name: "RUSTTEST".into(), on: true, dir: None, named: true, world: Arc::new(Mutex::new(None)), rank: Arc::new(Mutex::new(None)), fresh: Arc::new(Mutex::new(false)) };
         net.submit("__test", 88, 33.3, 1);
         net.event("launch", None, false, 0.0);
         for _ in 0..100 { if net.rank.lock().unwrap().is_some() { break; } std::thread::sleep(std::time::Duration::from_millis(150)); }

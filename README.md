@@ -1,6 +1,6 @@
 # Angles
 
-Current version: **Kill House** (0.13.0).
+Current version: **Kill House** (0.14.0).
 
 A teaching simulator for close-quarters battle (CQB) fundamentals, built with Rust and Bevy 0.16.
 A shoot house with IPSC-style cardboard targets, a six-lesson tutorial, first-person and top-down views,
@@ -49,7 +49,7 @@ The Mac screen must be on: with it off the game stops drawing.
 - `src/ui.rs` interface · `src/audio.rs` sound · `src/art.rs` vector art (targets, operator, icon) · `src/bot.rs` test scripts
 
 ## Credits and licences
-See [CREDITS.md](CREDITS.md). The first-person weapons, the operator and the threats are CC BY 4.0 models from Sketchfab; the hostage is CC BY-NC 4.0 (non-commercial only). All are credited there with the changes made.
+See [CREDITS.md](CREDITS.md). The first-person weapons, the operator and the threats are CC BY 4.0 models from Sketchfab; the hostage is a CC BY 4.0 scan by Renderpeople. All are credited there with the changes made.
 
 ## World ranking and usage counts
 Every finished run is sent to a permanent world ranking (shown in the game's Ranking screen and on the site) with the callsign typed in that screen, the score and the time. The game also sends anonymous usage counts: it was opened, a stage started, a stage ended. Each installation is identified only by a random number; no name, e-mail or other personal data is sent. The server is in `site/server/` (Vercel functions with a private Blob store).

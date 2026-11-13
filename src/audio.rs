@@ -187,9 +187,9 @@ pub fn setup_audio(mut commands: Commands, mut a: ResMut<Assets<AudioSource>>, a
     commands.spawn((AudioPlayer::new(a.add(wav(&clip!("ambiente"), 0.5))), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.3), ..default() }));
     commands.insert_resource(sounds);
     // música de fundo das telas (menu, etapas, avaliação): some quando a partida começa
-    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/menu_loop.wav")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0, false)));
+    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/menu_loop.mp3")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0, false)));
     // trilha de dentro da partida: de ação, bem diferente da do menu
-    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/play_loop.wav")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0, true)));
+    commands.spawn((AudioPlayer::new(asset.load::<AudioSource>("music/play_loop.mp3")), PlaybackSettings { mode: PlaybackMode::Loop, volume: Volume::Linear(0.0), ..default() }, Music(0.0, true)));
 }
 
 /// Música de fundo: o volume em que ela está agora e se é a trilha de dentro da partida (ou a das telas).

@@ -17,7 +17,7 @@ A teaching tool for close-quarters battle fundamentals. Real technique is learne
 - Oriented Strand Board (walls of the family home), by Dimitrios Savva. Sheet seams added and gloss removed with `tools/prep_osb.py`.
 
 ## Instructor voice
-Generated with ElevenLabs (voice "Brian") from the script in `assets/voice/script.tsv`. The characters' lines (`assets/voice/ch_*.wav` and `assets/sfx/voz_op_*.wav`) were generated the same way from `tools/voices_characters.tsv`: voices "Bill" and "Callum" for the two intruders, "Sarah" for the hostage and "Brian" (the instructor's voice) for the operator. The body falls, bullet hits on a person, the grenade blast and bounce (`assets/sfx/corpo_*.wav`, `carne_*.wav`, `granada_*.wav`) were generated with the ElevenLabs sound-effects model from text prompts. The menu music and the in-game underscore (`assets/music/menu_loop.wav`, `play_loop.wav`) were generated with ElevenLabs Music from text prompts.
+Generated with ElevenLabs (voice "Brian") from the script in `assets/voice/script.tsv`. The characters' lines (`assets/voice/ch_*.mp3` and `assets/sfx/voz_op_*.wav`) were generated the same way from `tools/voices_characters.tsv`: voices "Bill" and "Callum" for the two intruders, "Sarah" for the hostage and "Brian" (the instructor's voice) for the operator. The body falls, bullet hits on a person, the grenade blast and bounce (`assets/sfx/corpo_*.wav`, `carne_*.wav`, `granada_*.wav`) were generated with the ElevenLabs sound-effects model from text prompts. The menu music and the in-game underscore (`assets/music/menu_loop.mp3`, `play_loop.mp3`) were generated with ElevenLabs Music from text prompts.
 
 ## Arc font
 Barlow Condensed, by Jeremy Tribby, SIL Open Font License 1.1 (`assets/fonts/OFL-BarlowCondensed.txt`).
@@ -67,14 +67,10 @@ Barlow Condensed, by Jeremy Tribby, SIL Open Font License 1.1 (`assets/fonts/OFL
 |---|---|---|---|---|
 | Camouflaged intruder (`threat_b.glb`) | Forest soldier (outdated) | buh | https://sketchfab.com/3d-models/forest-soldier-outdated-b265975196394070837366de9a0ddb7c | Mesh and textures reduced; skeleton renamed to the Mixamo convention; carries the AKS-74u from the FSB Operator model above; standing, aiming, walking, running, flinching, grenade and falling motion from Mixamo (see below); recoil and hit-reaction clips made for this game. Converted with `tools3d/conv_invader.py` |
 
-## Hostage — Sketchfab, CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only
+## Hostage — Sketchfab, CC BY 4.0
 | In the game | Original work | Author | Source | Changes |
 |---|---|---|---|---|
-| Hostage (`hostage.glb`) | Women in jeans | aribb (RiceBeBe) | https://sketchfab.com/3d-models/women-in-jeans-e766ff60190248f09721cfe018182e5f | Original showcase pose removed; hands-up and arms-down poses and idle clip made for this game; falling motion from Mixamo (see below); clothes and hair recoloured per hostage; facial shape keys and small face parts removed; mesh and textures reduced; height set to 1.70 m |
-
-**This model's licence does not allow commercial use.** While it is in the game, the game cannot be sold or bundled with anything sold. Replace it before any commercial release.
-
-The pistol was matched to its Sketchfab page by triangle count (25,216) and clip names. Conversion scripts are in `tools3d/`.
+| Hostage (`hostage.glb`) | Carla Rigged 001 - Rigged 3D Business Women | Renderpeople | https://sketchfab.com/3d-models/carla-rigged-001-rigged-3d-business-women-acf520f450d14dd799f98a6fede3edf5 | Hands-up and arms-down poses and idle clip made for this game; falling motion from Mixamo (see below); textures reduced to 1024 px; height set to 1.70 m. Converted with `tools3d/conv_carla.py` |
 
 ## Character animation — Adobe Mixamo (https://www.mixamo.com)
 Standing idle, aiming and walking with a pistol (the player's body) and with a rifle (armed threats), and four falling animations come from Mixamo and were retargeted onto the operator, threat and hostage skeletons with `tools3d/mixamo_lib.py`. Mixamo animations are royalty free for use inside a project; the standalone animation files are not redistributed here. To rebuild the models, download them with a free Adobe account into `3dmodels/mixamo/` (file names listed at the top of `tools3d/mixamo_lib.py`); that folder is not in the repository.

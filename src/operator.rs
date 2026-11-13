@@ -45,6 +45,8 @@ fn model() -> String { crate::mdl("operator.glb") }
     /// Clipes extras das ameaças (opcionais): correr no recuo, susto, acerto sofrido e arremesso de granada;
     /// acertos já vistos e tempo que resta da reação a um acerto.
     pub run: Option<AnimationNodeIndex>, pub flinch: Option<AnimationNodeIndex>, pub hit: Option<AnimationNodeIndex>, pub toss: Option<AnimationNodeIndex>,
+    /// Andar de costas no começo do recuo e passo lateral (esquerda, direita) ao cruzar um vão.
+    pub walk_back: Option<AnimationNodeIndex>, pub sneak_l: Option<AnimationNodeIndex>, pub sneak_r: Option<AnimationNodeIndex>,
     pub hits: u8, pub hit_t: f32 }
 
 pub fn setup_operator(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset: Res<AssetServer>) {
@@ -173,6 +175,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         let walk = g.named_animations.get("Walk").map(|h| graph.add_clip(h.clone(), 1.0, root));
         let mut extra = |k: &str| g.named_animations.get(k).map(|h| graph.add_clip(h.clone(), 1.0, root));
         let (run, flinch, hit, toss) = (extra("Run"), extra("Flinch"), extra("Hit"), extra("Toss"));
+        let (walk_back, sneak_l, sneak_r) = (extra("WalkBack"), extra("SneakL"), extra("SneakR"));
         let mut names: Vec<&Box<str>> = g.named_animations.keys().filter(|k| k.starts_with("Fall")).collect();
         names.sort();
         let falls: Vec<AnimationNodeIndex> = names.into_iter().map(|k| graph.add_clip(g.named_animations[k].clone(), 1.0, root)).collect();
@@ -180,7 +183,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         // cada boneco começa num ponto diferente do clipe, para não se mexerem todos juntos
         let mut tr = AnimationTransitions::new();
         tr.play(&mut pl, idle, Duration::ZERO).repeat().seek_to((e.index() % 7) as f32 * 1.07);
-        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, FigAnim { target, idle, aim, shoot, relax, falls, recoil: 0.0, mode: 0, walk, frozen: false, run, flinch, hit, toss, hits: 0, hit_t: 0.0 }));
+        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, FigAnim { target, idle, aim, shoot, relax, falls, recoil: 0.0, mode: 0, walk, frozen: false, run, flinch, hit, toss, walk_back, sneak_l, sneak_r, hits: 0, hit_t: 0.0 }));
     }
     for (mut a, mut pl, mut tr) in &mut anims {
         let Some(t) = targets.list.get(a.target) else { continue };
@@ -211,18 +214,23 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         a.hits = t.hits; a.hit_t = (a.hit_t - fdt).max(0.0);
         let want: u8 = if a.aim.is_some() {
             if a.hit_t > 0.0 { 6 } else if t.ai.toss > 0.0 && a.toss.is_some() { 5 } else if t.ai.flinch > 0.0 && a.flinch.is_some() { 4 }
+            else if t.moving && t.ai.backing && a.walk_back.is_some() { 7 }
             else if t.moving && t.ai.tactic == crate::state::TAC_RETREAT && a.run.is_some() { 3 }
+            else if t.ai.side < -0.4 && a.sneak_l.is_some() { 8 } else if t.ai.side > 0.4 && a.sneak_r.is_some() { 9 }
             else if t.react > 0.04 || t.engaged || t.ai.ready { 1 } else if t.moving && a.walk.is_some() { 2 } else { 0 } } else if a.relax.is_some() {
             let zi = crate::map::zone_index(t.def.zone);
             (tac.pct.get(zi).map_or(false, |p| *p >= 0.9) && !targets.list.iter().any(|o| o.alive && !o.off && o.def.kind == crate::map::TKind::Threat && o.def.zone == t.def.zone)) as u8
         } else { 0 };
         if want != a.mode {
             a.mode = want;
-            let n = match want { 1 => a.aim.or(a.relax).unwrap_or(a.idle), 2 => a.walk.unwrap_or(a.idle), 3 => a.run.unwrap_or(a.idle), 4 => a.flinch.unwrap_or(a.idle), 5 => a.toss.unwrap_or(a.idle), 6 => a.hit.unwrap_or(a.idle), _ => a.idle };
-            let ms = if a.aim.is_some() { match want { 1 => 200, 4 | 6 => 70, 5 => 120, 3 => 180, _ => 350 } } else { 900 };
+            let n = match want { 1 => a.aim.or(a.relax).unwrap_or(a.idle), 2 => a.walk.unwrap_or(a.idle), 3 => a.run.unwrap_or(a.idle), 4 => a.flinch.unwrap_or(a.idle), 5 => a.toss.unwrap_or(a.idle), 6 => a.hit.unwrap_or(a.idle),
+                7 => a.walk_back.unwrap_or(a.idle), 8 => a.sneak_l.unwrap_or(a.idle), 9 => a.sneak_r.unwrap_or(a.idle), _ => a.idle };
+            let ms = if a.aim.is_some() { match want { 1 => 200, 4 | 6 => 70, 5 => 120, 3 => 180, 7 | 8 | 9 => 220, _ => 350 } } else { 900 };
             let x = tr.play(&mut pl, n, Duration::from_millis(ms));
             // gestos de uma vez só (susto, acerto, arremesso) não repetem
-            if want < 4 { x.repeat(); }
+            if !(4..=6).contains(&want) { x.repeat(); }
+            // o passo lateral do clipe é mais rápido que o do invasor cruzando o vão
+            if want == 8 || want == 9 { x.set_speed(0.8); }
             // susto: o clipe é longo e termina ajoelhado; toca só o trecho em que o braço cobre o rosto.
             // arremesso: acelerado para caber no tempo do gesto
             if want == 4 { x.seek_to(0.7).set_speed(1.5); }

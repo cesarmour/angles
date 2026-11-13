@@ -777,7 +777,7 @@ pub fn scenario_system(
         if !t.hunter || !t.alive || t.off { continue; }
         t.alert = t.alert.max(60.0);
         t.ai.lean = crate::map::damp(t.ai.lean, t.ai.lean_to, 10.0, dt);
-        t.ai.flinch = (t.ai.flinch - dt).max(0.0); t.ai.toss = (t.ai.toss - dt).max(0.0);
+        t.ai.flinch = (t.ai.flinch - dt).max(0.0); t.ai.toss = (t.ai.toss - dt).max(0.0); t.ai.backing = false; t.ai.side = 0.0;
         t.ai.door_t = (t.ai.door_t - dt).max(0.0);
         // de frente para o operador e com linha de tiro: para e atira (quem decide é o combate)
         if t.leave > 0.0 || t.rise > 0.0 {
@@ -838,11 +838,14 @@ pub fn scenario_system(
             let v = wp - pos;
             let len = v.length();
             if len < 0.15 { t.ai.path.remove(0); continue; }
-            let mut np = pos + v / len * (RETREAT_SPEED * dt).min(len);
+            // o começo do recuo é de costas: ele se afasta sem tirar os olhos (nem o fuzil) do operador;
+            // só depois vira e corre para o abrigo
+            let back = 4.0 - t.wait < 1.3 && pos.distance(p.pos) > 0.6;
+            let mut np = pos + v / len * ((if back { 1.1 } else { RETREAT_SPEED }) * dt).min(len);
             level.resolve_circle(&mut np, 0.28);
-            let f = turn(t.fwd, v / len, 14.0);
+            let f = if back { turn(t.fwd, (p.pos - pos).normalize_or_zero(), 9.0) } else { turn(t.fwd, v / len, 14.0) };
             place(t, &mut roots, np, f);
-            t.moving = true;
+            t.moving = true; t.ai.backing = back;
             continue;
         }
         // com o operador à vista ele para e atira (quem decide é o combate). Fatiando, só fica inclinado atrás do batente por
@@ -923,6 +926,8 @@ pub fn scenario_system(
             // sob fogo, sai mais depressa e já de frente para o operador (o combate cuida de para onde ele olha)
             let (f, sp) = if t.engaged { (t.fwd, SLICE_SPEED * 1.8) } else { (f, SLICE_SPEED) };
             if t.engaged { t.ai.lean_to = 0.0; }
+            // cruzando o vão sem ninguém à vista: passo lateral agachado, para o lado em que ele está andando
+            if !t.engaged { let lat = (v / len).dot(Vec2::new(-f.y, f.x)); if lat.abs() > 0.4 { t.ai.side = lat; } }
             let mut np = pos + v / len * (sp * dt).min(len);
             level.resolve_circle(&mut np, 0.28);
             place(t, &mut roots, np, f);

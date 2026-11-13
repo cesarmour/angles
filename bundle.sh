@@ -11,11 +11,11 @@ APP="$DIR/dist/Angles.app"
 rm -rf "$APP/Contents/MacOS/assets" "$APP/Contents/_CodeSignature"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 cp "$DIR/target/release/angles" "$APP/Contents/MacOS/angles"
-# texturas, modelos e as falas do instrutor (só os .wav; o roteiro em texto já vai dentro do executável)
+# texturas, modelos e as falas do instrutor (só os .mp3; o roteiro em texto já vai dentro do executável)
 rsync -a --delete "$DIR/assets/tex" "$DIR/assets/models" "$DIR/assets/music" "$APP/Contents/Resources/assets/"
 rm -rf "$APP/Contents/Resources/assets/local"
 [ "$LOCAL" = "1" ] && [ -d "$DIR/assets/local" ] && rsync -a "$DIR/assets/local" "$APP/Contents/Resources/assets/"
-mkdir -p "$APP/Contents/Resources/assets/voice" && rsync -a --delete --include="*.wav" --exclude="*" "$DIR/assets/voice/" "$APP/Contents/Resources/assets/voice/"
+mkdir -p "$APP/Contents/Resources/assets/voice" && rsync -a --delete --delete-excluded --include="*.mp3" --exclude="*" "$DIR/assets/voice/" "$APP/Contents/Resources/assets/voice/"
 cp "$DIR/assets/icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,8 +28,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>angles</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.13.0</string>
-  <key>CFBundleVersion</key><string>20</string>
+  <key>CFBundleShortVersionString</key><string>0.14.0</string>
+  <key>CFBundleVersion</key><string>21</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.simulation-games</string>

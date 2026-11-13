@@ -35,7 +35,7 @@ pub enum Tag {
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieVerb, Subtitle, SubText,
     Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
     Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound, DiffBtn(u8),
-    Scenarios, Ranking, ScnBest(u8), StageBtn(u8), CourseNext, RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
+    Scenarios, Ranking, ScnBest(u8), StageBtn(u8), CourseNext, Callsign, Ready, ReadyNum, Quote, QuoteText, QuoteBy, QuoteBar, RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry, Diff(u8), Scn(u8), Scenarios, Ranking, Stage(u8), Continue }
@@ -44,7 +44,7 @@ pub struct ResetGame { pub free: bool, pub mission2: bool, pub scn: Option<usize
 
 /// A fonte da interface (Rajdhani) tem letras mais baixas que a anterior: compensa no tamanho.
 const FS: f32 = 1.1;
-const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, cejordi84, CosmoX45, discofield, dslrguide, florianreichelt, GeneralSigma, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, qubodup, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nFIRST-PERSON WEAPONS (CC BY 4.0, sketchfab.com)   Pistol and gloves: \"AnimatedPistol\" by JUST  ·  Rifle: \"SCAR\" by JUST, rifle mesh by DelthorGames\n\nOPERATOR AND THREATS (CC BY 4.0)   \"FSB Operator\" by Mateusz Wolinski (jeandiz), with AKS-74u by N-GONE and clothing pieces by ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess  ·  changed for this game: recoloured, insignia and goggles removed, sunglasses added, the threat carries the pistol above, mesh and textures reduced  ·  second intruder: \"Forest soldier\" by buh, mesh reduced, carries the same rifle\n\nHOSTAGE (CC BY-NC 4.0, non-commercial)   \"Women in jeans\" by aribb  ·  changed for this game: hands-up pose, recoloured clothes and hair, mesh and textures reduced\n\nVOICES   instructor, operator, intruders and hostage generated with ElevenLabs\n\nCHARACTER ANIMATION   Adobe Mixamo (mixamo.com), applied to the models above  ·  recoil and hands-up poses made for this project\n\nLEVELS, WALKER MECH, PRACTICE TARGET, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
+const CREDITS: &str = "ENGINE   Bevy 0.16 (MIT / Apache-2.0)  ·  resvg, usvg, tiny-skia (Apache-2.0 / MIT)\n\nFONTS   Rajdhani, by Indian Type Foundry  ·  Saira Stencil One, by Omnibus-Type  ·  SIL Open Font License 1.1\n\nTEXTURES AND FURNITURE MODELS   Poly Haven (polyhaven.com), CC0\n\nSOUNDS   Freesound.org, all CC0 1.0, recorded by: Anthousai, areniporgen, BenDrain, cejordi84, CosmoX45, discofield, dslrguide, florianreichelt, GeneralSigma, jessepash, Kinoton, Krokulator, kyles, mahecic, Manim8, michorvath, nioczkus, Nox_Sound, Physon712, qubodup, RFCaldas, SecureSubset, Sheyvan, TampaJoey, vabadus, WasabiWielder, worthahep88\n\nFIRST-PERSON WEAPONS (CC BY 4.0, sketchfab.com)   Pistol and gloves: \"AnimatedPistol\" by JUST  ·  Rifle: \"SCAR\" by JUST, rifle mesh by DelthorGames\n\nOPERATOR AND THREATS (CC BY 4.0)   \"FSB Operator\" by Mateusz Wolinski (jeandiz), with AKS-74u by N-GONE and clothing pieces by ErhanMatur, Bzovius, SrGeneroso, shedmon, Albin and Mayess  ·  changed for this game: recoloured, insignia and goggles removed, sunglasses added, the threat carries the pistol above, mesh and textures reduced  ·  second intruder: \"Forest soldier\" by buh, mesh reduced, carries the same rifle\n\nHOSTAGE (CC BY 4.0)   \"Carla Rigged 001\" by Renderpeople  ·  changed for this game: hands-up pose, falling motion, textures reduced\n\nVOICES   instructor, operator, intruders and hostage generated with ElevenLabs\n\nCHARACTER ANIMATION   Adobe Mixamo (mixamo.com), applied to the models above  ·  recoil and hands-up poses made for this project\n\nLEVELS, WALKER MECH, PRACTICE TARGET, ICON, INTERFACE, LESSONS AND CODE   made for this project with Claude Code\n\nFull list with links in CREDITS.md.";
 fn txt(s: &str, font: &Handle<Font>, size: f32, color: Color) -> (Text, TextFont, TextColor) {
     (Text::new(s), TextFont { font: font.clone(), font_size: size * FS, ..default() }, TextColor(color))
 }
@@ -243,6 +243,8 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
             button(r, &f, "QUIT GAME", Act::Quit, false);
         });
         // a próxima etapa do aluno e as cinco fases do curso
+        // codinome do ranking mundial: pedido aqui na primeira abertura
+        s.spawn((txt("", &f.semi, 17.0, AMBER), Tag::Callsign));
         s.spawn((txt("", &f.semi, 15.0, CYAN), Tag::CourseNext));
         s.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), margin: UiRect::top(Val::Px(10.0)), ..default() }).with_children(|l| {
             for (i, (a, b)) in crate::course::PHASES.iter().enumerate() {
@@ -356,6 +358,22 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         s.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), max_width: Val::Px(1240.0), ..default() }, Tag::RankList));
         s.spawn(Node::default()).with_children(|b| button(b, &f, "BACK · ESC", Act::Back, true));
     });
+    // contagem antes da partida: número grande no centro, por cima da casa
+    commands.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), display: Display::None, flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+        BackgroundColor(Color::srgba(0.02, 0.025, 0.03, 0.55)), GlobalZIndex(30), Tag::Ready)).with_children(|r| {
+        r.spawn(txt("GET READY", &f.semi, 22.0, AMBER));
+        r.spawn((Text::new("3"), TextFont { font: f.bold.clone(), font_size: 260.0, ..default() }, TextColor(BONE), Tag::ReadyNum));
+    });
+    // fim da partida: tela rápida com uma frase histórica, antes da avaliação
+    commands.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), display: Display::None, flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, align_items: AlignItems::Center, row_gap: Val::Px(22.0), padding: UiRect::all(Val::Px(60.0)), ..default() },
+        BackgroundColor(Color::srgb(0.02, 0.025, 0.03)), GlobalZIndex(40), Tag::Quote)).with_children(|q| {
+        q.spawn((Text::new(""), TextFont { font: f.hl.clone(), font_size: 40.0, ..default() }, TextColor(BONE), TextLayout::new_with_justify(JustifyText::Center), Node { max_width: Val::Px(980.0), ..default() }, Tag::QuoteText));
+        q.spawn((Text::new(""), TextFont { font: f.hs.clone(), font_size: 17.0, ..default() }, TextColor(AMBER), Tag::QuoteBy));
+        q.spawn((Node { width: Val::Px(260.0), height: Val::Px(2.0), margin: UiRect::top(Val::Px(26.0)), ..default() }, BackgroundColor(Color::srgba(0.9, 0.9, 0.86, 0.16)))).with_children(|b| {
+            b.spawn((Node { width: Val::Percent(0.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(AMBER), Tag::QuoteBar));
+        });
+        q.spawn(txt("LOADING", &f.semi, 12.0, MUTE));
+    });
     commands.insert_resource(f);
     commands.insert_resource(diagrams);
 }
@@ -364,11 +382,14 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
 pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>, mut ck: ResMut<Checkpoint>, mut p: ResMut<Player>, mut back: Local<Mode>, mut prog: ResMut<crate::course::Progress>) {
     // durante a demonstração só existe uma ação: sair dela
     if game.demo { if c.pause || c.confirm { game.demo_end = true; } return; }
+    // tela da frase: qualquer confirmação só pula a tela
+    if game.quote_t > 0.0 { if c.confirm || c.pause { game.quote_t = 0.0; game.ui_dirty = true; } return; }
+    if game.ready_t > 0.0 { return; }
     let mut act: Option<Act> = None;
     for (i, a) in &q { if *i == Interaction::Pressed { act = Some(*a); } }
     match game.mode {
         Mode::Card if c.confirm => act = Some(Act::CardGo),
-        Mode::Menu if c.confirm => act = Some(Act::Continue),
+        Mode::Menu if c.confirm && !game.naming => act = Some(Act::Continue),
         Mode::Play if c.pause => { game.mode = Mode::Pause; game.ui_dirty = true; return; }
         Mode::Pause if c.pause => act = Some(Act::Resume),
         Mode::Credits | Mode::Scenarios | Mode::Ranking if c.pause || c.confirm => act = Some(Act::Back),
@@ -390,6 +411,8 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
             let picks: Vec<usize> = (0..MAPS.len()).filter(|&i| MAPS[i].pick).collect();
             let m = if game.mode == Mode::Menu && !picks.is_empty() { let k = picks.iter().position(|&i| i == map_index()).map_or(0, |k| (k + 1) % picks.len()); picks[k] } else if map().pick { map_index() } else { 0 };
             if m != map_index() || figs_built() != want_figs() { mapreq.0 = Some(m); } reset.write(ResetGame { free: true, mission2: false, scn: None }); }
+        // começo da partida: contagem 3, 2, 1 (o cartão some e a casa aparece); voltando do cartão no meio da partida, não
+        Act::CardGo if game.time < 0.05 && !game.demo && std::env::var("CQB_SCRIPT").is_err() => { if game.ready_t <= 0.0 { game.ready_t = 3.0; game.ui_dirty = true; } }
         Act::CardGo | Act::Resume => { game.mode = Mode::Play; }
         Act::Restart => { reset.write(ResetGame { free: game.free, mission2: game.mission2, scn: game.scn }); }
         Act::Mission2 => { set_force_figs(false); if map_index() != 0 || figs_built() != want_figs() { mapreq.0 = Some(0); } reset.write(ResetGame { free: true, mission2: true, scn: None }); }
@@ -616,7 +639,10 @@ pub fn update_ui(
             // o texto do menu fica à esquerda do operador: a margem direita reserva o espaço dele (e os botões quebram de linha)
             Tag::Menu => { show(&mut node, game.mode == Mode::Menu); let pr = Val::Px(if portrait_menu { PORTRAIT_PAD } else { 40.0 }); if node.padding.right != pr { node.padding.right = pr; } }
             Tag::Down => show(&mut node, game.mode == Mode::Down),
-            Tag::Card => show(&mut node, game.mode == Mode::Card),
+            Tag::Card => show(&mut node, game.mode == Mode::Card && game.ready_t <= 0.0),
+            Tag::Ready => show(&mut node, game.ready_t > 0.0),
+            Tag::Quote => show(&mut node, game.quote_t > 0.0),
+            Tag::QuoteBar => { let w = Val::Percent(((1.0 - game.quote_t / crate::course::QUOTE_SECS) * 100.0).clamp(0.0, 100.0)); if node.width != w { node.width = w; } }
             Tag::Pause => show(&mut node, game.mode == Mode::Pause),
             Tag::Debrief => show(&mut node, game.mode == Mode::Debrief),
             Tag::Portrait => show(&mut node, (game.mode == Mode::Menu && portrait_menu) || (game.mode == Mode::Debrief && portrait_db)),
@@ -642,9 +668,9 @@ pub fn update_ui(
                 });
             }
             // em janela estreita o aviso fica entre a caixa da lição (à esquerda) e o painel tático (à direita), sem cobrir nenhum dos dois
-            Tag::Toast => { show(&mut node, toast_on); let (l, r) = if uw < 1336.0 { (Val::Px(408.0), Val::Px(348.0)) } else { (Val::Px(0.0), Val::Px(0.0)) }; if node.padding.left != l { node.padding.left = l; node.padding.right = r; } }
+            Tag::Toast => { show(&mut node, toast_on && game.sub.is_none()); let (l, r) = if uw < 1336.0 { (Val::Px(408.0), Val::Px(348.0)) } else { (Val::Px(0.0), Val::Px(0.0)) }; if node.padding.left != l { node.padding.left = l; node.padding.right = r; } }
             Tag::Stamp => show(&mut node, play && game.stamp_t > 0.0),
-            Tag::Coach => show(&mut node, play && game.coach.is_some()),
+            Tag::Coach => show(&mut node, play && game.coach.is_some() && game.sub.is_none() && !toast_on),
             Tag::DemoBar => show(&mut node, game.demo),
             Tag::LessonBox => show(&mut node, !game.hide_box && game.mode != Mode::Card),
             Tag::Odds => show(&mut node, play && !game.demo && (game.free || game.lesson >= 1) && !scenario::is(&game, Kind::Defense)),
@@ -758,8 +784,6 @@ pub fn update_ui(
                 let first = th.iter().filter(|t| t.first_facing == Some(true)).count();
                 let contact = th.iter().filter(|t| t.first_facing.is_some()).count();
                 let acc = if s.shots > 0 { (s.hits as f32 / s.shots as f32 * 100.0).round() as i32 } else { 0 };
-                let en = |k: usize| game.entry_pie[k].map_or("—".to_string(), |v| format!("{}°", v.round() as i32));
-                let dw = |k: usize| format!("{:.1} s", game.dwell[k]);
                 let (nk, kavg) = (game.kills.len().max(1) as f32, |f: fn(&Kill) -> f32| game.kills.iter().map(f).sum::<f32>() / game.kills.len().max(1) as f32);
                 let _ = nk;
                 let route_txt = match game.route_score() { Some(r) => format!("{}%  ·  {} cm off the line on average", r.round() as i32, (game.route_sum / game.route_t * 100.0).round() as i32), None => "—".to_string() };
@@ -801,16 +825,24 @@ pub fn update_ui(
                     ("Hostages hit (no-shoot)".into(), s.civ_hit.to_string(), if s.civ_hit > 0 { BAD } else { GOOD }, if s.civ_hit > 0 { "The most serious error on the course. Confirm the target colour before every shot." } else { "" }),
                     ("Times hit (simulated)".into(), s.hits_taken.to_string(), if s.hits_taken > 0 { BAD } else { GOOD }, if s.hits_taken > 0 { "A threat had time to react with a clear line of fire to you." } else { "" }),
                     ("Threats you saw first".into(), format!("{} of {}", first, contact), if first == contact { GOOD } else { AMBER }, if first < contact { "For the others, you appeared without looking at them." } else { "" }),
-                    ("Fan opened before entering (of 180°)".into(), doorways().iter().enumerate().map(|(k, w)| format!("{} {}", w.zone, en(k))).collect::<Vec<_>>().join(" · "), BONE, ""),
                     ("Technique warnings during the run".into(), { let n: u32 = game.warns.iter().sum(); if n == 0 { "none".to_string() } else { WARN_NAMES.iter().zip(game.warns.iter()).filter(|(_, c)| **c > 0).map(|(k, c)| format!("{k} {c}")).collect::<Vec<_>>().join(" · ") } },
                         if game.warns.iter().sum::<u32>() == 0 { GOOD } else { AMBER }, ""),
-                    ("Time in the fatal funnel".into(), doorways().iter().enumerate().map(|(k, _)| dw(k)).collect::<Vec<_>>().join(" · "), BONE, ""),
                     ("Shots, accuracy and hits by zone".into(), format!("{} shots · {}% on target · A {} · C {} · D {}", s.shots, acc, s.zone_a, s.zone_c, s.zone_d), BONE, ""),
                     ("Total time".into(), format!("{} min {:02} s", (game.time / 60.0) as i32, (game.time % 60.0) as i32), BONE, ""),
                 ];
                 // nos cenários a tabela fica mais curta: sai o que é só do tutorial
                 if game.free { rows.remove(0); }
-                if game.scn.is_some() { rows.retain(|r| !r.0.starts_with("Fan opened") && !r.0.starts_with("Time in the fatal funnel") && !r.0.starts_with("Badges")); }
+                if game.scn.is_some() { rows.retain(|r| !r.0.starts_with("Badges")); }
+                // avaliação por porta: cada vão que o operador cruzou, com quanto do leque de 180° estava aberto ao entrar e
+                // quanto tempo ele ficou parado no vão. É a nota do sistema de ângulo, porta a porta.
+                for (k, w) in doorways().iter().enumerate() {
+                    let Some(deg) = game.entry_pie[k] else { continue };
+                    let (deg, dwell) = (deg.round().clamp(0.0, 180.0) as i32, game.dwell[k]);
+                    let col = if deg >= 110 && dwell <= 1.5 { GOOD } else if deg >= 70 && dwell <= 3.0 { AMBER } else { BAD };
+                    let note: &str = if deg < 70 { "You went in with most of the doorway still closed. Slice it from outside first." } else if dwell > 3.0 { "Too long standing in the doorway: it is the one place they are already aiming at." } else if deg < 110 { "Open more of it from outside before you step in." } else { "" };
+                    let name = openings().get(w.opening).map_or(w.zone, |o| o.name);
+                    scn_rows.push((format!("Doorway · {name}"), format!("{deg}° of 180° open on entry  ·  {dwell:.1} s in the doorway"), col, note));
+                }
                 scn_rows.append(&mut rows);
                 let rows = scn_rows;
                 commands.entity(e).despawn_related::<Children>();
@@ -874,6 +906,14 @@ pub fn update_ui(
             Tag::DownTitle if game.mode == Mode::Down => set(&mut t, if game.down_title.is_empty() { "OPERATOR DOWN" } else { &game.down_title }),
             // curso: etapa trancada fica apagada; no menu, qual é a próxima etapa do aluno
             Tag::StageBtn(i) if game.mode == Mode::Scenarios => { col.0 = if prog.unlocked(i as usize) { if (i as usize) < prog.done { GOOD } else { BONE } } else { MUTE.with_alpha(0.45) }; }
+            Tag::Callsign if game.mode == Mode::Menu => {
+                let line = if !net.on { String::new() }
+                    else if !net.named { format!("YOUR CALLSIGN   {}_      type it and press ENTER  ·  it goes on the world ranking", net.name) }
+                    else { format!("CALLSIGN   {}      change it in RANKING", net.name) };
+                set(&mut t, &line);
+                let c = if net.named { MUTE } else { AMBER };
+                if col.0 != c { col.0 = c; }
+            }
             Tag::CourseNext if game.mode == Mode::Menu => {
                 let n = crate::course::STAGES.len();
                 set(&mut t, &if prog.done >= n { "COURSE COMPLETE · every stage is open for practice".to_string() }
@@ -949,6 +989,9 @@ pub fn update_ui(
                 } else if k == 6 { set(&mut t, &format!("{}°", tac.hfov.to_degrees().round() as i32)); col.0 = CYAN; }
             }
             Tag::SubText => if let Some((s, _)) = &game.sub { set(&mut t, s); },
+            Tag::ReadyNum => if game.ready_t > 0.0 { set(&mut t, &format!("{}", game.ready_t.ceil() as i32)); },
+            Tag::QuoteText => if game.quote_t > 0.0 { set(&mut t, &format!("\u{201C}{}\u{201D}", crate::course::QUOTES[game.quote_i % crate::course::QUOTES.len()].0)); },
+            Tag::QuoteBy => if game.quote_t > 0.0 { set(&mut t, &crate::course::QUOTES[game.quote_i % crate::course::QUOTES.len()].1.to_uppercase()); },
             Tag::PieDeg => if let Some(i) = tac.pie_active { set(&mut t, &format!("{}°", tac.pie_deg(i).round() as i32)); },
             // o que falta de cada lado: o lado com mais graus fica forte, o outro esmaecido; lado já aberto não mostra nada
             Tag::PieLeft => { let (l, r) = (tac.bar_left, tac.bar_right); set(&mut t, &if l > 0 { format!("‹ {}°", l) } else { String::new() }); col.0 = HUD_AMBER.with_alpha(if l >= r { 1.0 } else { 0.55 }); }

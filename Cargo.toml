@@ -1,10 +1,10 @@
 [package]
 name = "angles"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.16.1", features = ["wav", "jpeg"] }
+bevy = { version = "0.16.1", features = ["wav", "mp3", "jpeg"] }
 resvg = "0.45"
 ureq = { version = "2", features = ["json"] }
 serde_json = "1"

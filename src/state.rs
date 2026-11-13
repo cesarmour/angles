@@ -67,6 +67,14 @@ pub struct Game {
     pub sub: Option<(String, f32)>,
     /// Modo em terceira pessoa (câmera por cima do ombro, com o corpo do operador à vista).
     pub third: bool,
+    /// O jogador está digitando o codinome no menu (primeira abertura): Enter confirma o nome em vez de começar o curso.
+    pub naming: bool,
+    /// Tempo que resta da fala em curso (instrutor ou personagem): enquanto não zera, ninguém mais fala.
+    pub talk: f32,
+    /// Tela rápida entre o fim da partida e a avaliação: qual frase histórica aparece e por quanto tempo ainda.
+    pub quote_i: usize, pub quote_t: f32,
+    /// Contagem "3, 2, 1" antes de a partida começar (segundos que faltam).
+    pub ready_t: f32,
 }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
@@ -102,7 +110,7 @@ impl Default for Game {
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
             scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
-            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None, third: std::env::var("CQB_THIRD").is_ok() }
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None, third: std::env::var("CQB_THIRD").is_ok(), naming: false, talk: 0.0, quote_i: 0, quote_t: 0.0, ready_t: 0.0 }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -217,6 +225,9 @@ pub struct Brain {
     pub last: Vec2, pub lost: f32, pub bangs: u8, pub bang_cd: f32, pub hold: f32,
     /// Tempo que resta do gesto de arremessar a granada (só para a animação).
     pub toss: f32,
+    /// Para a animação: recuando de costas (de frente para o operador) e passo lateral ao cruzar um vão
+    /// (negativo = para a esquerda dele, positivo = para a direita).
+    pub backing: bool, pub side: f32,
 }
 
 pub struct TargetState {

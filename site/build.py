@@ -4,15 +4,15 @@
   python3 site/build.py
 
 Writes two files next to this script:
-  index.html     complete standalone page (images embedded), ready for any static host
+  index.html     the site page; it loads its images from img/ (publish both together)
   artifact.html  the same page as a fragment, for publishing as a Claude artifact
 Change VERSION / SIZE below when a new release goes out.
 """
 import base64, mimetypes, pathlib, re
 
 HERE = pathlib.Path(__file__).parent
-VERSION = "0.13.0"
-SIZE = "131 MB"
+VERSION = "0.14.0"
+SIZE = "86 MB"
 REPO = "https://github.com/cesarmour/angles"
 DOWNLOAD = f"{REPO}/releases/download/v{VERSION}/Angles-mac.zip"
 DESCRIPTION = ("Angles is a free CQB teaching simulator for Mac: a shoot house with armed threats, hostages "
@@ -26,15 +26,20 @@ def data_uri(name: str) -> str:
 
 
 def main() -> None:
-    t = (HERE / "template.html").read_text()
-    t = re.sub(r"\{\{img:([\w.\-]+)\}\}", lambda m: data_uri(m.group(1)), t)
-    for key, val in {"version": VERSION, "size": SIZE, "repo": REPO, "download": DOWNLOAD}.items():
-        t = t.replace("{{" + key + "}}", val)
-    left = re.findall(r"\{\{[^}]*\}\}", t)
-    assert not left, f"unfilled placeholders: {left}"
-    head, body = t.split("<!--BODY-->")
+    raw = (HERE / "template.html").read_text()
 
-    (HERE / "artifact.html").write_text(head + body)
+    def fill(images) -> str:
+        t = re.sub(r"\{\{img:([\w.\-]+)\}\}", lambda m: images(m.group(1)), raw)
+        for key, val in {"version": VERSION, "size": SIZE, "repo": REPO, "download": DOWNLOAD}.items():
+            t = t.replace("{{" + key + "}}", val)
+        left = re.findall(r"\{\{[^}]*\}\}", t)
+        assert not left, f"unfilled placeholders: {left}"
+        return t
+
+    # the artifact is a single file, so its images are embedded; the site loads them as separate files from img/
+    # (the page itself stays small and the opening image can load while the rest is still coming)
+    (HERE / "artifact.html").write_text("".join(fill(data_uri).split("<!--BODY-->")))
+    head, body = fill(lambda name: f"img/{name}").split("<!--BODY-->")
 
     icon = data_uri("icon.png")
     page = f"""<!doctype html>
