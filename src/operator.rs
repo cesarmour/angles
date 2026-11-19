@@ -16,7 +16,7 @@ fn model() -> String { crate::mdl("operator.glb") }
 /// Corpo 3D do operador do jogador nas vistas de cima (arquivo de onde saem os clipes).
 #[derive(Component)] pub struct BodyScene(pub Handle<Gltf>);
 /// Clipes do corpo do jogador: espera com a pistola baixa, mira e coice do disparo.
-#[derive(Component)] pub struct BodyAnim { pub idle: AnimationNodeIndex, pub aim: Option<AnimationNodeIndex>, pub shoot: Option<AnimationNodeIndex>, pub walk: Option<AnimationNodeIndex>, pub walk_aim: Option<AnimationNodeIndex>,
+#[derive(Component)] pub struct BodyAnim { /** Quedas (Fall1..Fall4) e o tranco de tiro levado, copiados do boneco da ameaça. */ pub falls: Vec<AnimationNodeIndex>, pub hit: Option<AnimationNodeIndex>, pub idle: AnimationNodeIndex, pub aim: Option<AnimationNodeIndex>, pub shoot: Option<AnimationNodeIndex>, pub walk: Option<AnimationNodeIndex>, pub walk_aim: Option<AnimationNodeIndex>,
     /// Estado em exibição: 0 espera, 1 mira, 2 andando, 3 andando com a arma apontada.
     pub mode: u8, pub recoil: f32, pub hot: f32, pub shot_n: u32 }
 /// Marca a cena do operador: as malhas dela vão para a camada do estúdio (ver `world::no_shadow_children`).
@@ -47,7 +47,9 @@ fn model() -> String { crate::mdl("operator.glb") }
     pub run: Option<AnimationNodeIndex>, pub flinch: Option<AnimationNodeIndex>, pub hit: Option<AnimationNodeIndex>, pub toss: Option<AnimationNodeIndex>,
     /// Andar de costas no começo do recuo e passo lateral (esquerda, direita) ao cruzar um vão.
     pub walk_back: Option<AnimationNodeIndex>, pub sneak_l: Option<AnimationNodeIndex>, pub sneak_r: Option<AnimationNodeIndex>,
-    pub hits: u8, pub hit_t: f32 }
+    pub hits: u8, pub hit_t: f32,
+    /// Coice do disparo: segundos desde o primeiro tiro da rajada (negativo = parado) e os ossos que levam o tranco.
+    pub kick: f32, pub kick_bones: Option<[Option<Entity>; 3]> }
 
 pub fn setup_operator(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset: Res<AssetServer>) {
     let mut img = Image::new_fill(Extent3d { width: 800, height: 1200, depth_or_array_layers: 1 }, TextureDimension::D2, &[0, 0, 0, 0], TextureFormat::Bgra8UnormSrgb, RenderAssetUsages::default());
@@ -148,13 +150,13 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
             }
         }
         let to = Vec3::new(p.eye.x - mz.x, 0.0, p.eye.z - mz.z).normalize_or_zero();
-        commands.spawn((Mesh3d(quad.clone()), MeshMaterial3d(mat.clone()), Transform::from_translation(mz + to * 0.06).looking_at(p.eye, Vec3::Y).with_scale(Vec3::splat(0.55)), bevy::pbr::NotShadowCaster, EnemyFlash(0.075)));
-        commands.spawn((PointLight { color: Color::srgb(1.0, 0.78, 0.5), intensity: 900_000.0, range: 9.0, shadows_enabled: false, ..default() }, Transform::from_translation(mz + to * 0.2), crate::world::light_layers(), EnemyFlash(0.11)));
+        commands.spawn((Mesh3d(quad.clone()), MeshMaterial3d(mat.clone()), Transform::from_translation(mz + to * 0.06).looking_at(p.eye, Vec3::Y).with_scale(Vec3::splat(0.3)), bevy::pbr::NotShadowCaster, EnemyFlash(0.05)));
+        commands.spawn((PointLight { color: Color::srgb(1.0, 0.78, 0.5), intensity: 60_000.0, range: 5.0, shadows_enabled: false, ..default() }, Transform::from_translation(mz + to * 0.2), crate::world::light_layers(), EnemyFlash(0.06)));
     }
     let fdt = time.delta_secs();
     for (e, mut f, light) in &mut flashes {
         f.0 -= fdt;
-        if let Some(mut l) = light { l.intensity = 900_000.0 * (f.0 / 0.11).clamp(0.0, 1.0); }
+        if let Some(mut l) = light { l.intensity = 60_000.0 * (f.0 / 0.06).clamp(0.0, 1.0); }
         if f.0 <= 0.0 { commands.entity(e).try_despawn(); }
     }
     for (e, mut pl) in &mut fresh {
@@ -183,7 +185,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         // cada boneco começa num ponto diferente do clipe, para não se mexerem todos juntos
         let mut tr = AnimationTransitions::new();
         tr.play(&mut pl, idle, Duration::ZERO).repeat().seek_to((e.index() % 7) as f32 * 1.07);
-        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, FigAnim { target, idle, aim, shoot, relax, falls, recoil: 0.0, mode: 0, walk, frozen: false, run, flinch, hit, toss, walk_back, sneak_l, sneak_r, hits: 0, hit_t: 0.0 }));
+        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, FigAnim { target, idle, aim, shoot, relax, falls, recoil: 0.0, mode: 0, walk, frozen: false, run, flinch, hit, toss, walk_back, sneak_l, sneak_r, hits: 0, hit_t: 0.0, kick: -1.0, kick_bones: None }));
     }
     for (mut a, mut pl, mut tr) in &mut anims {
         let Some(t) = targets.list.get(a.target) else { continue };
@@ -201,12 +203,14 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
         }
         if a.frozen { pl.resume_all(); a.frozen = false; a.mode = 0; a.recoil = 0.0; tr.play(&mut pl, a.idle, Duration::ZERO).repeat(); }
         // disparo: coice curto e volta para a mira
-        if shooters.contains(&a.target) { if let Some(n) = a.shoot { tr.play(&mut pl, n, Duration::from_millis(30)); a.recoil = 0.52; a.mode = 1; } }
-        if a.recoil > 0.0 {
-            a.recoil -= fdt;
-            if a.recoil <= 0.0 { if let Some(n) = a.aim { tr.play(&mut pl, n, Duration::from_millis(90)).repeat(); } }
-            continue;
+        // disparo: a pose de mira continua (o clipe de disparo quase não mexia o corpo e voltava a mira para o primeiro
+        // quadro a cada tiro); o coice é aplicado direto no tronco e nos braços, em `recoil_pose`
+        a.kick = if shooters.contains(&a.target) { 0.0 } else if a.kick >= 0.0 && a.kick < 1.0 { a.kick + fdt } else { -1.0 };
+        if shooters.contains(&a.target) {
+            if a.mode != 1 { if let Some(n) = a.aim { tr.play(&mut pl, n, Duration::from_millis(60)).repeat(); } a.mode = 1; }
+            a.recoil = 0.52;
         }
+        if a.recoil > 0.0 { a.recoil -= fdt; continue; }
         // ameaça: mira quando tem o operador na linha de tiro e anda quando troca de posição. Refém: baixa os braços quando
         // o cômodo dela está limpo (área já vista e nenhuma ameaça viva lá dentro).
         // acerto sofrido sem cair: reação curta
@@ -276,7 +280,7 @@ pub fn fig_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Glt
 }
 
 /// Corpo do jogador nas vistas de cima: pistola baixa em espera; levanta a arma ao mirar ou logo depois de atirar; coice no disparo.
-pub fn body_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Gltf>>, mut graphs: ResMut<Assets<AnimationGraph>>, p: Res<Player>,
+pub fn body_system(time: Res<Time>, game: Res<Game>, mut commands: Commands, gltfs: Res<Assets<Gltf>>, mut graphs: ResMut<Assets<AnimationGraph>>, p: Res<Player>,
     mut fresh: Query<(Entity, &mut AnimationPlayer), (Without<IdleReady>, Without<BodyAnim>)>, parents: Query<&ChildOf>, scenes: Query<&BodyScene>,
     mut anims: Query<(&mut BodyAnim, &mut AnimationPlayer, &mut AnimationTransitions)>) {
     use std::time::Duration;
@@ -295,12 +299,36 @@ pub fn body_system(time: Res<Time>, mut commands: Commands, gltfs: Res<Assets<Gl
         let shoot = g.named_animations.get("Shoot").map(|h| graph.add_clip(h.clone(), 1.0, root));
         let walk = g.named_animations.get("Walk").map(|h| graph.add_clip(h.clone(), 1.0, root));
         let walk_aim = g.named_animations.get("WalkAim").map(|h| graph.add_clip(h.clone(), 1.0, root));
+        let mut names: Vec<&Box<str>> = g.named_animations.keys().filter(|k| k.starts_with("Fall")).collect();
+        names.sort();
+        let falls: Vec<AnimationNodeIndex> = names.into_iter().map(|k| graph.add_clip(g.named_animations[k].clone(), 1.0, root)).collect();
+        let hit = g.named_animations.get("Hit").map(|h| graph.add_clip(h.clone(), 1.0, root));
         let mut tr = AnimationTransitions::new();
         tr.play(&mut pl, idle, Duration::ZERO).repeat();
-        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, BodyAnim { idle, aim, shoot, walk, walk_aim, mode: 0, recoil: 0.0, hot: 0.0, shot_n: p.shot_n }));
+        commands.entity(e).insert((AnimationGraphHandle(graphs.add(graph)), tr, IdleReady, BodyAnim { falls, hit, idle, aim, shoot, walk, walk_aim, mode: 0, recoil: 0.0, hot: 0.0, shot_n: p.shot_n }));
     }
     let dt = time.delta_secs();
     for (mut a, mut pl, mut tr) in &mut anims {
+        // abatido: cai de verdade (para trás se o tiro veio da frente, para a frente se veio de trás, de lado nos outros
+        // casos) e fica no chão. O jogo está em câmera lenta nesse trecho, e a animação acompanha.
+        if game.dying() {
+            if a.mode != 20 {
+                a.mode = 20; a.recoil = 0.0;
+                let k = match &game.foe {
+                    Some(fo) if game.foe_kill => { let d = (Vec2::new(fo.eye.x, fo.eye.z) - p.pos).normalize_or_zero().dot(p.fwd()); if d > 0.45 { 3 } else if d < -0.45 { 2 } else { 1 } }
+                    _ => 0,
+                };
+                // acelerado: em câmera lenta, a queda inteira (uns três segundos de clipe) cabe no tempo até a tela de fim
+                if let Some(n) = a.falls.get(k).or(a.falls.first()) { tr.play(&mut pl, *n, Duration::from_millis(110)).set_speed(1.6); }
+            }
+            continue;
+        }
+        // "o que o adversário viu" depois de uma partida em que o operador levou tiro e seguiu: o tranco do tiro, uma vez
+        if game.foe_t > 0.0 {
+            if a.mode != 21 { a.mode = 21; a.recoil = 0.0; if let Some(n) = a.hit { tr.play(&mut pl, n, Duration::from_millis(80)); } }
+            continue;
+        }
+        if a.mode >= 20 { a.mode = 0; tr.play(&mut pl, a.idle, Duration::ZERO).repeat(); }
         if p.shot_n != a.shot_n {
             a.shot_n = p.shot_n; a.hot = 1.4;
             if let Some(n) = a.shoot { tr.play(&mut pl, n, Duration::from_millis(30)); a.recoil = 0.44; a.mode = 9; }
@@ -381,6 +409,17 @@ pub fn room_clear_system(time: Res<Time>, mut game: ResMut<Game>, tac: Res<crate
 /// Ameaças que trocam de posição dentro do cômodo quando ouvem tiro (só no percurso livre e na missão 2; no tutorial elas
 /// ficam onde estão, para a lição continuar igual). Cada uma se muda no máximo duas vezes, para uma vaga livre do mesmo
 /// cômodo, e para se já estiver de olho no operador.
+/// Operador abatido: quem está de pé fica onde está, de arma apontada, até a tela de fim (antes eles seguiam andando e
+/// passavam por cima do corpo, na frente da câmera da queda).
+pub fn hold_system(game: Res<Game>, mut targets: ResMut<Targets>, mut held: Local<Vec<(f32, f32, f32, f32)>>) {
+    if !game.dying() { if !held.is_empty() { held.clear(); } return; }
+    if held.len() != targets.list.len() { *held = targets.list.iter().map(|t| (t.def.x, t.def.z, t.def.fx, t.def.fz)).collect(); return; }
+    for (t, h) in targets.list.iter_mut().zip(held.iter()) {
+        if !t.alive || t.off { continue; }
+        t.def.x = h.0; t.def.z = h.1; t.def.fx = h.2; t.def.fz = h.3; t.moving = false; t.goal = None;
+    }
+}
+
 pub fn threat_move_system(time: Res<Time>, game: Res<Game>, level: Res<crate::map::Level>, mut targets: ResMut<Targets>, mut heard: EventReader<Sfx>, mut roots: Query<&mut Transform, Without<Fig>>) {
     use crate::map::{slots, TKind};
     let dt = time.delta_secs().min(0.05);
@@ -474,6 +513,51 @@ pub fn hands_setup(mut commands: Commands, figs: Query<(Entity, &Fig), Without<H
 
 /// Mãos para o alto: roda depois da animação e antes da propagação das transformações. Cada osso é girado para apontar
 /// numa direção fixa em relação ao corpo (braço para cima e para fora, antebraço e mão para cima), misturado com a pose do clipe.
+/// Coice dos invasores ao atirar, aplicado depois da animação: o tronco vai para trás e volta a cada tiro da rajada
+/// (três, a cada décimo de segundo), a cabeça compensa metade e o ombro da arma recua um pouco mais.
+pub fn recoil_pose(mut figs: Query<(Entity, &mut FigAnim)>, roots: Query<(&Fig, &GlobalTransform)>, parents: Query<&ChildOf>, children: Query<&Children>, names: Query<&Name>,
+    globals: Query<&GlobalTransform>, mut locals: Query<&mut Transform>) {
+    for (e, mut a) in &mut figs {
+        if a.kick < 0.0 { continue; }
+        if a.kick_bones.is_none() {
+            let mut found = [None; 3];
+            let mut stack = vec![e];
+            while let Some(c) = stack.pop() {
+                if let Ok(n) = names.get(c) {
+                    let n = n.as_str();
+                    let n = n.rsplit(':').next().unwrap_or(n);
+                    if n.starts_with("Spine2") { found[0] = Some(c); } else if n.starts_with("Head") && !n.starts_with("HeadTop") { found[1] = Some(c); } else if n.starts_with("RightShoulder") { found[2] = Some(c); }
+                }
+                if let Ok(ch) = children.get(c) { stack.extend(ch.iter()); }
+            }
+            a.kick_bones = Some(found);
+        }
+        // três pulsos: sobe em 25 ms e amortece em uns 90 ms
+        let pulse = |x: f32| if x < 0.0 { 0.0 } else { (x / 0.025).min(1.0) * (-x / 0.09).exp() };
+        let k = (pulse(a.kick) + pulse(a.kick - 0.1) + pulse(a.kick - 0.2)).min(1.3);
+        if k < 0.004 { continue; }
+        // frente do boneco no mundo: sobe na hierarquia até a raiz dele
+        let (mut cur, mut body) = (e, None);
+        for _ in 0..24 {
+            if let Ok((_, g)) = roots.get(cur) { body = Some(g.compute_transform().rotation); break; }
+            match parents.get(cur) { Ok(p) => cur = p.parent(), Err(_) => break }
+        }
+        let Some(body) = body else { continue };
+        let fwd = body * Vec3::Z;
+        // girar em torno deste eixo leva o alto do corpo para trás
+        let axis = fwd.cross(Vec3::Y).normalize_or_zero();
+        let Some(bones) = a.kick_bones else { continue };
+        let gain = std::env::var("CQB_KICK").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0);
+        for (i, ang) in [0.1f32 * gain, -0.05 * gain, 0.07 * gain].iter().enumerate() {
+            let Some(b) = bones[i] else { continue };
+            let Some(pg) = parents.get(b).ok().and_then(|c| globals.get(c.parent()).ok()).map(|g| g.compute_transform().rotation) else { continue };
+            let Ok(mut tf) = locals.get_mut(b) else { continue };
+            let world = Quat::from_axis_angle(axis, ang * k);
+            tf.rotation = (pg.inverse() * world * pg * tf.rotation).normalize();
+        }
+    }
+}
+
 pub fn hands_pose(time: Res<Time>, targets: Res<Targets>, mut figs: Query<(&Fig, &mut HandsRig, &GlobalTransform)>, globals: Query<&GlobalTransform>, parents: Query<&ChildOf>,
     mut locals: Query<&mut Transform>, mut vis: Query<&mut Visibility>) {
     let dt = time.delta_secs().min(0.05);

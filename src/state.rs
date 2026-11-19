@@ -75,7 +75,22 @@ pub struct Game {
     pub quote_i: usize, pub quote_t: f32,
     /// Contagem "3, 2, 1" antes de a partida começar (segundos que faltam).
     pub ready_t: f32,
+    /// Demonstração em dois tempos: 1 = o jeito errado (o operador não atira e paga pelo erro), 2 = o jeito certo.
+    pub demo_phase: u8,
+    /// "O que o adversário viu": de onde veio o último tiro levado e como o operador estava naquela hora.
+    pub foe: Option<Foe>, pub foe_t: f32,
+    /// O tiro que derrubou o operador veio de alguém que o via (e não pela parede ou de uma granada): a câmera da queda
+    /// fica nos olhos de quem atirou.
+    pub foe_kill: bool,
+    /// Pergunta rápida entre as etapas: (qual pergunta, resposta escolhida).
+    pub quiz: Option<(usize, Option<usize>)>,
 }
+/// Retrato do último tiro levado: olhos de quem atirou, posição e direção do operador, e há quanto tempo ele estava à vista.
+#[derive(Clone, Debug)]
+pub struct Foe { /** Qual alvo atirou (índice na lista). */ pub who: usize, pub eye: Vec3, pub pos: Vec2, pub yaw: f32, pub lean: f32, pub crouch: bool, pub seen_for: f32, pub looking: bool }
+/// O que já foi mostrado ao jogador nesta sessão (não volta ao reiniciar a partida): demonstrações e perguntas.
+#[derive(Resource, Default)]
+pub struct Teach { pub demo_seen: u32, pub quiz_seen: u32, pub quiz_n: usize, pub quiz_req: bool }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
 static DIFF: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
@@ -101,7 +116,10 @@ pub const DIFF_NOTES: [&str; 3] = [
 /// Quantos tiros o operador aguenta: no segundo, a partida acaba.
 pub const MAX_WOUNDS: u8 = 2;
 /// Quanto dura a queda do operador abatido, antes de a tela de fim aparecer.
-pub const DOWN_SECS: f32 = 1.3;
+/// Tempo de jogo entre o tiro que derruba o operador e a tela de fim. Esse trecho roda em câmera lenta (`SLOWMO`),
+/// visto de fora: dá uns três segundos de relógio para a queda aparecer inteira.
+pub const DOWN_SECS: f32 = 1.7;
+pub const SLOWMO: f32 = 0.45;
 impl Default for Game {
     fn default() -> Self {
         Game { mode: Mode::Menu, time: 0.0, view: View::Fp, tac: true, flash: false, free: false, mission2: false, seed: 1, lesson: 0, obj: Vec::new(), lesson_end: 0.0, debriefed: false,
@@ -110,7 +128,7 @@ impl Default for Game {
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
             scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
-            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None, third: std::env::var("CQB_THIRD").is_ok(), naming: false, talk: 0.0, quote_i: 0, quote_t: 0.0, ready_t: 0.0 }
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None, third: std::env::var("CQB_THIRD").is_ok(), naming: false, talk: 0.0, quote_i: 0, quote_t: 0.0, ready_t: 0.0, demo_phase: 0, foe: None, foe_t: 0.0, foe_kill: false, quiz: None }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -129,7 +147,9 @@ pub const TIP_SECS: f32 = 8.0;
 
 impl Game {
     /// O traçado está sendo desenhado agora?
-    pub fn route_visible(&self) -> bool { self.demo || self.guide == 1 || (self.guide == 2 && self.guide_t > 0.0) }
+    /// O operador foi abatido e a queda está sendo mostrada (ou acabou de ser).
+    pub fn dying(&self) -> bool { self.down_t > 0.0 || (self.mode == Mode::Down && self.down_title.is_empty()) }
+    pub fn route_visible(&self) -> bool { if self.demo { return self.demo_phase != 1; } self.guide == 1 || (self.guide == 2 && self.guide_t > 0.0) }
     pub fn next_guide(&mut self) { self.guide = match self.guide { 1 => 2, 2 => 0, _ => 1 }; if self.guide == 2 { self.guide_t = TIP_SECS; } self.ui_dirty = true; }
     /// Nota do traçado (0 a 100): 100 até 20 cm de distância média, zero a 1 m ou mais.
     pub fn route_score(&self) -> Option<f32> { if self.route_t < 2.0 { None } else { Some((1.0 - (self.route_sum / self.route_t - 0.2) / 0.8).clamp(0.0, 1.0) * 100.0) } }
@@ -302,3 +322,7 @@ pub const WEAPONS: [WeaponDef; 2] = [
         ads_pitch: -0.03, ads_yaw: 0.0, mag: 30, reserve: 90, cool: 0.12, kick: 0.6, block: 0.84, reload_s: 2.7, reload_empty_s: 3.3,
         idle: "Idle", shoot: "Shoot", reload: "Reload", reload_empty: "Reload", take: "Take", hide: "Hide", walk: "Walk", run: "Run" },
 ];
+
+/// As telas de ensino (frase, retrato do tiro, demonstração automática, pergunta) ficam fora dos testes automáticos,
+/// a não ser que o teste peça por elas com CQB_TEACH.
+pub fn teach_on() -> bool { std::env::var("CQB_SCRIPT").is_err() || std::env::var("CQB_TEACH").is_ok() }

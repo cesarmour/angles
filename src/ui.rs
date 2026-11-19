@@ -33,12 +33,12 @@ pub struct Diagrams(pub Vec<Handle<Image>>);
 pub enum Tag {
     Hud, LessonKick, LessonTitle, ObjList, TacPanel, TacFov, TacFovNote, TacCorner, TacCornerNote, TacBody, TacZoneName, TacZone, TacExpo, MiniFrame, Legend,
     AmmoMag, AmmoRes, AmmoMode, Stance, ViewTag, Prompt, Toast, ToastText, Wp, WpText, Hit, Dmg, Cross(u8), Label(u8), PieBar, PieName, PieDeg, PieLeft, PieRight, PieHint, PieVerb, Subtitle, SubText,
-    Coach, CoachKick, CoachText, DemoBar, DemoBtn, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
+    Coach, CoachKick, CoachText, DemoBar, DemoTitle, DemoBtn, Foe, FoeText, FoeGo, Quiz, QuizQ, QuizOpt(u8), QuizWhy, QuizImg, QuizGo, FlashBtn, GuideBtn, BoxBtn, LessonBox, Odds, OddsVal, OddsNote, OddsBar, BadgeList,
     Menu, Card, Pause, Debrief, Credits, MapBtn(u8), MapNote, Replay, ReplayTitle, ReplayBars, ReplayCursor, CardKick, CardTitle, CardLead, CardPoints, CardImg, DbGrade, DbScore, DbRows, Portrait, Stamp, StampText, Down, DownWhy, DownStats, Wound, DiffBtn(u8),
     Scenarios, Ranking, ScnBest(u8), StageBtn(u8), CourseNext, Callsign, Ready, ReadyNum, Quote, QuoteText, QuoteBy, QuoteBar, RankList, PromptText, DbTitle, DbRank, DownTitle, DownKick, DownTip, Lock, LockText,
 }
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry, Diff(u8), Scn(u8), Scenarios, Ranking, Stage(u8), Continue }
+pub enum Act { Start, Free, CardGo, Resume, Restart, Quit, Mission2, Demo, Flash, Guide, Box, Credits, Back, Map(u8), Retry, Diff(u8), Scn(u8), Scenarios, Ranking, Stage(u8), Continue, QuizPick(u8) }
 #[derive(Event)]
 pub struct ResetGame { pub free: bool, pub mission2: bool, pub scn: Option<usize> }
 
@@ -78,6 +78,8 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
     };
     let mut diagrams = Diagrams::default();
     for i in 0..6 { diagrams.0.push(images.add(art::svg_image(&art::diagram_svg(i), 960, 570, false))); }
+    // do sétimo em diante, os desenhos das perguntas rápidas
+    for i in 0..crate::course::QUIZ.len() { diagrams.0.push(images.add(art::svg_image(&art::quiz_svg(i), 960, 570, false))); }
 
     /* ---------- HUD ---------- */
     commands.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), display: Display::None, ..default() }, Tag::Hud)).with_children(|h| {
@@ -177,11 +179,11 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
                     t.spawn((txt("", &f.body, 15.5, BONE), Tag::CoachText));
                 });
         });
-        h.spawn((Node { width: Val::Percent(100.0), top: Val::Px(16.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::DemoBar)).with_children(|c| {
+        h.spawn((Node { width: Val::Percent(100.0), bottom: Val::Px(196.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::DemoBar)).with_children(|c| {
             c.spawn((Node { padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)), border: UiRect::top(Val::Px(2.0)), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(2.0), ..default() }, BackgroundColor(PANEL), BorderColor(CYAN)))
                 .with_children(|t| {
-                    t.spawn(txt("DEMO · IDEAL ROUTE", &f.bold, 20.0, CYAN));
-                    t.spawn(txt("The operator runs the lesson on his own. ENTER or ESC returns to the card  ·  V switches the view", &f.body, 13.0, MUTE));
+                    t.spawn((txt("DEMO · IDEAL ROUTE", &f.bold, 26.0, CYAN), Tag::DemoTitle));
+                    t.spawn(txt("Green floor: what he has seen. Red: what he has not.   ·   ENTER skips to the lesson   ·   V switches the view", &f.body, 13.0, MUTE));
                 });
         });
         h.spawn((Node { align_items: AlignItems::Center, column_gap: Val::Px(6.0), display: Display::None, ..abs() }, Tag::Wp)).with_children(|w| {
@@ -191,7 +193,7 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         h.spawn((Node { width: Val::Percent(100.0), bottom: Val::Px(90.0), justify_content: JustifyContent::Center, display: Display::None, ..abs() }, Tag::Replay)).with_children(|c| {
             c.spawn((Node { width: Val::Px(660.0), flex_direction: FlexDirection::Column, padding: UiRect::all(Val::Px(12.0)), border: UiRect::top(Val::Px(2.0)), row_gap: Val::Px(6.0), ..default() }, BackgroundColor(PANEL), BorderColor(CYAN))).with_children(|p| {
                 p.spawn((txt("", &f.bold, 24.0, BONE), Tag::ReplayTitle));
-                p.spawn(txt("Your path seen from above. The line colour and the bars show how many degrees the nearest corner was still hiding at each moment.", &f.body, 13.5, MUTE));
+                p.spawn(txt("Your path seen from above. Green floor is what you had already seen at that moment; red is what was still closed. The bars show how many degrees the nearest corner was hiding.", &f.body, 13.5, MUTE));
                 p.spawn((Node { height: Val::Px(64.0), align_items: AlignItems::FlexEnd, column_gap: Val::Px(1.0), ..default() }, Tag::ReplayBars));
                 p.spawn((Node { height: Val::Px(3.0), width: Val::Px(8.0), ..default() }, BackgroundColor(Color::WHITE), Tag::ReplayCursor));
                 p.spawn(txt("ENTER TO CONTINUE", &f.semi, 13.0, AMBER));
@@ -364,6 +366,31 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
         r.spawn(txt("GET READY", &f.semi, 22.0, AMBER));
         r.spawn((Text::new("3"), TextFont { font: f.bold.clone(), font_size: 260.0, ..default() }, TextColor(BONE), Tag::ReadyNum));
     });
+    // pergunta rápida antes do cartão da etapa: a cena vista de cima e três respostas
+    commands.spawn(screen(Tag::Quiz)).insert((BackgroundColor(Color::srgb(0.02, 0.025, 0.03)), GlobalZIndex(35))).with_children(|s| {
+        s.spawn(txt("QUICK CHECK · ONE QUESTION BEFORE THE NEXT STAGE", &f.semi, 14.0, AMBER));
+        s.spawn((txt("", &f.bold, 40.0, BONE), Node { max_width: Val::Px(1120.0), ..default() }, Tag::QuizQ));
+        s.spawn(Node { column_gap: Val::Px(40.0), align_items: AlignItems::FlexStart, ..default() }).with_children(|r| {
+            r.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(10.0), width: Val::Px(560.0), ..default() }).with_children(|c| {
+                for i in 0..3u8 {
+                    c.spawn((Button, Node { padding: UiRect::axes(Val::Px(16.0), Val::Px(10.0)), border: UiRect::all(Val::Px(1.5)), ..default() }, BorderColor(BONE.with_alpha(0.5)), BackgroundColor(Color::NONE), Act::QuizPick(i)))
+                        .with_children(|b| { b.spawn((txt("", &f.semi, 19.0, BONE), Tag::QuizOpt(i))); });
+                }
+                c.spawn((txt("", &f.body, 17.0, BONE), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }, Tag::QuizWhy));
+                c.spawn((txt("", &f.semi, 13.0, AMBER), Tag::QuizGo));
+            });
+            r.spawn((ImageNode::new(diagrams.0[6].clone()), Node { width: Val::Px(520.0), height: Val::Px(309.0), border: UiRect::all(Val::Px(1.0)), ..default() }, BorderColor(Color::srgba(0.9, 0.9, 0.86, 0.16)), BackgroundColor(Color::srgba(0.035, 0.05, 0.055, 0.7)), Tag::QuizImg));
+        });
+    });
+    // "o que o adversário viu": faixa por cima da imagem da câmera dele
+    commands.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), display: Display::None, flex_direction: FlexDirection::Column, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, padding: UiRect::all(Val::Px(34.0)), ..default() },
+        GlobalZIndex(20), Tag::Foe)).with_children(|r| {
+        r.spawn((Node { padding: UiRect::axes(Val::Px(18.0), Val::Px(8.0)), border: UiRect::top(Val::Px(2.0)), ..default() }, BackgroundColor(PANEL), BorderColor(BAD))).with_children(|t| { t.spawn(txt("WHAT HE SAW", &f.bold, 30.0, BAD)); });
+        r.spawn((Node { padding: UiRect::axes(Val::Px(18.0), Val::Px(10.0)), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(4.0), max_width: Val::Px(900.0), ..default() }, BackgroundColor(PANEL))).with_children(|t| {
+            t.spawn((Text::new(""), TextFont { font: f.body.clone(), font_size: 19.0, ..default() }, TextColor(BONE), TextLayout::new_with_justify(JustifyText::Center), Tag::FoeText));
+            t.spawn((txt("ENTER TO CONTINUE", &f.semi, 13.0, AMBER), Tag::FoeGo));
+        });
+    });
     // fim da partida: tela rápida com uma frase histórica, antes da avaliação
     commands.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), display: Display::None, flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, align_items: AlignItems::Center, row_gap: Val::Px(22.0), padding: UiRect::all(Val::Px(60.0)), ..default() },
         BackgroundColor(Color::srgb(0.02, 0.025, 0.03)), GlobalZIndex(40), Tag::Quote)).with_children(|q| {
@@ -379,12 +406,31 @@ pub fn setup_ui(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut ima
 }
 
 /// Cliques nos botões e teclas de confirmação/pausa.
-pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>, mut ck: ResMut<Checkpoint>, mut p: ResMut<Player>, mut back: Local<Mode>, mut prog: ResMut<crate::course::Progress>) {
+pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interaction, &Act), Changed<Interaction>>, mut reset: EventWriter<ResetGame>, mut sfx: EventWriter<Sfx>, mut exit: EventWriter<AppExit>, keys: Res<ButtonInput<KeyCode>>, mut mapreq: ResMut<MapReq>, mut ck: ResMut<Checkpoint>, mut p: ResMut<Player>, mut back: Local<Mode>, mut prog: ResMut<crate::course::Progress>, mut teach: ResMut<Teach>) {
     // durante a demonstração só existe uma ação: sair dela
     if game.demo { if c.pause || c.confirm { game.demo_end = true; } return; }
     // tela da frase: qualquer confirmação só pula a tela
     if game.quote_t > 0.0 { if c.confirm || c.pause { game.quote_t = 0.0; game.ui_dirty = true; } return; }
     if game.ready_t > 0.0 { return; }
+    if game.foe_t > 0.0 { if c.confirm || c.pause { game.foe_t = 0.0; game.ui_dirty = true; } return; }
+    // pergunta rápida: A, B, C (ou 1, 2, 3, ou o clique) escolhe; depois de respondida, ENTER segue para o cartão
+    if let Some((k, pick)) = game.quiz {
+        if game.mode != Mode::Card { game.quiz = None; game.ui_dirty = true; return; }
+        if game.quote_t > 0.0 { return; }
+        match pick {
+            None => {
+                let mut ch = None;
+                for (i, a) in &q { if *i == Interaction::Pressed { if let Act::QuizPick(n) = a { ch = Some(*n as usize); } } }
+                for (n, ks) in [[KeyCode::KeyA, KeyCode::Digit1], [KeyCode::KeyB, KeyCode::Digit2], [KeyCode::KeyC, KeyCode::Digit3]].iter().enumerate() { if ks.iter().any(|x| keys.just_pressed(*x)) { ch = Some(n); } }
+                if let Some(n) = ch {
+                    game.quiz = Some((k, Some(n))); game.ui_dirty = true;
+                    sfx.write(if n == crate::course::QUIZ[k % crate::course::QUIZ.len()].right { Sfx::Good } else { Sfx::Ui });
+                } else if c.pause { game.quiz = None; game.ui_dirty = true; }
+            }
+            Some(_) => if c.confirm || c.pause { game.quiz = None; game.ui_dirty = true; sfx.write(Sfx::Ui); },
+        }
+        return;
+    }
     let mut act: Option<Act> = None;
     for (i, a) in &q { if *i == Interaction::Pressed { act = Some(*a); } }
     match game.mode {
@@ -434,6 +480,8 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
             if !prog.unlocked(i) { return; }
             let st = &crate::course::STAGES[i];
             prog.current = Some(i);
+            // uma pergunta sobre o que a etapa anterior ensinou, a primeira vez que cada etapa abre nesta sessão
+            if i >= 1 && teach.quiz_seen & (1 << i) == 0 && teach_on() { teach.quiz_seen |= 1 << i; teach.quiz_n = (i - 1) % crate::course::QUIZ.len(); teach.quiz_req = true; }
             set_difficulty(st.diff);
             match st.what {
                 crate::course::What::Tutorial => { set_force_figs(false); if map_index() != 0 || figs_built() != want_figs() { mapreq.0 = Some(0); } reset.write(ResetGame { free: false, mission2: false, scn: None }); }
@@ -461,6 +509,7 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
             game.mode = Mode::Menu; game.view = View::Fp; game.tac = false; game.toast = None; game.coach = None; game.down_t = 0.0; game.stamp_t = 0.0;
         }
         // no tutorial volta ao começo da lição em que o operador caiu; no percurso livre e na missão 2 recomeça a partida
+        Act::QuizPick(_) => {}
         Act::Retry => { if !game.free && ck.snap.is_some() { ck.retry = true; } else { reset.write(ResetGame { free: game.free, mission2: game.mission2, scn: game.scn }); } }
     }
     game.ui_dirty = true;
@@ -468,11 +517,13 @@ pub fn ui_actions(mut game: ResMut<Game>, c: Res<Controls>, q: Query<(&Interacti
 
 #[allow(clippy::too_many_arguments)]
 pub fn do_reset(mut ev: EventReader<ResetGame>, mut game: ResMut<Game>, mut p: ResMut<Player>, mut level: ResMut<Level>, mut targets: ResMut<Targets>, mut tac: ResMut<Tac>,
-    mut commands: Commands, junk: Query<Entity, Or<(With<Decal>, With<Casing>, With<Puff>)>>, mut fx: ResMut<Fx>) {
+    mut commands: Commands, junk: Query<Entity, Or<(With<Decal>, With<Casing>, With<Puff>)>>, mut fx: ResMut<Fx>, mut teach: ResMut<Teach>) {
     let Some(e) = ev.read().last() else { return };
     let (free, m2, scn) = (e.free, e.mission2, e.scn);
     let (sens, guide, hide_box, third) = (game.sens, game.guide, game.hide_box, game.third);
     *game = Game { sens, guide, hide_box, third, ..default() };
+    // a pergunta pedida ao abrir a etapa entra depois de o jogo ser refeito
+    if teach.quiz_req { teach.quiz_req = false; if !free && !m2 { game.quiz = Some((teach.quiz_n, None)); } }
     *p = Player::with_weapon(p.weapon);
     level.reset();
     // a posição de ameaças e reféns é sorteada a cada partida, em todos os modos (cada alvo continua no seu cômodo)
@@ -590,7 +641,7 @@ pub fn update_ui(
     for (e, tag, mut node) in nodes.iter_mut() {
         match *tag {
             // CQB_NOHUD: capturas limpas para o site, sem nada da interface por cima
-            Tag::Hud => show(&mut node, std::env::var("CQB_NOHUD").is_err() && !matches!(game.mode, Mode::Menu | Mode::Debrief | Mode::Credits | Mode::Down | Mode::Scenarios | Mode::Ranking)),
+            Tag::Hud => show(&mut node, std::env::var("CQB_NOHUD").is_err() && game.down_t <= 0.0 && !matches!(game.mode, Mode::Menu | Mode::Debrief | Mode::Credits | Mode::Down | Mode::Scenarios | Mode::Ranking)),
             Tag::Credits => show(&mut node, game.mode == Mode::Credits),
             Tag::Scenarios => show(&mut node, game.mode == Mode::Scenarios),
             Tag::Ranking => show(&mut node, game.mode == Mode::Ranking),
@@ -638,14 +689,16 @@ pub fn update_ui(
             }
             // o texto do menu fica à esquerda do operador: a margem direita reserva o espaço dele (e os botões quebram de linha)
             Tag::Menu => { show(&mut node, game.mode == Mode::Menu); let pr = Val::Px(if portrait_menu { PORTRAIT_PAD } else { 40.0 }); if node.padding.right != pr { node.padding.right = pr; } }
-            Tag::Down => show(&mut node, game.mode == Mode::Down),
+            Tag::Down => show(&mut node, game.mode == Mode::Down && game.foe_t <= 0.0),
+            Tag::Foe => show(&mut node, game.foe_t > 0.0 || (game.down_t > 0.0 && game.foe_kill && game.view == View::Fp)),
+            Tag::Quiz => show(&mut node, game.quiz.is_some() && game.mode == Mode::Card),
             Tag::Card => show(&mut node, game.mode == Mode::Card && game.ready_t <= 0.0),
             Tag::Ready => show(&mut node, game.ready_t > 0.0),
             Tag::Quote => show(&mut node, game.quote_t > 0.0),
             Tag::QuoteBar => { let w = Val::Percent(((1.0 - game.quote_t / crate::course::QUOTE_SECS) * 100.0).clamp(0.0, 100.0)); if node.width != w { node.width = w; } }
             Tag::Pause => show(&mut node, game.mode == Mode::Pause),
-            Tag::Debrief => show(&mut node, game.mode == Mode::Debrief),
-            Tag::Portrait => show(&mut node, (game.mode == Mode::Menu && portrait_menu) || (game.mode == Mode::Debrief && portrait_db)),
+            Tag::Debrief => show(&mut node, game.mode == Mode::Debrief && game.foe_t <= 0.0),
+            Tag::Portrait => show(&mut node, (game.mode == Mode::Menu && portrait_menu) || (game.mode == Mode::Debrief && portrait_db && game.foe_t <= 0.0)),
             // o painel de medidas e a legenda de cores saíram: ficam a barra da porta em foco e o minimapa (só com o radar)
             Tag::TacPanel | Tag::Legend => show(&mut node, false),
             Tag::MiniFrame => show(&mut node, game.tac && !bird),
@@ -864,13 +917,14 @@ pub fn update_ui(
     for (tag, mut bg) in bgs.iter_mut() {
         if *tag == Tag::Dmg {
             // clarão vermelho a cada tiro levado; na queda do operador a tela inteira avermelha
-            let fall = if game.down_t > 0.0 { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) * 0.55 } else { 0.0 };
+            let fall = if game.down_t > 0.0 { (((1.0 - game.down_t / DOWN_SECS) - 0.72) / 0.28).clamp(0.0, 1.0) * 0.42 } else { 0.0 };
             bg.0 = if game.fade_t > 0.0 { Color::srgba(0.0, 0.0, 0.0, (game.fade_t / 0.45).clamp(0.0, 1.0)) } else { Color::srgba(0.75, 0.06, 0.04, ((game.dmg_t / 1.3).clamp(0.0, 1.0) * 0.38).max(fall)) };
         }
         if *tag == Tag::OddsBar { bg.0 = if game.odds >= 75.0 { GOOD } else if game.odds >= 50.0 { AMBER } else { BAD }; }
     }
     let lesson = &LESSONS[game.lesson.min(5)];
     for (tag, mut im) in imgs.iter_mut() {
+        if *tag == Tag::QuizImg { if let Some((k, _)) = game.quiz { if let Some(h) = diagrams.0.get(6 + k) { if im.image != *h { im.image = h.clone(); } } } }
         if *tag == Tag::CardImg && game.mode == Mode::Card { let h = &diagrams.0[game.lesson.min(5)]; if im.image != *h { im.image = h.clone(); } }
     }
     let score_grade = || {
@@ -989,6 +1043,31 @@ pub fn update_ui(
                 } else if k == 6 { set(&mut t, &format!("{}°", tac.hfov.to_degrees().round() as i32)); col.0 = CYAN; }
             }
             Tag::SubText => if let Some((s, _)) = &game.sub { set(&mut t, s); },
+            Tag::QuizQ => if let Some((k, _)) = game.quiz { set(&mut t, crate::course::QUIZ[k % crate::course::QUIZ.len()].q); },
+            Tag::QuizOpt(n) => if let Some((k, pick)) = game.quiz {
+                let qz = &crate::course::QUIZ[k % crate::course::QUIZ.len()];
+                set(&mut t, &format!("{}   {}", ["A", "B", "C"][n as usize], qz.opts[n as usize]));
+                col.0 = match pick { Some(_) if n as usize == qz.right => GOOD, Some(x) if x == n as usize => BAD, Some(_) => MUTE, None => BONE };
+            },
+            Tag::QuizWhy => if let Some((k, pick)) = game.quiz {
+                let qz = &crate::course::QUIZ[k % crate::course::QUIZ.len()];
+                match pick { Some(x) => { set(&mut t, &format!("{} {}", if x == qz.right { "Right." } else { "Not quite." }, qz.why)); col.0 = if x == qz.right { GOOD } else { BONE }; } None => set(&mut t, "") }
+            },
+            Tag::QuizGo => if let Some((_, pick)) = game.quiz { set(&mut t, if pick.is_some() { "ENTER TO CONTINUE" } else { "PRESS A, B OR C  ·  ESC SKIPS" }); },
+            Tag::FoeGo => set(&mut t, if game.foe_t > 0.0 { "ENTER TO CONTINUE" } else { "" }),
+            Tag::FoeText => if game.foe_t > 0.0 || game.down_t > 0.0 { if let Some(fo) = &game.foe {
+                let secs = format!("{:.1}", fo.seen_for.min(99.0));
+                set(&mut t, &if fo.looking { format!("This is you from where he stood. He had you in view for {secs} s before the shot: you were looking at him and he was still faster.") }
+                    else { format!("This is you from where he stood. He had you in view for {secs} s and you were not looking his way: that angle was never opened.") });
+            } },
+            Tag::DemoTitle if game.demo => {
+                let l = &crate::lessons::LESSONS[game.lesson.min(5)];
+                match game.demo_phase {
+                    1 => { set(&mut t, &format!("THE WRONG WAY  ·  {}", l.mistake.to_uppercase())); col.0 = BAD; }
+                    2 if !l.fix.is_empty() => { set(&mut t, &format!("THE RIGHT WAY  ·  {}", l.fix.to_uppercase())); col.0 = GOOD; }
+                    _ => { set(&mut t, "DEMO · IDEAL ROUTE"); col.0 = CYAN; }
+                }
+            }
             Tag::ReadyNum => if game.ready_t > 0.0 { set(&mut t, &format!("{}", game.ready_t.ceil() as i32)); },
             Tag::QuoteText => if game.quote_t > 0.0 { set(&mut t, &format!("\u{201C}{}\u{201D}", crate::course::QUOTES[game.quote_i % crate::course::QUOTES.len()].0)); },
             Tag::QuoteBy => if game.quote_t > 0.0 { set(&mut t, &crate::course::QUOTES[game.quote_i % crate::course::QUOTES.len()].1.to_uppercase()); },

@@ -125,6 +125,10 @@ pub fn is(game: &Game, k: Kind) -> bool { kind(game) == Some(k) }
 /// Quantos invasores a defesa da casa tem no total (2 + 4 + ... ).
 pub fn invaders_total() -> u32 { (1..=WAVES).map(|w| w * 2).sum() }
 
+/// Folga do corpo do invasor em movimento. Maior que a do alvo parado (0,28): no passo lateral agachado as pernas e os
+/// cotovelos abrem uns 45 cm, e com 28 cm o boneco entrava no batente e nos montantes (que saem 4 cm da parede).
+const THREAT_R: f32 = 0.38;
+
 fn blocked(level: &Level, q: Vec2, r: f32) -> bool {
     level.solids.iter().any(|s| s.on && q.x > s.x1 - r && q.x < s.x2 + r && q.y > s.z1 - r && q.y < s.z2 + r)
 }
@@ -835,6 +839,7 @@ pub fn scenario_system(
             t.wait -= dt;
             let Some(&wp) = t.ai.path.first() else { t.ai.tactic = TAC_HOLD; continue; };
             if t.wait <= 0.0 { t.ai.path.clear(); t.ai.tactic = TAC_HOLD; continue; }
+            let mut wp = wp; level.resolve_circle(&mut wp, THREAT_R);
             let v = wp - pos;
             let len = v.length();
             if len < 0.15 { t.ai.path.remove(0); continue; }
@@ -842,7 +847,7 @@ pub fn scenario_system(
             // só depois vira e corre para o abrigo
             let back = 4.0 - t.wait < 1.3 && pos.distance(p.pos) > 0.6;
             let mut np = pos + v / len * ((if back { 1.1 } else { RETREAT_SPEED }) * dt).min(len);
-            level.resolve_circle(&mut np, 0.28);
+            level.resolve_circle(&mut np, THREAT_R);
             let f = if back { turn(t.fwd, (p.pos - pos).normalize_or_zero(), 9.0) } else { turn(t.fwd, v / len, 14.0) };
             place(t, &mut roots, np, f);
             t.moving = true; t.ai.backing = back;
@@ -869,7 +874,8 @@ pub fn scenario_system(
         if t.ai.tactic == TAC_STACK {
             // vai para o lado do batente, de olho na quina
             t.ai.t -= dt;
-            let v = t.ai.anchor - pos;
+            let mut an = t.ai.anchor; level.resolve_circle(&mut an, THREAT_R);
+            let v = an - pos;
             let len = v.length();
             if len < 0.08 || t.ai.t <= 0.0 {
                 t.ai.tactic = TAC_SLICE; t.ai.anchor = pos; t.ai.t = 0.7 + 0.6 * r01(now * 3.7 + i as f32); t.ai.ready = true; t.moving = false;
@@ -900,7 +906,7 @@ pub fn scenario_system(
             }
             let mut np = pos + v / len * (STACK_SPEED * dt).min(len);
             for (j, q) in &others { if *j != i { let w = np - *q; let l = w.length(); if l < 0.5 && l > 0.001 { np += w / l * (0.5 - l) * 0.5; } } }
-            level.resolve_circle(&mut np, 0.28);
+            level.resolve_circle(&mut np, THREAT_R);
             let f = turn(t.fwd, (t.ai.pivot - np).normalize_or_zero(), 9.0);
             place(t, &mut roots, np, f);
             t.moving = true;
@@ -915,7 +921,9 @@ pub fn scenario_system(
             let gone = (pos - t.ai.anchor).dot(inward);
             t.ai.lean_to = if gone < 0.45 && t.ai.t < 1.0 { LEAN * Vec2::new(-f.y, f.x).dot(inward).signum() } else { 0.0 };
             t.ai.t -= dt;
-            let v = t.ai.to - pos;
+            // o destino respeita a mesma folga do corpo: senão ele ficaria andando contra a parede sem nunca chegar
+            let mut to = t.ai.to; level.resolve_circle(&mut to, THREAT_R);
+            let v = to - pos;
             let len = v.length();
             if len < 0.08 || t.ai.t < -5.0 {
                 t.ai.tactic = TAC_NONE; t.ai.ready = false; t.ai.lean_to = 0.0; t.ai.door_t = 8.0;
@@ -929,7 +937,7 @@ pub fn scenario_system(
             // cruzando o vão sem ninguém à vista: passo lateral agachado, para o lado em que ele está andando
             if !t.engaged { let lat = (v / len).dot(Vec2::new(-f.y, f.x)); if lat.abs() > 0.4 { t.ai.side = lat; } }
             let mut np = pos + v / len * (sp * dt).min(len);
-            level.resolve_circle(&mut np, 0.28);
+            level.resolve_circle(&mut np, THREAT_R);
             place(t, &mut roots, np, f);
             t.moving = false;
             continue;
@@ -1011,6 +1019,7 @@ pub fn scenario_system(
                 }
             }
         }
+        let mut goal = goal; level.resolve_circle(&mut goal, THREAT_R);
         let v = goal - pos;
         let len = v.length();
         if std::env::var("CQB_HUNTLOG").map_or(false, |v| v == "2") && (game.time * 4.0).fract() < 0.04 { println!("BOT PASSO {} pos=({:.2},{:.2}) casa_d={:?} alvo=({:.2},{:.2}) alt={}", t.def.id, pos.x, pos.y, ncell(pos).map(|c| d[c]), goal.x, goal.y, t.alt); }
@@ -1019,7 +1028,7 @@ pub fn scenario_system(
         let mut np = pos + dir * (speed * dt).min(len);
         // não anda por dentro de outro invasor
         for (j, q) in &others { if *j != i { let w = np - *q; let l = w.length(); if l < 0.5 && l > 0.001 { np += w / l * (0.5 - l) * 0.5; } } }
-        level.resolve_circle(&mut np, 0.28);
+        level.resolve_circle(&mut np, THREAT_R);
         // porta fechada no caminho: abre
         for dr in level.doors.iter_mut() { if !dr.opening && Vec2::new(dr.cx, dr.cz).distance(np) < 1.3 { dr.opening = true; sfx.write(Sfx::Door(Vec3::new(dr.cx, 1.0, dr.cz))); } }
         let mv = np - pos;
@@ -1105,7 +1114,7 @@ pub fn grenade_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, l
                 sfx.write(Sfx::Hurt);
                 game.wounds += if d < NADE_KILL { MAX_WOUNDS } else { 1 };
                 if game.wounds >= MAX_WOUNDS && !nodeath {
-                    game.down_t = DOWN_SECS; game.toast = None;
+                    game.down_t = DOWN_SECS; game.toast = None; game.foe_kill = false;
                     game.down_why = "A grenade went off beside you. When one lands, leave the spot at once and put a wall between you and it.".into();
                 } else { game.toast("Hit by a grenade (simulated). You stayed in one place too long: when one lands, get a wall between you and it.", 2, 6.0); }
             }
@@ -1246,7 +1255,7 @@ pub fn rank_system(mut game: ResMut<Game>, targets: Res<Targets>, mut rk: ResMut
 pub fn card(game: &Game) -> (&'static str, String, &'static str, &'static [&'static str]) {
     match game.scn {
         Some(i) => { let s = &SCENARIOS[i]; (s.kicker, s.name.to_uppercase(), s.lead, s.points) }
-        None => { let l = &LESSONS[game.lesson.min(5)]; (l.kicker, l.title.to_uppercase(), l.lead, l.points) }
+        None => { let l = &LESSONS[game.lesson.min(5)]; (l.kicker, if l.mistake.is_empty() { l.title } else { l.mistake }.to_uppercase(), l.lead, l.points) }
     }
 }
 

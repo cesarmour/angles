@@ -3,15 +3,20 @@ phase2	Phase two. Doors. You work one room at a time, and you open the doorway f
 phase3	Phase three. Hallways. Doors on both sides. Every opening you walk past without slicing is an angle at your back.
 phase4	Phase four. Opposition. From here on, the targets think. They slice your doorway the way you slice theirs.
 phase5	Final exam. Everything at once. They learn the door that hurt them, and the walls will not stop a round. Shoot, then move.
-stage1	Fundamentals. A doorway is one hundred and eighty degrees of angle. You cannot see all of it from one spot. So you walk an arc outside it, and you open it one slice at a time.
-stage2	Threshold. A small room is cleared from the door. Walk the arc from one jamb to the other. Step in only for the corner you could not see.
-stage3	Clean shot. The threat is behind a hostage. Do not hurry the trigger. Step sideways until the angle gives you the threat and nothing else.
-stage4	Opposing doors. Slice the left, then the right, then move. Never stand between two openings you have not looked into.
-stage5	Locked door. Work it from the side of the frame. Stay off the line of the doorway. That line is where the rounds come out.
-stage6	Rear security. A cleared room does not stay cleared. Check behind you every time you stop.
-stage7	Second look. Hands tell you more than faces. Identify at the moment of the shot, not before.
-stage8	Hostage rescue. You are on a clock. Open only the angles that are on your way, and accept the ones you leave.
-stage9	Home defense. Hold nothing for long. Take your shots, change position, and never fire twice from the same spot.
+stage1	Fundamentals. Most people clear a corner the wrong way: they walk up to it and look, and whoever is waiting sees them first. Here you learn to open every angle one slice at a time.
+stage2	Threshold. The mistake is stepping into a small room to look around. Clear it from the door: walk the arc from one jamb to the other, and step in only for the corner you could not see.
+stage3	Clean shot. The mistake is hurrying the trigger with a hostage in the way. Step sideways until the angle gives you the threat and nothing else.
+stage4	Opposing doors. The mistake is walking past an opening you have not looked into. That angle is now at your back. Slice the left, then the right, then move.
+stage5	Locked door. The mistake is working it from the front. That line is where the rounds come out. Work it from the side of the frame.
+stage6	Rear security. The mistake is trusting a room because you cleared it once. They move. Check behind you every time you stop.
+stage7	Second look. The mistake is deciding early. Some armed people give up, and some raised hands are waiting. Identify at the moment of the shot.
+stage8	Hostage rescue. The mistake is clearing everything while the clock runs. Open only the angles that are on your way, and accept the ones you leave.
+stage9	Home defense. The mistake is holding one good spot. They learn the door that hurt them, and the walls do not stop a round. Shoot, move, repeat.
+lesson1	Don't hug the corner. Walk tight around it and your muzzle crosses the edge before your eyes do. Back off the wall, and slice it one step at a time.
+lesson2	Don't stop in the doorway. Everyone inside is already aiming at it. Open the room from outside, then go through without stopping, and check the near corners.
+lesson3	Don't shoot what you have not identified. Armed is a threat. Hands up is a hostage. Slice the door, look at the hands, then fire.
+lesson4	Don't stand in front of a closed door. Rounds come through it. Open it from the side, by the jamb, and slice both ways before you step out.
+lesson5	Don't walk past what you cannot see behind. Tall furniture is a corner. Slice it in an arc, from a distance.
 step_left	Step left.
 step_right	Step right.
 keep_slicing	Keep slicing. There is still angle on that door.

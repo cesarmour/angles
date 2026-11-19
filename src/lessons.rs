@@ -6,32 +6,33 @@ use crate::tactical::Tac;
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
-pub struct Lesson { pub title: &'static str, pub kicker: &'static str, pub lead: &'static str, pub points: &'static [&'static str], pub objs: &'static [&'static str], pub corners: Option<&'static str> }
+/// `mistake` é o erro que a lição corrige (vira o título do cartão) e `fix`, a correção em poucas palavras.
+pub struct Lesson { pub mistake: &'static str, pub fix: &'static str, pub title: &'static str, pub kicker: &'static str, pub lead: &'static str, pub points: &'static [&'static str], pub objs: &'static [&'static str], pub corners: Option<&'static str> }
 
 pub const LESSONS: [Lesson; 6] = [
-    Lesson { title: "Fundamentals", kicker: "Lesson 1 of 6 · Staging area", corners: None,
+    Lesson { mistake: "", fix: "", title: "Fundamentals", kicker: "Lesson 1 of 6 · Staging area", corners: None,
         lead: "You are in a shoot house: a training building with cardboard targets. Nobody wins here by shooting fast. You win by seeing first, exposing little and firing only at what you have identified.",
         points: &["Targets are IPSC-style cardboard. They drop with two hits, or a single hit in the A zone (the centre rectangle and the head box).", "Q and E lean your torso. C toggles crouch; Ctrl crouches while held. To aim, hold Space or the right button; Z locks and unlocks the aim (handy on a trackpad).", "The tactical view (G) shows your sector: what eyes and gun cover right now (70° at the ready, 32° through the sights; aiming narrows it). The human eye notices movement across almost 200°, but only identifies a target in that central band.", "Every door or corner has a 180° fan: everything on the other side of the opening, wall to wall. The panel shows two numbers: degrees in view right now (changes as you step, lean, turn or aim) and degrees already cleared. The 180° belong to the door, not to your vision.", "The top-down view (V) shows the same scene from above, with only what you have already seen."],
         objs: &["Look around with the mouse", "Walk with W A S D", "Aim: hold Space or the right button (Z locks the aim)", "Lean with Q or E", "Crouch with C or Ctrl", "Drop the practice target on the back wall", "Reload with R", "Turn on the tactical view with G", "Go to the top-down view with V and back", "Switch the flashlight off or on with L"] },
-    Lesson { title: "Slicing the pie", kicker: "Lesson 2 of 6 · Corridor corner", corners: None,
-        lead: "Every corner hides an angle. Don't turn it in one go: move away from it and go around in an arc, one side step at a time. Each step opens a few more degrees of the corner's 180° fan, with the gun already pointed at the new slice. With the tactical view on (G), the bar at the top of the screen counts those degrees for you.",
-        points: &["Stay far from the corner: the farther from the wall, the less body you show for each degree you see.", "Eyes and muzzle together: whatever appears in the new slice appears in your sights.", "Lean toward the open side, away from the wall (the panel tells you which key, Q or E, and how many degrees it adds): you see the next slice exposing only head and gun. Leaning into the wall opens nothing.", "Score: follow the ideal route (T switches it: always, tip, off) and drop each threat at the smallest slice angle with the least body showing. The ODDS box shows it live. O hides the lesson box.", "Don't flag your muzzle: if you touch the wall, the gun pulls back."],
+    Lesson { mistake: "Don't hug the corner", fix: "Back off the wall and slice the pie", title: "Slicing the pie", kicker: "Lesson 2 of 6 · Slicing the pie", corners: None,
+        lead: "Walk tight around a corner and your shoulder and muzzle cross the edge before your eyes do. Whoever is waiting sees you first.\n\nThe fix: back off the wall and go around in an arc, one side step at a time. Each step opens a few more degrees, with the gun already on the new slice.",
+        points: &["Distance: the farther from the corner, the less body you show for each degree you open.", "Eyes and muzzle together: what appears in the new slice appears in your sights. Leaning (Q or E) toward the open side shows only head and gun.", "The bar at the top of the screen counts the degrees you have opened. Score: follow the route (T switches it) and drop each threat at the smallest angle."],
         objs: &["Advance to near the corner", "At the corner, lean: under 15 cm of body exposed", "Go around in an arc: see the threat before you are side-on to it", "Neutralize the corridor threat", "Corridor 2 clear"] },
-    Lesson { title: "Fatal funnel and near corners", kicker: "Lesson 3 of 6 · Room A, centre door", corners: Some("A"),
-        lead: "The door is the one place everyone knows you will come through. Whoever is inside is already aiming at it. That is the fatal funnel: clear what you can from outside, then go through without stopping.",
-        points: &["From outside: slice the door from one jamb to the other. Watch the bar at the top: green is what you have opened, red is what is still closed, and the arrows say which way to step. What is left at the end are the near corners.", "On entry: don't stop in the doorway. Go in and get off the door line.", "Near corners first: they are the only part of the room you haven't seen yet.", "The barricade in the middle of the room covers anyone crouching behind it, on either side."],
+    Lesson { mistake: "Don't stop in the doorway", fix: "Open the room from outside, then go through", title: "Fatal funnel and near corners", kicker: "Lesson 3 of 6 · Fatal funnel and near corners", corners: Some("A"),
+        lead: "The doorway is the one place everyone inside is already aiming at. Stand in it and you are the only target in the room.\n\nThe fix: open the room from outside, from one jamb to the other, then cross without stopping.",
+        points: &["Watch the bar at the top: green is what you have opened, red is still closed, and the arrows say which way to step.", "What is left at the end are the two near corners. Go in, get off the door line and check them first.", "The barricade in the middle covers anyone crouching behind it, on either side."],
         objs: &["From outside, slice the door from both sides (110° of 180°)", "Cross the doorway without stopping (1.5 s max)", "Check both near corners", "Neutralize the 2 threats", "Room A clear"] },
-    Lesson { title: "Positive identification", kicker: "Lesson 4 of 6 · Room B, corner door", corners: Some("B"),
-        lead: "Not everyone in the house is a threat. The armed figure is a threat. The unarmed person with hands up is a hostage: a no-shoot. Before every shot, confirm what it is and what is behind it.",
-        points: &["Hands up and no weapon: don't shoot. Hitting a hostage is the most serious error on the course.", "Armed: threat. Two shots in the A zone.", "Corner door: the whole room lies to one side. The near corner is the one that runs along the door wall.", "The flashlight (L) helps you see hands and weapons in dark corners."],
+    Lesson { mistake: "Don't shoot what you haven't identified", fix: "Slice, identify, then shoot", title: "Positive identification", kicker: "Lesson 4 of 6 · Positive identification", corners: Some("B"),
+        lead: "Not everyone in the house is a threat, and hitting a hostage is the most serious error on the course.\n\nThe fix: armed is a threat; hands up and unarmed is a no-shoot. Before every shot, confirm what it is and what is behind it.",
+        points: &["Armed: threat. Two shots in the A zone.", "Corner door: the whole room lies to one side, so slice it before you step in. The near corner runs along the door wall.", "The flashlight (L) helps you see hands and weapons in dark corners."],
         objs: &["Slice the door before entering (100° of 180°)", "Neutralize the 2 threats (armed)", "Don't shoot a hostage (hands up, unarmed)", "Room B clear"] },
-    Lesson { title: "Closed door and T-junction", kicker: "Lesson 5 of 6 · Corridor 3", corners: None,
-        lead: "A closed door tells you nothing about what is behind it. Don't stand in front of it: open it from the side, off the line of fire of whoever is on the other side.",
-        points: &["Stand by the jamb and open with F.", "Behind this door the corridor runs both ways: two corners at once.", "Slice one side from inside the room, then the other.", "When you step out you turn your back on one side. Only step out when both are clear."],
+    Lesson { mistake: "Don't stand in front of a closed door", fix: "Open it from the side, by the jamb", title: "Closed door and T-junction", kicker: "Lesson 5 of 6 · Closed door and T-junction", corners: None,
+        lead: "A closed door tells you nothing about what is behind it, and rounds go through it. Stand in front and you are on the line of everyone on the other side.\n\nThe fix: stand by the jamb and open it from the side (F).",
+        points: &["Behind this door the corridor runs both ways: two corners at once.", "Slice one side from inside the room, then the other.", "Stepping out turns your back on one side. Only step out when both are clear."],
         objs: &["Open the door from the side, off the doorway (F)", "Slice both sides of the corridor without leaving the room (70° of 180°)", "Neutralize the 2 threats"] },
-    Lesson { title: "Dead space", kicker: "Lesson 6 of 6 · Room C", corners: Some("C"),
-        lead: "Tall furniture creates areas you can't see from the door or from the middle of the room. Until you have moved far enough to see behind it, the room is not clear.",
-        points: &["Treat the furniture like a corner: slice it in an arc, from a distance.", "Don't walk right past the furniture.", "Hostage (hands up) and threat (armed) can be side by side. Identify each one."],
+    Lesson { mistake: "Don't walk past what you can't see behind", fix: "Treat tall furniture like a corner", title: "Dead space", kicker: "Lesson 6 of 6 · Dead space", corners: Some("C"),
+        lead: "Tall furniture hides areas you cannot see from the door or from the middle of the room. Walk past it and you hand your back to whoever is behind.\n\nThe fix: slice it in an arc, from a distance. Until you can see behind it, the room is not clear.",
+        points: &["Treat the furniture like a corner: in an arc, from a distance, never right past it.", "Hostage (hands up) and threat (armed) can be side by side. Identify each one."],
         objs: &["Open the door from the side, off the doorway (F)", "Neutralize the 2 threats", "Don't hit the hostage (hands up, unarmed)", "Clear the dead space behind the cabinet"] },
 ];
 
@@ -231,6 +232,8 @@ pub enum Step {
     Shoot(&'static str), Open(usize), Lean(f32), Say(&'static str), Scan, Look(f32, f32),
     /// Abre a porta e segue direto para o próximo passo (sem esperar parado na frente dela).
     OpenNow(usize),
+    /// Fica parado por tantos quadros (só na demonstração).
+    Pause(u32),
 }
 
 pub fn ideal(l: usize) -> &'static [Step] {
@@ -280,6 +283,50 @@ pub fn ideal(l: usize) -> &'static [Step] {
             Say("Slice the door from outside. Then treat the cabinet like a corner: from a distance, in an arc, never right past it."),
             Go(18.3, 4.5, 20.5, 1.0), Go(19.55, 5.5, 19.55, 0.5), Go(20.7, 4.5, 16.0, 2.0),
             Go(19.55, 4.6, 20.4, 0.7), Shoot("T9"), Go(19.55, 3.2, 16.0, 3.2), Go(18.6, 3.2, 15.8, 1.0), Go(16.9, 3.1, 16.2, 0.9), Shoot("T8"), Scan, Mv(16.0, 1.5), Scan,
+        ],
+        _ => &[],
+    }
+}
+
+/// O jeito errado de cada lição: a demonstração mostra primeiro este trajeto (o operador não atira e leva o tiro) e só
+/// depois o traçado ideal. É o erro que o título do cartão nomeia.
+pub fn wrong(l: usize) -> &'static [Step] {
+    use Step::*;
+    match l {
+        1 => &[
+            Start(3.0, 14.9, 5.0, 13.0),
+            Say("The mistake: walking tight along the corner wall."),
+            Mv(5.0, 13.0), Go(5.55, 9.0, 5.55, 5.0), Go(5.55, 5.55, 5.55, 4.5),
+            Say("Shoulder and muzzle crossed the edge before the eyes did. Whoever waits down the corridor saw him first."),
+            Go(7.4, 5.2, 13.0, 5.0), Pause(235),
+        ],
+        2 => &[
+            Start(7.0, 5.0, 13.0, 5.0),
+            Say("The mistake: walking up to the door and stopping in it."),
+            Go(10.0, 5.0, 13.0, 5.0), Go(10.0, 6.05, 10.0, 9.0),
+            Say("Framed in the doorway, he is the one thing everyone inside was already aiming at. The near corners are still unseen."),
+            Pause(210),
+        ],
+        3 => &[
+            Start(10.5, 8.0, 14.0, 10.9),
+            Say("The mistake: straight through a corner door."),
+            Go(12.6, 10.95, 16.0, 10.95), Go(14.9, 10.95, 20.5, 10.95),
+            Say("The whole room was to one side and he saw none of it before stepping in. The threat along the door wall has his flank."),
+            Pause(210),
+        ],
+        4 => &[
+            Start(19.5, 10.0, 19.5, 7.6),
+            Say("The mistake: opening a closed door from the front."),
+            Mv(19.5, 7.6), Mv(17.55, 7.6), Go(17.55, 6.6, 17.55, 5.0), OpenNow(0), Pause(40),
+            Say("He stands on the line of whoever is behind it, and the corridor runs both ways: two angles, and he can only face one."),
+            Go(17.55, 5.4, 14.6, 5.2), Pause(210),
+        ],
+        5 => &[
+            Start(17.55, 5.45, 17.55, 4.6), Open(0),
+            Say("The mistake: walking in, right past the tall cabinet."),
+            Go(19.55, 4.6, 19.55, 2.0), Open(1), Go(19.55, 3.0, 19.55, 0.5), Go(18.6, 2.7, 16.0, 2.7),
+            Say("Whoever stands behind the cabinet or in the far corner now has his back. The room was never clear."),
+            Pause(210),
         ],
         _ => &[],
     }
@@ -618,15 +665,28 @@ pub fn checkpoint_system(mut game: ResMut<Game>, mut p: ResMut<Player>, mut tac:
 /// Modo demonstração: o operador percorre sozinho o traçado ideal da lição, visto de cima e com a visão tática ligada.
 #[allow(clippy::too_many_arguments)]
 pub fn demo_system(time: Res<Time>, mut game: ResMut<Game>, mut p: ResMut<Player>, mut tac: ResMut<Tac>, mut level: ResMut<Level>, mut targets: ResMut<Targets>,
-    mut bot: ResMut<Bot>, mut snap: ResMut<DemoSnap>, mut commands: Commands) {
+    mut bot: ResMut<Bot>, mut snap: ResMut<DemoSnap>, mut teach: ResMut<Teach>, mut commands: Commands) {
+    // liga a demonstração: o operador anda sozinho, visto de cima, com o chão pintado pelo que ele já viu
+    fn arm(game: &mut Game, p: &mut Player, bot: &mut Bot, phase: u8) {
+        p.vel = Vec2::ZERO; p.lean = 0.0; p.crouching = false; p.mag = p.def().mag; p.reloading = false; p.switch_to = None; p.pitch = -0.04;
+        game.mode = Mode::Play; game.demo = true; game.demo_phase = phase; game.demo_end = false; game.demo_idle = 0.0; game.view = View::Bird; game.tac = true; game.toast = None; game.coach = None; game.guide_i = 0; game.ui_dirty = true;
+        bot.demo_q = crate::bot::cmds_of(if phase == 1 { wrong(game.lesson) } else { ideal(game.lesson) }, true).into();
+        bot.n = 0; bot.demo_frames = 0; bot.hold_ads = false; bot.hold_lean = 0.0; bot.hold_crouch = false;
+    }
+    // a primeira vez que o cartão de cada lição aparece, a demonstração roda sozinha antes dele (ENTER pula)
+    if !game.demo && !game.demo_req && game.mode == Mode::Card && !game.ckpt_req && !game.free && !game.mission2 && game.scn.is_none() && game.lesson >= 1
+        && game.ready_t <= 0.0 && game.quote_t <= 0.0 && !ideal(game.lesson).is_empty() && teach.demo_seen & (1 << game.lesson) == 0 && !bot.active && std::env::var("CQB_SCRIPT").is_err() {
+        teach.demo_seen |= 1 << game.lesson;
+        game.demo_req = true;
+    }
     if game.demo_req {
         game.demo_req = false;
         if ideal(game.lesson).is_empty() || game.demo { return; }
+        teach.demo_seen |= 1 << game.lesson;
         snap.0 = Some(Box::new(take_snap(&game, &p, &tac, &level, &targets)));
-        p.vel = Vec2::ZERO; p.lean = 0.0; p.crouching = false; p.mag = p.def().mag; p.reloading = false; p.switch_to = None; p.pitch = -0.04;
-        game.mode = Mode::Play; game.demo = true; game.demo_end = false; game.demo_idle = 0.0; game.view = View::Bird; game.tac = true; game.toast = None; game.coach = None; game.guide_i = 0; game.ui_dirty = true;
-        bot.demo_q = crate::bot::steps_cmds(game.lesson, true).into();
-        bot.n = 0; bot.demo_frames = 0; bot.hold_ads = false; bot.hold_lean = 0.0; bot.hold_crouch = false;
+        // no teste automático só o traçado ideal; para o jogador, primeiro o erro e depois a correção
+        let phase = if (bot.active && std::env::var("CQB_TEACH").is_err()) || wrong(game.lesson).is_empty() { 2 } else { 1 };
+        arm(&mut game, &mut p, &mut bot, phase);
         // no teste automático a demonstração roda num jogo recém-aberto: deixa a casa como estaria ao chegar nesta lição
         if bot.active {
             tac.corner_zone = LESSONS[game.lesson].corners;
@@ -636,9 +696,18 @@ pub fn demo_system(time: Res<Time>, mut game: ResMut<Game>, mut p: ResMut<Player
     }
     if !game.demo { return; }
     if bot.demo_q.is_empty() { game.demo_idle += time.delta_secs().min(0.05); }
+    // acabou o jeito errado: a casa volta ao começo da lição e o operador refaz o trecho do jeito certo
+    if game.demo_phase == 1 && !game.demo_end && game.mode == Mode::Play && bot.demo_q.is_empty() && game.demo_idle > 0.8 {
+        if bot.active { println!("BOT demo errado L{}: atingido={} pos=({:.2},{:.2})", game.lesson, game.stats.hits_taken, p.pos.x, p.pos.y); }
+        // o teste pode pedir só o trecho errado (CQB_TEACH=wrong)
+        if std::env::var("CQB_TEACH").map_or(false, |v| v == "wrong") { game.demo_end = true; return; }
+        if let Some(s) = snap.0.clone() { put_snap(*s, &mut game, &mut p, &mut tac, &mut level, &mut targets, &mut commands); }
+        arm(&mut game, &mut p, &mut bot, 2);
+        return;
+    }
     if !(game.demo_end || game.demo_idle > 2.5 || game.mode != Mode::Play) { return; }
     if bot.active { println!("BOT demo L{}: obj={:?} atingido={} fatias={:?}", game.lesson, game.obj, game.stats.hits_taken, (0..5).map(|i| tac.pie_deg(i) as i32).collect::<Vec<_>>()); }
     if let Some(s) = snap.0.take() { put_snap(*s, &mut game, &mut p, &mut tac, &mut level, &mut targets, &mut commands); }
-    game.mode = Mode::Card; game.demo = false; game.demo_req = false; game.demo_end = false; game.ui_dirty = true;
+    game.mode = Mode::Card; game.demo = false; game.demo_phase = 0; game.demo_req = false; game.demo_end = false; game.ui_dirty = true;
     bot.demo_q.clear(); bot.n = 0; bot.hold_ads = false; bot.hold_lean = 0.0; bot.hold_crouch = false;
 }

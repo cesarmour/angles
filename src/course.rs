@@ -18,15 +18,15 @@ pub const PHASES: [(&str, &str); 5] = [
     ("FINAL EXAM", "everything at once, against a team that slices doorways and learns from its losses"),
 ];
 pub const STAGES: [Stage; 9] = [
-    Stage { phase: 0, title: "Fundamentals", teaches: "Six lessons against cardboard: move, lean, slice a corner in an arc, cross a doorway, identify before you fire.", what: What::Tutorial, diff: 0, weapon: 0 },
-    Stage { phase: 1, title: "Threshold", teaches: "Small rooms are cleared from the door. Walk the arc outside; step in only for the corner you could not see.", what: What::Scn(2), diff: 0, weapon: 0 },
-    Stage { phase: 1, title: "Clean shot", teaches: "A threat stands behind a hostage. Step sideways until the angle gives you a shot that touches only the threat.", what: What::Scn(0), diff: 0, weapon: 0 },
-    Stage { phase: 2, title: "Opposing doors", teaches: "Doors on both sides and a four-way crossing. Every opening you pass without slicing is an angle at your back.", what: What::Scn(1), diff: 0, weapon: 1 },
-    Stage { phase: 2, title: "Locked door", teaches: "Breaching is slow and loud. Work it from the side of the frame, off the line of the doorway.", what: What::Scn(4), diff: 0, weapon: 1 },
-    Stage { phase: 3, title: "Rear security", teaches: "Threats leave their rooms and come out of areas you already cleared. A cleared angle does not stay cleared.", what: What::Scn(3), diff: 1, weapon: 1 },
-    Stage { phase: 3, title: "Second look", teaches: "Some armed people give up, and some with their hands up are waiting. Identify at the moment of the shot.", what: What::Scn(5), diff: 1, weapon: 1 },
-    Stage { phase: 3, title: "Hostage rescue", teaches: "One hostage, one captor and a clock. Open only the angles that are on your way.", what: What::Scn(6), diff: 1, weapon: 1 },
-    Stage { phase: 4, title: "Home defense", teaches: "Five waves that slice your doorways, fire through the OSB and learn the door that hurt them. Shoot, move, repeat.", what: What::Scn(7), diff: 1, weapon: 1 },
+    Stage { phase: 0, title: "Fundamentals", teaches: "Six lessons against cardboard. Each one names a mistake, shows it from above, then has you do it the right way.", what: What::Tutorial, diff: 0, weapon: 0 },
+    Stage { phase: 1, title: "Threshold", teaches: "The mistake: stepping into a small room to look around. Clear it from the door; step in only for the corner you could not see.", what: What::Scn(2), diff: 0, weapon: 0 },
+    Stage { phase: 1, title: "Clean shot", teaches: "The mistake: hurrying the trigger with a hostage in the way. Step sideways until the angle gives you only the threat.", what: What::Scn(0), diff: 0, weapon: 0 },
+    Stage { phase: 2, title: "Opposing doors", teaches: "The mistake: walking past an opening you have not sliced. Every one of them is an angle at your back.", what: What::Scn(1), diff: 0, weapon: 1 },
+    Stage { phase: 2, title: "Locked door", teaches: "The mistake: working a locked door from the front. Breaching is slow and loud; do it from the side of the frame.", what: What::Scn(4), diff: 0, weapon: 1 },
+    Stage { phase: 3, title: "Rear security", teaches: "The mistake: trusting a room because you cleared it once. Threats come out of areas you already cleared.", what: What::Scn(3), diff: 1, weapon: 1 },
+    Stage { phase: 3, title: "Second look", teaches: "The mistake: deciding early. Some armed people give up, and some raised hands are waiting. Identify at the moment of the shot.", what: What::Scn(5), diff: 1, weapon: 1 },
+    Stage { phase: 3, title: "Hostage rescue", teaches: "The mistake: clearing everything while the clock runs. One hostage, one captor: open only the angles that are on your way.", what: What::Scn(6), diff: 1, weapon: 1 },
+    Stage { phase: 4, title: "Home defense", teaches: "The mistake: holding one good spot. Five waves slice your doorways, fire through the OSB and learn the door that hurt them.", what: What::Scn(7), diff: 1, weapon: 1 },
 ];
 
 /// Progresso do aluno: quantas etapas já venceu (a seguinte fica destravada) e a etapa em curso.
@@ -67,10 +67,36 @@ pub fn course_system(game: Res<Game>, targets: Res<Targets>, mut pr: ResMut<Prog
     if passed && i == pr.done { pr.done = (i + 1).min(STAGES.len()); pr.save(); }
 }
 
+/* ---------- perguntas rápidas entre as etapas ---------- */
+
+/// Uma pergunta: o enunciado, três respostas, qual é a certa e o porquê. Aparece antes do cartão de cada etapa depois
+/// da primeira, sempre sobre o que a etapa anterior ensinou; o desenho correspondente está em `art::quiz_svg`.
+pub struct Quiz { pub q: &'static str, pub opts: [&'static str; 3], pub right: usize, pub why: &'static str }
+pub const QUIZ: [Quiz; 8] = [
+    Quiz { q: "Where do you start slicing this corner?", opts: ["Tight against the corner wall", "In the middle of the corridor", "On the far wall, away from the corner"], right: 2,
+        why: "The farther you are from the corner, the less body you show for each degree you open. Tight against it, your muzzle crosses the edge before your eyes do." },
+    Quiz { q: "You are outside a room. What comes first?", opts: ["Step into the doorway and look around", "Walk the arc outside, from one jamb to the other", "Run in and take the far corner"], right: 1,
+        why: "From outside you open most of the room without ever being framed in the door. The doorway is where everyone inside is already aiming." },
+    Quiz { q: "You sliced the door from outside. What have you still not seen?", opts: ["The far wall", "The middle of the room", "The two corners beside the door"], right: 2,
+        why: "The near corners run along the door wall, so no position outside shows them. They are the first thing you check when you go in." },
+    Quiz { q: "Two doors face each other. You sliced the left one. What now?", opts: ["Carry on down the hallway", "Slice the right one before moving on", "Enter the room on the left"], right: 1,
+        why: "Every opening you pass without slicing is an angle at your back. Left, then right, then move." },
+    Quiz { q: "Where do you stand to open a closed door?", opts: ["Right in front of it", "By the jamb, off the doorway", "A few steps back, in front of it"], right: 1,
+        why: "Rounds come out along the line of the doorway, and a door does not stop them. From the jamb you are off that line." },
+    Quiz { q: "You cleared this room a minute ago and pass it again. How do you treat it?", opts: ["It is clear: walk past", "As an open angle: look into it again", "Run past it as fast as you can"], right: 1,
+        why: "Threats move. A cleared angle does not stay cleared, least of all when it ends up behind you." },
+    Quiz { q: "A figure appears with hands half raised. When do you decide?", opts: ["As soon as you see a silhouette", "At the moment of the shot, looking at the hands", "Never fire at raised hands"], right: 1,
+        why: "Some armed people give up, and some raised hands are waiting. Hands tell you what the figure is, and only at the moment you would fire." },
+    Quiz { q: "The hostage is three rooms away and the clock is running. What do you clear?", opts: ["Every room, in order", "Only the angles that are on your way", "Nothing: sprint to the hostage"], right: 1,
+        why: "Clearing everything loses the clock, and sprinting hands your back to every door. Open what is on your way and accept the angles you leave." },
+];
+
 /* ---------- frases da tela de fim de partida ---------- */
 
 /// Quanto tempo a frase fica na tela.
 pub const QUOTE_SECS: f32 = 3.6;
+/// Quanto tempo dura o retrato "o que o adversário viu".
+pub const FOE_SECS: f32 = 5.0;
 /// Frases de comandantes e autores militares (texto, autor). As marcadas "attributed" são de atribuição tradicional,
 /// sem fonte primária segura.
 pub const QUOTES: [(&str, &str); 16] = [
@@ -100,7 +126,7 @@ const SCRIPT: &str = include_str!("../assets/voice/script.tsv");
 fn line(id: &str) -> Option<&'static str> { SCRIPT.lines().find_map(|l| l.split_once('\t').filter(|(k, _)| *k == id).map(|(_, t)| t)) }
 
 #[derive(Default)]
-pub struct VoiceState { deb_said: bool, hit_cd: f32, quotes: usize, until: f32, clock: f32, last_mode: Option<Mode>, hits: u32, civ: u32, nade: bool, stall: f32, deg: f32, door: Option<usize>, said_open: Option<usize>, hint_cd: f32, passed: bool, done_seen: usize }
+pub struct VoiceState { foe_wait: bool, card_t: f32, card_key: Option<(usize, usize)>, deb_said: bool, hit_cd: f32, quotes: usize, until: f32, clock: f32, last_mode: Option<Mode>, hits: u32, civ: u32, nade: bool, stall: f32, deg: f32, door: Option<usize>, said_open: Option<usize>, hint_cd: f32, passed: bool, done_seen: usize }
 
 /// Fala do instrutor nos momentos que ensinam: a instrução de cada etapa no cartão, para que lado andar quando o aluno
 /// para com a porta pela metade, a porta aberta, tiro levado, refém atingido, granada, e o resultado da etapa.
@@ -121,13 +147,17 @@ pub fn voice_system(time: Res<Time<Real>>, mut game: ResMut<Game>, pr: Res<Progr
     // fim da partida: uma tela rápida com uma frase histórica antes da avaliação (qualquer tecla pula)
     // a mesma tela aparece ao abrir o jogo e quando o jogador cai (não só quando a casa é limpa)
     let over = matches!(mode, Mode::Debrief | Mode::Down) && !game.demo && prev != Some(Mode::Down) && prev != Some(Mode::Ranking);
-    if entered && (over || prev.is_none()) && std::env::var("CQB_SCRIPT").is_err() {
+    if entered && (over || prev.is_none()) && teach_on() {
         st.quotes = st.quotes.wrapping_add(1);
         let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as usize).unwrap_or(0);
         game.quote_i = (st.quotes + secs) % QUOTES.len();
         game.quote_t = QUOTE_SECS; game.ui_dirty = true;
     }
     if entered && game.quote_t < QUOTE_SECS { game.quote_t = 0.0; game.ui_dirty = true; }
+    // depois da frase, quem levou tiro vê por alguns segundos o que o adversário via na hora
+    if entered { game.foe_t = 0.0; st.foe_wait = over && mode == Mode::Debrief && game.foe.is_some() && teach_on(); }
+    if st.foe_wait && game.quote_t <= 0.0 { st.foe_wait = false; game.foe_t = FOE_SECS; game.ui_dirty = true; }
+    else if game.foe_t > 0.0 { game.foe_t = (game.foe_t - dt).max(0.0); if game.foe_t <= 0.0 { game.ui_dirty = true; } }
     if game.quote_t > 0.0 { game.quote_t = (game.quote_t - dt).max(0.0); if game.quote_t <= 0.0 { game.ui_dirty = true; } }
     if mode != Mode::Debrief { st.deb_said = false; }
     // contagem antes de começar: um bipe por segundo e a partida abre no zero
@@ -139,10 +169,20 @@ pub fn voice_system(time: Res<Time<Real>>, mut game: ResMut<Game>, pr: Res<Progr
         else if game.ready_t <= 0.0 { game.mode = Mode::Play; sfx.write(Sfx::Good); }
         else if game.ready_t.ceil() < before { sfx.write(Sfx::Ui); }
     }
+    if mode == Mode::Menu { st.card_key = None; }
     if let Some(i) = pr.current {
-        if entered && mode == Mode::Card { say = Some(format!("stage{}", i + 1)); st.hits = 0; st.civ = 0; st.said_open = None; }
+        if entered && mode == Mode::Card { st.hits = 0; st.civ = 0; st.said_open = None; }
+        // a fala do cartão sai uma vez por lição, e só depois de o cartão ficar um instante na tela (a demonstração
+        // automática troca o cartão pelo jogo logo no primeiro quadro: aí a fala espera a demonstração acabar)
+        st.card_t = if mode == Mode::Card && !game.demo && game.quote_t <= 0.0 && game.quiz.is_none() { st.card_t + dt } else { 0.0 };
+        let tutorial = matches!(STAGES[i].what, What::Tutorial);
+        let key = (i, if tutorial { game.lesson } else { 0 });
+        if st.card_t > 0.35 && st.card_key != Some(key) {
+            st.card_key = Some(key);
+            say = Some(if tutorial && game.lesson >= 1 { format!("lesson{}", game.lesson.min(5)) } else { format!("stage{}", i + 1) });
+        }
         // o resultado só é dito depois que a tela da frase sai
-        if mode == Mode::Debrief && game.quote_t <= 0.0 && !st.deb_said {
+        if mode == Mode::Debrief && game.quote_t <= 0.0 && game.foe_t <= 0.0 && !st.foe_wait && !st.deb_said {
             st.deb_said = true;
             let passed = pr.done > st.done_seen || pr.done > i;
             say = Some(if pr.done >= STAGES.len() && pr.done > st.done_seen { "course_done" } else if passed { "stage_passed" } else { "stage_failed" }.to_string());
@@ -170,7 +210,7 @@ pub fn voice_system(time: Res<Time<Real>>, mut game: ResMut<Game>, pr: Res<Progr
     let Some(id) = say else { return };
     // não atropela a fala anterior, a não ser para avisos que não podem esperar
     // (e não fala por cima de um personagem: espera a vez)
-    let urgent = matches!(id.as_str(), "grenade" | "hostage_hit") || id.starts_with("stage");
+    let urgent = matches!(id.as_str(), "grenade" | "hostage_hit") || id.starts_with("stage") || id.starts_with("lesson");
     if (st.clock < st.until || game.talk > 0.0) && !urgent { return; }
     let Some(text) = line(&id) else { return };
     let secs = 1.0 + text.len() as f32 * 0.062;

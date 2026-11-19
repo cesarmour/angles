@@ -96,6 +96,7 @@ fn main() {
         .init_resource::<state::Controls>()
         .init_resource::<bot::Bot>()
         .init_resource::<lessons::DemoSnap>()
+        .init_resource::<state::Teach>()
         .init_resource::<lessons::Checkpoint>()
         .init_resource::<scenario::Nav>()
         .insert_resource(scenario::Ranking::load())
@@ -127,6 +128,15 @@ fn main() {
         .add_systems(Update, net::net_system.before(ui::update_ui))
         .add_systems(Update, operator::hands_setup)
         .add_systems(Update, scenario::grenade_system.after(scenario::scenario_system).before(lessons::update_lessons))
-        .add_systems(PostUpdate, operator::hands_pose.after(bevy::app::Animation).before(bevy::transform::TransformSystem::TransformPropagate))
+        .add_systems(PostUpdate, (operator::hands_pose, operator::recoil_pose).after(bevy::app::Animation).before(bevy::transform::TransformSystem::TransformPropagate))
+        .add_systems(Update, slowmo)
+        .add_systems(Update, operator::hold_system.after(operator::threat_move_system).after(scenario::scenario_system).before(operator::fig_system).before(ui::update_ui))
         .run();
+}
+
+/// Câmera lenta enquanto o operador cai (o tempo do jogo desacelera; relógio real, som e interface seguem normais).
+fn slowmo(game: Res<state::Game>, mut time: ResMut<Time<Virtual>>, mut base: Local<Option<f32>>) {
+    let b = *base.get_or_insert_with(|| std::env::var("CQB_SPEED").ok().and_then(|s| s.parse().ok()).filter(|_| std::env::var("CQB_SCRIPT").is_ok()).unwrap_or(1.0));
+    let want = b * if game.mode == state::Mode::Play && game.down_t > 0.0 { state::SLOWMO } else { 1.0 };
+    if (time.relative_speed() - want).abs() > 1e-3 { time.set_relative_speed(want); }
 }

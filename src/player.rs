@@ -292,7 +292,7 @@ pub fn update_player(time: Res<Time>, c: Res<Controls>, mut p: ResMut<Player>, m
 }
 
 pub fn update_cameras(
-    time: Res<Time>, mut p: ResMut<Player>, game: Res<Game>, level: Res<Level>,
+    time: Res<Time>, mut p: ResMut<Player>, game: Res<Game>, level: Res<Level>, targets: Res<Targets>,
     mut cams: ParamSet<(
         Query<(&mut Transform, &mut Projection, &mut Camera), With<FpCam>>,
         Query<(&mut Transform, &mut Projection, &mut Camera), With<BirdCam>>,
@@ -306,7 +306,11 @@ pub fn update_cameras(
     let dt = time.delta_secs().min(0.05);
     let t = time.elapsed_secs();
     let replay = game.mode == Mode::Replay;
-    let bird = game.view == View::Bird || replay;
+    // "o que o adversário viu": a câmera vai para os olhos de quem acertou o operador e olha para onde ele estava
+    let foe = if game.foe_t > 0.0 { game.foe.clone() } else { None };
+    let bird = (game.view == View::Bird || replay) && foe.is_none();
+    // operador abatido: em vez de tombar a tela, a câmera sai do corpo e mostra a queda de fora, em câmera lenta
+    let death = foe.is_none() && !bird && game.dying();
     // no replay a câmera de cima enquadra o trajeto inteiro
     let (mut rc, mut rz) = (p.pos, game.bird_zoom);
     let mut rs: Option<(Vec2, f32)> = None;
@@ -341,7 +345,7 @@ pub fn update_cameras(
             pos.y = pos.y.clamp(0.45, WALL_H - 0.3);
             *tf = Transform::from_translation(pos).looking_at(p.eye + f3 * 12.0, Vec3::Y);
         }
-        let k_down = if third { 0.0 } else { 1.0 };
+        let k_down = if third || death { 0.0 } else { 1.0 };
         // operador abatido: a câmera desaba para o chão e tomba de lado
         let k = if game.mode == Mode::Down { if game.down_title.is_empty() { 1.0 } else { 0.0 } } else if game.down_t > 0.0 { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) } else { 0.0 };
         if k * k_down > 0.0 {
@@ -350,6 +354,54 @@ pub fn update_cameras(
             tf.rotation = rot * Quat::from_euler(EulerRot::YXZ, 0.0, 0.25 * e, 1.05 * e);
         }
         if let Projection::Perspective(pp) = proj.as_mut() { pp.fov = (68.0 + (50.0 - 68.0) * a + p.g_lower * 3.0f32).to_radians(); }
+        // câmera por cima do ombro de quem atirou: ele entra no canto do quadro, de costas, e o operador fica no meio.
+        // `s` é onde o atirador está, `o` onde o operador está e `drop` quanto o enquadramento já desceu com a queda.
+        let shoulder = |s: Vec2, o: Vec2, drop: f32| -> (Vec3, Vec3) {
+            let d = (o - s).normalize_or_zero();
+            let r = Vec2::new(-d.y, d.x);
+            let mut best = (Vec2::ZERO, -1.0f32);
+            // de preferência sobre o ombro direito dele; se houver parede colada, o esquerdo
+            for side in [1.0f32, -1.0] {
+                let off = -d * 1.2 + r * (0.72 * side);
+                let len = off.length();
+                let free = level.cast_ray(s.x, s.y, off.x / len, off.y / len, len + 0.3, 0.0);
+                let k = ((free - 0.3) / len).clamp(0.0, 1.0);
+                if k > best.1 { best = (s + off * k, k); }
+                if k >= 0.999 { break; }
+            }
+            // sem espaço atrás dele (atirador encostado na parede): a câmera vai para a frente do rosto, na altura dos
+            // olhos. Dali a visada até o operador está livre, já que foi de onde o tiro saiu.
+            if best.1 < 0.85 { let q = s + d * 0.5; return (Vec3::new(q.x, 1.6, q.y), Vec3::new(o.x, 1.05 - 0.55 * drop, o.y)); }
+            (Vec3::new(best.0.x, 1.72, best.0.y), Vec3::new(o.x, 1.05 - 0.55 * drop, o.y))
+        };
+        if let Some(fo) = &foe {
+            let (from, look) = shoulder(Vec2::new(fo.eye.x, fo.eye.z), fo.pos, 0.0);
+            *tf = Transform::from_translation(from).looking_at(look, Vec3::Y);
+            if let Projection::Perspective(pp) = proj.as_mut() { pp.fov = 0.86; }
+        }
+        if death {
+            let k = if game.mode == Mode::Down { 1.0 } else { (1.0 - game.down_t / DOWN_SECS).clamp(0.0, 1.0) };
+            let e = k * k * (3.0 - 2.0 * k);
+            let (from, look) = match &game.foe {
+                // quem atirou via o operador: a queda aparece por cima do ombro dele, onde ele está agora
+                Some(fo) if game.foe_kill => {
+                    let s = targets.list.get(fo.who).filter(|t| t.alive && !t.off).map_or(Vec2::new(fo.eye.x, fo.eye.z), |t| Vec2::new(t.def.x, t.def.z));
+                    shoulder(s, p.pos, e)
+                }
+                // tiro pela parede ou granada: câmera alta, atrás e ao lado, sem atravessar parede
+                _ => {
+                    let f = p.fwd(); let r = p.right();
+                    let flat = -f * 2.5 + r * 1.1;
+                    let len = flat.length().max(0.01);
+                    let d = level.cast_ray(p.pos.x, p.pos.y, flat.x / len, flat.y / len, len + 0.3, 0.0);
+                    let q = p.pos + flat * ((d - 0.3) / len).clamp(0.15, 1.0);
+                    (Vec3::new(q.x, (WALL_H - 0.35).min(2.2), q.y), Vec3::new(p.pos.x, 1.2 - 0.6 * e, p.pos.y))
+                }
+            };
+            *tf = Transform::from_translation(from).looking_at(look, Vec3::Y);
+            // aproxima devagar enquanto ele cai
+            if let Projection::Perspective(pp) = proj.as_mut() { pp.fov = 0.9 - 0.14 * e; }
+        }
         if cam.is_active == bird { cam.is_active = !bird; }
     }
     if let Ok((mut tf, mut proj, mut cam)) = cams.p1().single_mut() {
@@ -369,9 +421,11 @@ pub fn update_cameras(
     }
     if let Ok(mut tf) = cams.p3().single_mut() {
         let (bp, by) = rs.unwrap_or((p.pos, p.yaw));
+        // no retrato do tiro o corpo volta para onde estava (e como estava) quando foi acertado
+        let (bp, by, bl, bc) = match &foe { Some(fo) => (fo.pos, fo.yaw, fo.lean, if fo.crouch { 1.0 } else { 0.0 }), None => (bp, by, p.lean, p.crouch) };
         tf.translation = Vec3::new(bp.x, 0.0, bp.y);
-        tf.rotation = Quat::from_rotation_y(by) * Quat::from_rotation_z(-p.lean * 0.22);
-        tf.scale = Vec3::new(1.0, 1.0 - p.crouch * 0.34, 1.0);
+        tf.rotation = Quat::from_rotation_y(by) * Quat::from_rotation_z(-bl * 0.22);
+        tf.scale = Vec3::new(1.0, 1.0 - bc * 0.34, 1.0);
     }
     // lanterna presa à arma, sempre à frente da boca do cano
     let dirq = Quat::from_euler(EulerRot::YXZ, p.yaw, if bird { 0.0 } else { p.pitch + p.recoil.x }, 0.0);
@@ -393,7 +447,7 @@ pub fn update_gun(time: Res<Time>, mut p: ResMut<Player>, c: Res<Controls>, game
     let def = p.def();
     // só a arma em uso aparece; no menu a tela é do operador, sem arma na frente
     for (m, mut v) in &mut models {
-        let want = if m.0 == p.weapon && game.mode != Mode::Menu && !game.third { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if m.0 == p.weapon && game.mode != Mode::Menu && !game.third && game.foe_t <= 0.0 && !game.dying() { Visibility::Inherited } else { Visibility::Hidden };
         if *v != want { *v = want; }
     }
     if let Ok(mut m) = muzzle.single_mut() { if m.translation != def.muzzle { m.translation = def.muzzle; } }
@@ -533,10 +587,12 @@ pub fn gun_anim_drive(anims: Res<GunAnims>, p: Res<Player>, game: Res<Game>, mut
 
 /// Terceira pessoa: a câmera do operador passa a enxergar o corpo dele (camada L_BODY) e o boneco exibido troca.
 pub fn third_person_system(game: Res<Game>, mut commands: Commands, cam: Query<Entity, With<FpCam>>, mut figs: Query<(&BodyFig, &mut Visibility)>, mut last: Local<Option<bool>>) {
-    if *last == Some(game.third) { return; }
-    *last = Some(game.third);
+    // o corpo do operador também aparece para a câmera principal no retrato do tiro levado
+    let body = game.third || game.foe_t > 0.0 || game.dying();
+    if *last == Some(body) { return; }
+    *last = Some(body);
     if let Ok(e) = cam.single() {
-        commands.entity(e).insert(if game.third { RenderLayers::from_layers(&[0, L_FP, L_BODY]) } else { RenderLayers::from_layers(&[0, L_FP]) });
+        commands.entity(e).insert(if body { RenderLayers::from_layers(&[0, L_FP, L_BODY]) } else { RenderLayers::from_layers(&[0, L_FP]) });
     }
     let has_alt = figs.iter().any(|(f, _)| f.0);
     for (f, mut v) in &mut figs {

@@ -226,6 +226,35 @@ pub fn diagram_svg(i: usize) -> String {
     format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 190\" width=\"320\" height=\"190\">{DIAG_CSS}{body}</svg>")
 }
 
+/* ---------- perguntas rápidas entre as etapas: a cena vista de cima ---------- */
+/// Desenho de cada pergunta (mesma ordem de `course::QUIZ`). As letras marcam as posições que as respostas citam.
+pub fn quiz_svg(i: usize) -> String {
+    let mark = |x: f32, y: f32, l: &str| format!("<circle class=\"op\" cx=\"{x}\" cy=\"{y}\" r=\"8\"/><text x=\"{}\" y=\"{}\" style=\"font-size:19px;fill:#f2b23a\">{l}</text>", x - 5.0, y - 13.0);
+    let thr = |x: f32, y: f32| format!("<rect class=\"thr\" x=\"{}\" y=\"{}\" width=\"12\" height=\"12\" transform=\"rotate(45 {x} {y})\"/>", x - 6.0, y - 6.0);
+    let body = match i {
+        // quina de corredor: colado nela, no meio ou na parede oposta
+        0 => format!("<path class=\"danger\" d=\"M150 96 L310 30 L310 96 Z\"/><rect class=\"mass\" x=\"150\" y=\"96\" width=\"160\" height=\"90\"/><path class=\"wall\" d=\"M10 186 V4 H310\"/><path class=\"wall\" d=\"M150 186 V96 H310\"/>{}{}{}{}<text class=\"lbl\" x=\"226\" y=\"84\">unseen</text>",
+            thr(284.0, 62.0), mark(134.0, 150.0, "A"), mark(82.0, 150.0, "B"), mark(28.0, 150.0, "C")),
+        // sala vista de fora: o que fazer primeiro
+        1 => format!("<path class=\"danger\" d=\"M134 100 L186 100 L236 186 L84 186 Z\"/><path class=\"wall\" d=\"M30 100 H134 M186 100 H290 M30 100 V10 H290 V100\"/>{}{}<path class=\"arc\" d=\"M70 150 Q160 196 250 150\"/><circle class=\"op\" cx=\"70\" cy=\"150\" r=\"8\"/><text class=\"lbl\" x=\"196\" y=\"128\">door line</text>", thr(60.0, 36.0), thr(262.0, 84.0)),
+        // o que sobra depois de fatiar a porta
+        2 => format!("<path class=\"f2\" d=\"M160 150 L134 100 L60 10 L260 10 L186 100 Z\"/><path class=\"wall\" d=\"M30 100 H134 M186 100 H290 M30 100 V10 H290 V100\"/><circle class=\"op\" cx=\"160\" cy=\"156\" r=\"8\"/>{}{}{}{}",
+            "<text x=\"154\" y=\"30\" style=\"font-size:19px;fill:#f2b23a\">A</text>", "<text x=\"154\" y=\"70\" style=\"font-size:19px;fill:#f2b23a\">B</text>",
+            "<circle class=\"corner\" cx=\"48\" cy=\"84\" r=\"11\"/><text x=\"62\" y=\"90\" style=\"font-size:19px;fill:#f2b23a\">C</text>", "<circle class=\"corner\" cx=\"272\" cy=\"84\" r=\"11\"/><text x=\"246\" y=\"90\" style=\"font-size:19px;fill:#f2b23a\">C</text>"),
+        // portas frente a frente
+        3 => "<path class=\"f2\" d=\"M160 136 L130 100 L40 96 L40 44 L130 70 Z\"/><path class=\"wall\" d=\"M130 6 V70 M130 100 V186 M190 6 V70 M190 100 V186\"/><path class=\"wall thin\" d=\"M130 40 H40 V130 H130 M190 40 H280 V130 H190\"/><circle class=\"op\" cx=\"160\" cy=\"136\" r=\"8\"/><text class=\"lbl ok\" x=\"58\" y=\"122\">sliced</text><text x=\"228\" y=\"92\" style=\"font-size:30px;fill:#ff5a4f\">?</text><path class=\"move\" d=\"M160 122 V24\"/>".to_string(),
+        // porta fechada: onde ficar
+        4 => format!("<path class=\"danger\" d=\"M138 76 H182 V186 H138 Z\"/><path class=\"wall\" d=\"M10 72 H134 M186 72 H310\"/><path d=\"M134 72 H186\" stroke=\"#f2b23a\" stroke-width=\"4\"/>{}{}{}<text class=\"lbl\" x=\"196\" y=\"66\">closed door</text>", mark(160.0, 104.0, "A"), mark(112.0, 108.0, "B"), mark(160.0, 168.0, "C")),
+        // sala limpa há pouco, de novo no caminho
+        5 => "<path class=\"wall\" d=\"M10 90 H96 M140 90 H310 M10 150 H310\"/><path class=\"wall thin\" d=\"M50 90 V14 H190 V90\"/><text class=\"lbl\" x=\"72\" y=\"52\">cleared a minute ago</text><circle class=\"op\" cx=\"60\" cy=\"120\" r=\"8\"/><path class=\"move\" d=\"M74 120 H250\"/><text x=\"112\" y=\"84\" style=\"font-size:24px;fill:#ff5a4f\">?</text>".to_string(),
+        // identificar: mãos meio levantadas
+        6 => format!("<path class=\"wall\" d=\"M30 110 H134 M186 110 H290 M30 110 V10 H290 V110\"/><path class=\"sight\" d=\"M160 160 L160 44\"/>{}<circle class=\"op\" cx=\"160\" cy=\"160\" r=\"8\"/><text class=\"lbl\" x=\"176\" y=\"40\">hands half raised</text>", thr(160.0, 36.0)),
+        // resgate contra o relógio
+        _ => "<path class=\"wall\" d=\"M10 110 H60 M90 110 H150 M180 110 H240 M270 110 H310 M10 150 H310 M310 110 V150\"/><path class=\"wall thin\" d=\"M20 110 V40 H120 V110 M130 110 V40 H210 V110 M220 110 V40 H300 V110\"/><circle class=\"op\" cx=\"24\" cy=\"130\" r=\"8\"/><path class=\"move\" d=\"M38 130 H268\"/><circle cx=\"290\" cy=\"130\" r=\"9\" fill=\"none\" stroke=\"#6fd58e\" stroke-width=\"3\"/><text class=\"lbl ok\" x=\"262\" y=\"172\">hostage</text><text class=\"lbl\" x=\"40\" y=\"172\">the clock is running</text>".to_string(),
+    };
+    format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 190\" width=\"320\" height=\"190\">{DIAG_CSS}{body}</svg>")
+}
+
 /// Grava a arte dos alvos em RGBA cru para conferência visual (CQB_DUMP=pasta).
 /* ---------- operador visto de cima (512 px = 1,1 m; centro do corpo em 256,330; a frente é para cima) ---------- */
 pub const OP_PX: u32 = 512;
@@ -384,4 +413,18 @@ pub fn dump(dir: &str) {
     let _ = std::fs::write(format!("{dir}/operador.rgba"), svg_rgba(&operator_svg(), OP_PX, OP_PX));
     let _ = std::fs::write(format!("{dir}/bota.rgba"), svg_rgba(&boot_svg(), 96, 192));
     for (n, ns) in [false, true].iter().enumerate() { let _ = std::fs::write(format!("{dir}/alvo{n}.rgba"), svg_rgba(&ipsc_svg(*ns), 460, 760)); }
+}
+
+#[cfg(test)]
+mod quiz_tests {
+    /// Todos os desenhos das perguntas rendem; com QUIZ_DUMP=pasta, grava cada um em RGBA cru para conferir a olho.
+    #[test]
+    fn quiz_diagrams() {
+        for i in 0..crate::course::QUIZ.len() {
+            let px = super::svg_rgba(&super::quiz_svg(i), 960, 570);
+            assert_eq!(px.len(), 960 * 570 * 4);
+            assert!(px.chunks_exact(4).filter(|p| p[3] > 0).count() > 2000, "desenho {i} vazio");
+            if let Ok(d) = std::env::var("QUIZ_DUMP") { std::fs::write(format!("{d}/quiz{i}.rgba"), &px).unwrap(); }
+        }
+    }
 }

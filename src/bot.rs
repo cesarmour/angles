@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub enum Cmd {
     Wait(u32), Start(bool), Confirm, Tp(f32, f32, f32, f32), Go(f32, f32, Option<(f32, f32)>), Face(f32, f32), Shoot(&'static str), Spin, Interact, Reload,
     Ads(u32), Lean(f32, u32), Crouch(u32), Tac(bool), ViewTo(View), Flash(bool), Shot(&'static str), Snap(&'static str), Look(u32), Fire, Quit, Mission2, Pause, WaitReplay,
-    HideBox, Yaw(f32), Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
+    HideBox, Yaw(f32), Lesson(usize), Quiz(usize), QuizAns(usize), Die, Say(&'static str), OpenDoor(usize), DemoOf(usize), WaitDemo, Map(usize), Weapon(usize), Credits, Diff(u8), Menu, Scn(usize), Screen(Mode), Aim(bool, usize), Who(u8, f32), Auto(bool), Hold(u32), TpEnv, WaitNade,
     /// Espera um invasor começar a sair do vão de chegada de uma passagem entre andares.
     WaitClimb,
     /// Espera um invasor começar a fatiar uma porta (parado ao lado do batente); assusta todos os invasores vivos (motivo 1, 2 ou 3).
@@ -31,9 +31,10 @@ pub struct Bot { pub fps: f32, pub auto_card: bool, pub card_n: u32, pub active:
     pub home: Option<(Vec2, Vec2)>, pub flee: Vec<Vec2>, pub flee_i: usize }
 
 /// Converte o traçado ideal de uma lição em comandos. Na demonstração entram também o ponto de partida e as legendas.
-pub fn steps_cmds(l: usize, demo: bool) -> Vec<Cmd> {
+pub fn steps_cmds(l: usize, demo: bool) -> Vec<Cmd> { cmds_of(ideal(l), demo) }
+pub fn cmds_of(steps: &[Step], demo: bool) -> Vec<Cmd> {
     let mut v = Vec::new();
-    for s in ideal(l) {
+    for s in steps {
         match *s {
             Step::Start(x, z, lx, lz) => if demo { v.push(Cmd::Tp(x, z, (-(lx - x)).atan2(-(lz - z)), -0.04)); v.push(Cmd::Wait(50)); },
             Step::Go(x, z, lx, lz) => v.push(Cmd::Go(x, z, Some((lx, lz)))),
@@ -44,6 +45,7 @@ pub fn steps_cmds(l: usize, demo: bool) -> Vec<Cmd> {
             Step::Lean(a) => v.push(if a != 0.0 { Cmd::Lean(a, 60) } else { Cmd::Lean(0.0, 0) }),
             Step::Say(m) => if demo { v.push(Cmd::Say(m)); v.push(Cmd::Wait(70)); },
             Step::Scan => v.push(Cmd::Spin),
+            Step::Pause(n) => if demo { v.push(Cmd::Wait(n)); },
             Step::Look(x, z) => { v.push(Cmd::Face(x, z)); v.push(Cmd::Wait(if demo { 40 } else { 10 })); }
         }
     }
@@ -255,13 +257,24 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
         // o mesmo no tutorial: abatido na lição 2, volta ao começo dela
         "down2" => vec![Wait(60), Start(false), Wait(40), Confirm, Wait(80), Near(false, 0, 3.0), Wait(900), Snap("t1"), Shot("t1"), Confirm, Wait(120), Snap("t2"), Shot("t2"), Confirm, Wait(120), Snap("t3"), Shot("t3"), Quit],
         "menu" => vec![Wait(200), Shot("menu1"), Wait(400), Shot("menu2"), Wait(400), Shot("menu3"), Quit],
+        // telas de ensino (rodar com CQB_TEACH): trecho errado das cinco demonstrações, cartões e perguntas, retrato do tiro
+        "teach_wrong" => vec![Wait(300), Start(false), Wait(20), DemoOf(1), WaitDemo, DemoOf(2), WaitDemo, DemoOf(3), WaitDemo, DemoOf(4), WaitDemo, DemoOf(5), WaitDemo, Wait(20), Quit],
+        "teach_full" => vec![Wait(300), Start(false), Wait(20), DemoOf(1), WaitDemo, Wait(20), Quit],
+        "teach_ui" => vec![Wait(300), Start(false), Wait(30), Lesson(1), Wait(20), Shot("t-card1"), Lesson(4), Wait(20), Shot("t-card4"), Quiz(0), Wait(20), Shot("t-quiz0"), QuizAns(0), Wait(20), Shot("t-quiz0-wrong"),
+            Quiz(4), Wait(20), Shot("t-quiz4"), QuizAns(1), Wait(20), Shot("t-quiz4-right"), Quiz(2), Wait(20), Shot("t-quiz2"), Quit],
+        "teach_foe" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0)]; for k in 0..34 { v.push(Wait(36)); v.push(Shot(["f00","f01","f02","f03","f04","f05","f06","f07","f08","f09","f10","f11","f12","f13","f14","f15","f16","f17","f18","f19","f20","f21","f22","f23","f24","f25","f26","f27","f28","f29","f30","f31","f32","f33"][k])); } v.push(Quit); v }
+        // animações: queda vista dos olhos de quem atirou, queda com a câmera alta e o coice dos invasores de perto
+        "t_death" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0), Wait(40)]; for k in 0..80 { v.push(Wait(8)); v.push(Shot(Box::leak(format!("d{k:02}").into_boxed_str()))); } v.push(Quit); v }
+        "t_foe2" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0), Wait(260), Screen(Mode::Debrief), Wait(225)]; for k in 0..24 { v.push(Wait(12)); v.push(Shot(Box::leak(format!("g{k:02}").into_boxed_str()))); } v.push(Quit); v }
+        "t_chase" => { let mut v = vec![Wait(300), Start(true), Wait(150), Tp(10.0, 9.0, 1.0, 0.0), Wait(30), Die]; for k in 0..22 { v.push(Wait(6)); v.push(Shot(Box::leak(format!("c{k:02}").into_boxed_str()))); } v.push(Quit); v }
+        "t_recoil" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), HideBox, Near(false, 2, 2.6), Wait(20)]; for k in 0..60 { v.push(Wait(2)); v.push(Shot(Box::leak(format!("r{k:02}").into_boxed_str()))); } v.push(Quit); v }
         "demo" => vec![Wait(60), Start(false), Wait(20), DemoOf(1), WaitDemo, DemoOf(2), WaitDemo, DemoOf(3), WaitDemo, DemoOf(4), WaitDemo, DemoOf(5), WaitDemo, Wait(20), Quit],
         _ => {
             // percurso completo: a lição 1 testa os controles; as demais seguem o mesmo traçado ideal que o jogador vê no chão
             let mut v = vec![
                 Start(false), Wait(40),
-                Look(110), ViewTo(View::Bird), Go(1.6, 15.6, None), Go(4.6, 15.6, None), Go(3.0, 14.9, None), Ads(50), Ads(0), Lean(1.0, 50), Lean(0.0, 0), Crouch(60), Crouch(0),
-                Shoot("P0"), Reload, Wait(150), Flash(false), Wait(8), Flash(true), Tac(true), ViewTo(View::Fp), Wait(5), ViewTo(View::Bird), Wait(10), Snap("L0"), Wait(160),
+                Look(110), ViewTo(View::Bird), Go(1.6, 15.6, None), Go(4.6, 15.6, None), Go(3.0, 14.9, None), Ads(120), Ads(0), Lean(1.0, 110), Lean(0.0, 0), Crouch(120), Crouch(0),
+                Shoot("P0"), Reload, Wait(330), Flash(false), Wait(8), Flash(true), Tac(true), ViewTo(View::Fp), Wait(5), ViewTo(View::Bird), Wait(10), Snap("L0"), Wait(160),
             ];
             for (l, name) in [(1usize, "L1"), (2, "L2"), (3, "L3"), (4, "L4"), (5, "L5")] {
                 v.extend(steps_cmds(l, false));
@@ -301,7 +314,7 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
     };
     if demo && bot.active {
         bot.demo_frames += 1;
-        if bot.demo_frames == 200 || bot.demo_frames == 520 { commands.spawn(Screenshot::primary_window()).observe(save_to_disk(format!("{}/4{}-demo-{}.png", bot.out, game.lesson, bot.demo_frames))); }
+        if matches!(bot.demo_frames, 200 | 520) || (std::env::var("CQB_TEACH").is_ok() && matches!(bot.demo_frames, 110 | 330 | 430 | 620 | 760)) { commands.spawn(Screenshot::primary_window()).observe(save_to_disk(format!("{}/4{}-demo{}-{:03}.png", bot.out, game.lesson, game.demo_phase, bot.demo_frames))); }
     }
     // no percurso completo, os cartões de lição são dispensados sozinhos
     if !demo && bot.auto_card && matches!(game.mode, Mode::Card | Mode::Replay) {
@@ -328,7 +341,8 @@ pub fn bot_drive(mut bot: ResMut<Bot>, mut c: ResMut<Controls>, mut p: ResMut<Pl
     }
     // Ameaça à vista tem prioridade sobre o roteiro: como as posições são sorteadas, o operador automático (teste e
     // demonstração) para e neutraliza o que aparecer no setor, desde que não haja um refém na linha de tiro.
-    if game.mode == Mode::Play && (demo || bot.auto_card) {
+    // no "jeito errado" da demonstração o operador não reage: o erro tem de aparecer inteiro
+    if game.mode == Mode::Play && (demo || bot.auto_card) && game.demo_phase != 1 {
         let eye = p.eye2();
         let clear = |t: &TargetState| -> bool {
             let (tp, d) = (Vec2::new(t.def.x, t.def.z), Vec2::new(t.def.x, t.def.z).distance(eye));
@@ -431,6 +445,11 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
         Cmd::Credits => { game.mode = crate::state::Mode::Credits; game.ui_dirty = true; done = true; }
         Cmd::WaitReplay => { done = (game.mode == Mode::Replay && game.replay_t > 3.5) || bot.n > 900; }
         Cmd::Say(m) => { game.coach = Some((m.to_string(), 3, 11.0)); game.ui_dirty = true; done = true; }
+        // derruba o operador sem ninguém tê-lo visto (como uma granada): testa a câmera alta da queda
+        Cmd::Die => { game.down_t = DOWN_SECS; game.foe_kill = false; game.down_why = "Test.".into(); done = true; }
+        Cmd::Lesson(l) => { game.lesson = l; game.obj = vec![0; crate::lessons::LESSONS[l].objs.len()]; game.mode = Mode::Card; game.ui_dirty = true; done = true; }
+        Cmd::Quiz(k) => { game.mode = Mode::Card; game.quiz = Some((k, None)); game.ui_dirty = true; done = true; }
+        Cmd::QuizAns(n) => { if let Some((k, _)) = game.quiz { game.quiz = Some((k, Some(n))); game.ui_dirty = true; } done = true; }
         Cmd::OpenDoor(i) => { if level.doors[i].open < 0.5 && !level.doors[i].opening { c.interact = true; } done = true; }
         Cmd::DemoOf(l) => { game.lesson = l; game.obj = vec![0; crate::lessons::LESSONS[l].objs.len()]; game.mode = Mode::Card; game.demo_req = true; game.ui_dirty = true; done = true; }
         Cmd::Map(i) => { mapreq.0 = Some(i); done = true; }

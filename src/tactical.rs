@@ -80,6 +80,8 @@ pub fn draw_arc(data: &mut [u8], st: &[u8; 180]) {
 #[derive(Resource)]
 pub struct Tac {
     pub vis: Vis, pub wedge: Wedge, pub hfov: f32, pub c: f32,
+    /// `seen_i`: em que amostra do trajeto gravado cada célula foi vista pela primeira vez (o replay repinta o chão com isso).
+    pub seen_i: Vec<u16>,
     pub seen: Vec<u8>, pub cur: Vec<u8>, pub expo: Vec<u8>, pub zone_idx: Vec<i8>, pub tot: [u32; MAX_ZONES], pub pct: [f32; MAX_ZONES],
     pub expo_deg: f32, pub stat_t: f32, pub overlay: Handle<Image>, pub fog: Handle<Image>, pub wedge_mesh: Handle<Mesh>,
     pub overlay_mat: Handle<StandardMaterial>, pub fog_mat: Handle<StandardMaterial>,
@@ -115,7 +117,7 @@ impl Tac {
         for p in self.pie.iter_mut() { *p = [0u8; 180]; }
         for p in self.pie_now.iter_mut() { *p = None; }
         self.pie_active = None; self.lean_hint = None;
-        self.seen.fill(0); self.cur.fill(0); self.expo.fill(0); self.pct = [0.0; MAX_ZONES]; self.expo_deg = 0.0; self.stat_t = 0.0; self.primary = None;
+        self.seen.fill(0); self.seen_i.fill(u16::MAX); self.cur.fill(0); self.expo.fill(0); self.pct = [0.0; MAX_ZONES]; self.expo_deg = 0.0; self.stat_t = 0.0; self.primary = None;
     }
     #[inline] pub fn cell(x: f32, z: f32) -> Option<usize> {
         let (i, j) = (((x - MAP_X1) * PPM).floor() as i32, ((z - MAP_Z1) * PPM).floor() as i32);
@@ -156,13 +158,44 @@ pub fn setup_tactical(mut commands: Commands, mut images: ResMut<Assets<Image>>,
     let wmat = mats.add(StandardMaterial { base_color: Color::srgba(0.38, 0.84, 0.91, 0.24), unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
     commands.spawn((Mesh3d(wedge_mesh.clone()), MeshMaterial3d(wmat), Transform::from_xyz(0.0, 3.7, 0.0), RenderLayers::layer(L_TOP), NotShadowCaster, NotShadowReceiver, NoFrustumCulling));
     let mut tac = Tac {
-        vis: Vis::default(), wedge: Wedge::default(), hfov: 1.7, c: 0.0, seen: vec![0; GW * GH], cur: vec![0; GW * GH], expo: vec![0; GW * GH], zone_idx: vec![-1i8; GW * GH], tot: [0; MAX_ZONES], pct: [0.0; MAX_ZONES],
+        vis: Vis::default(), wedge: Wedge::default(), hfov: 1.7, c: 0.0, seen_i: vec![u16::MAX; GW * GH], seen: vec![0; GW * GH], cur: vec![0; GW * GH], expo: vec![0; GW * GH], zone_idx: vec![-1i8; GW * GH], tot: [0; MAX_ZONES], pct: [0.0; MAX_ZONES],
         expo_deg: 0.0, stat_t: 0.0, overlay, fog, wedge_mesh, overlay_mat: om, fog_mat: fmat, primary: None, body_cm: 25.0, corner_zone: None, pie: vec![[0u8; 180]; openings().len()], pie_now: vec![None; openings().len()], pie_active: None, lean_hint: None, bar_left: 0, bar_right: 0,
     };
     let bar = images.add(art::rgba_image(ARC_W as u32, ARC_H as u32, vec![0u8; ARC_W * ARC_H * 4], true, false, false));
     commands.insert_resource(PieBarTex(bar));
     tac.rebuild(&level);
     commands.insert_resource(tac);
+}
+
+/// Grava a névoa das vistas de cima: `raw` é a opacidade de cada célula; `fr` e `fg` tingem de vermelho e de verde.
+fn write_fog(images: &mut Assets<Image>, fog: &Handle<Image>, raw: &[u16], fr: &[u16], fg: &[u16]) {
+    let n = GW * GH;
+    let blur = |src: &[u16]| -> Vec<u16> {
+        let rad = 2i32;
+        let div = 2 * rad as u32 + 1;
+        let mut tmp = vec![0u16; n];
+        for j in 0..GH { for i in 0..GW {
+            let mut acc = 0u32;
+            for d in -rad..=rad { acc += src[j * GW + (i as i32 + d).clamp(0, GW as i32 - 1) as usize] as u32; }
+            tmp[j * GW + i] = (acc / div) as u16;
+        } }
+        let mut out = vec![0u16; n];
+        for j in 0..GH { for i in 0..GW {
+            let mut acc = 0u32;
+            for d in -rad..=rad { acc += tmp[(j as i32 + d).clamp(0, GH as i32 - 1) as usize * GW + i] as u32; }
+            out[j * GW + i] = (acc / div) as u16;
+        } }
+        out
+    };
+    let (alpha, fr, fg) = (blur(raw), blur(fr), blur(fg));
+    if let Some(img) = images.get_mut(fog) {
+        if let Some(data) = img.data.as_mut() {
+            for k in 0..n {
+                let (r, g) = (fr[k] as f32 / 255.0, fg[k] as f32 / 255.0);
+                data[k * 4..k * 4 + 4].copy_from_slice(&[(104.0 * r + 14.0 * g) as u8, (20.0 * r + 118.0 * g) as u8, (18.0 * r + 64.0 * g) as u8, alpha[k] as u8]);
+            }
+        }
+    }
 }
 
 pub fn tac_update(
@@ -175,6 +208,23 @@ pub fn tac_update(
         // sem pintura no chão: a única leitura de ângulos é a barra da porta em foco, no alto da tela
         let want = Visibility::Hidden;
         if *v != want { *v = want; }
+    }
+    // replay da entrada: o chão é repintado amostra por amostra, verde no que já tinha sido visto até ali e vermelho no resto
+    if game.mode == Mode::Replay {
+        let idx = crate::lessons::replay_index(&game).min(65000) as u16;
+        let sig = 0x5eed_0000u64 | idx as u64;
+        if *bar_sig != sig {
+            *bar_sig = sig;
+            let n = GW * GH;
+            let (mut raw, mut fr, mut fg) = (vec![150u16; n], vec![0u16; n], vec![0u16; n]);
+            for k in 0..n {
+                if tac.zone_idx[k] < 0 { continue; }
+                if tac.seen[k] > 0 && tac.seen_i[k] <= idx { fg[k] = 255; raw[k] = 92; } else { fr[k] = 255; raw[k] = 136; }
+            }
+            write_fog(&mut images, &tac.fog, &raw, &fr, &fg);
+            let _ = mats.get_mut(&tac.fog_mat);
+        }
+        return;
     }
     if game.mode != Mode::Play || std::env::var("CQB_NOTAC").is_ok() { return; }
     let dt = time.delta_secs().min(0.05);
@@ -194,6 +244,7 @@ pub fn tac_update(
 
     // área coberta neste quadro e acumulada
     tac.cur.fill(0);
+    let stamp = game.track.len().min(65000) as u16;
     let (mut x1, mut x2, mut z1, mut z2) = (eye.x, eye.x, eye.y, eye.y);
     for q in &wedge.pts { x1 = x1.min(q.x); x2 = x2.max(q.x); z1 = z1.min(q.y); z2 = z2.max(q.y); }
     let i1 = (((x1 - MAP_X1) * PPM).floor() as i32 - 3).clamp(0, GW as i32 - 1) as usize;
@@ -203,7 +254,7 @@ pub fn tac_update(
     for j in j1..=j2 {
         for i in i1..=i2 {
             let k = j * GW + i;
-            if wedge.sees(eye, cell_center(k), 0.16) { tac.cur[k] = 1; tac.seen[k] = 255; }
+            if wedge.sees(eye, cell_center(k), 0.16) { tac.cur[k] = 1; if tac.seen[k] == 0 { tac.seen_i[k] = stamp; } tac.seen[k] = 255; }
         }
     }
     if std::env::var("CQB_CURLOG").is_ok() { println!("BOT CUR {:.1} {:.1} {:.4} {} {}", eye.x, eye.y, c, tac.cur.iter().filter(|v| **v > 0).count(), wedge.pts.len()); }
@@ -330,25 +381,8 @@ pub fn tac_update(
         tac.expo_deg = expo;
     }
 
-    // texturas: sobreposição no chão (primeira pessoa) e névoa das vistas de cima, as duas com borda suavizada
+    // névoa das vistas de cima, com borda suavizada
     let n = GW * GH;
-    let blur = |src: &[u16]| -> Vec<u16> {
-        let rad = 2i32;
-        let div = 2 * rad as u32 + 1;
-        let mut tmp = vec![0u16; n];
-        for j in 0..GH { for i in 0..GW {
-            let mut acc = 0u32;
-            for d in -rad..=rad { acc += src[j * GW + (i as i32 + d).clamp(0, GW as i32 - 1) as usize] as u32; }
-            tmp[j * GW + i] = (acc / div) as u16;
-        } }
-        let mut out = vec![0u16; n];
-        for j in 0..GH { for i in 0..GW {
-            let mut acc = 0u32;
-            for d in -rad..=rad { acc += tmp[(j as i32 + d).clamp(0, GH as i32 - 1) as usize * GW + i] as u32; }
-            out[j * GW + i] = (acc / div) as u16;
-        } }
-        out
-    };
     // névoa das vistas de cima (vista aérea e minimapa): neutra, sem cores (escura no que ainda não foi visto, meio-tom no
     // que já foi). Na demonstração fica translúcida, para acompanhar a casa e o traçado. O entorno imediato do operador
     // fica sempre visível.
@@ -358,22 +392,17 @@ pub fn tac_update(
     for k in 0..n {
         let (cur, seen, zone) = (tac.cur[k] > 0, tac.seen[k] > 0, tac.zone_idx[k] >= 0);
         raw[k] = if cur { 0 } else if seen { 118.min(dark) } else { dark };
-        let _ = zone;
+        // na demonstração o chão conta a história: verde no que o operador já viu, vermelho no que ainda está fechado
+        if game.demo && zone {
+            if cur || seen { fg[k] = 255; raw[k] = if cur { 46 } else { 96 }; } else { fr[k] = 255; raw[k] = 132; }
+        }
     }
     let (pi, pj) = (((p.pos.x - MAP_X1) * PPM) as i32, ((p.pos.y - MAP_Z1) * PPM) as i32);
     for j in (pj - 9).max(0)..=(pj + 9).min(GH as i32 - 1) { for i in (pi - 9).max(0)..=(pi + 9).min(GW as i32 - 1) {
         let k = j as usize * GW + i as usize;
         if cell_center(k).distance(p.pos) < 0.5 { raw[k] = 0; fr[k] = 0; fg[k] = 0; }
     } }
-    let (alpha, fr, fg) = (blur(&raw), blur(&fr), blur(&fg));
-    if let Some(img) = images.get_mut(&tac.fog) {
-        if let Some(data) = img.data.as_mut() {
-            for k in 0..n {
-                let (r, g) = (fr[k] as f32 / 255.0, fg[k] as f32 / 255.0);
-                data[k * 4..k * 4 + 4].copy_from_slice(&[(104.0 * r + 14.0 * g) as u8, (20.0 * r + 118.0 * g) as u8, (18.0 * r + 64.0 * g) as u8, alpha[k] as u8]);
-            }
-        }
-    }
+    write_fog(&mut images, &tac.fog, &raw, &fr, &fg);
     // o material precisa ser marcado como alterado para passar a usar a textura atualizada
     let _ = mats.get_mut(&tac.fog_mat);
     let _ = &mut meshes;

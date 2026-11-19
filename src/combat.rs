@@ -504,7 +504,7 @@ pub fn combat(
     game.burst.retain_mut(|b| { b.0 -= dt; if b.0 <= 0.0 { rounds.push((b.1, b.2)); false } else { true } });
     for (mz, to) in rounds {
         sfx.write(Sfx::EnemyRound(mz));
-        puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
+        puff(&mut commands, &fx, &mut smats, mz + to * 0.12, to, 1, Color::srgb(0.34, 0.34, 0.33), 1.9, 0.04);
         enemy_casing(&mut commands, &fx, &mut smats, mz, to, game.time * 3.1 + mz.x);
     }
     let mut shots_now: Vec<Vec2> = Vec::new();
@@ -597,6 +597,7 @@ pub fn combat(
                 if easy {
                     // papelão não atira: o tiro levado é só anotado (clarão vermelho, som e aviso), sem disparo na tela
                     game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
+                    if !game.demo { game.foe = Some(Foe { who: i, eye: Vec3::new(t.def.x, 1.5, t.def.z), pos: p.pos, yaw: p.yaw, lean: p.lean, crouch: p.crouching, seen_for: (game.time - t.contact_t).max(0.0), looking: t.vis }); }
                     sfx.write(Sfx::Hurt);
                     if script { println!("BOT TIRO simulado t={:.1} de {} a {:.1} m contato_ha={:.1}s", game.time, t.def.id, d, game.time - t.contact_t); }
                     game.toast(if t.vis { "Hit (simulated). The threat had a clear line of fire for too long: identify and neutralize faster." }
@@ -614,8 +615,7 @@ pub fn combat(
                 let flat = Vec3::new(aim.x - t.def.x, 0.0, aim.z - t.def.z).normalize_or_zero();
                 let mz = if mech { Vec3::new(t.def.x, 1.45, t.def.z) + flat * 0.72 } else { let l = t.lean_at(1.38); enemy_muzzle(t.def.x + l.x, t.def.z + l.y, flat) };
                 let to = (aim - mz).normalize_or_zero();
-                puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
-                puff(&mut commands, &fx, &mut smats, mz + to * 0.1, to, 2, Color::srgb(0.2, 0.2, 0.19), 1.6, 0.09);
+                puff(&mut commands, &fx, &mut smats, mz + to * 0.12, to, 2, Color::srgb(0.34, 0.34, 0.33), 1.9, 0.04);
                 // cápsula ejetada para a direita da arma e o resto da rajada (o mech não ejeta nem dá rajada)
                 if !mech {
                     enemy_casing(&mut commands, &fx, &mut smats, mz, to, game.time * 2.3 + i as f32);
@@ -634,6 +634,7 @@ pub fn combat(
                 if game.dmg_t > if diff == 2 || defense { 0.95 } else { 0.8 } { chance = 0.0; }
                 if rand01(game.time * 53.1 + i as f32 * 9.7 + game.stats.shots as f32) < chance {
                     game.stats.hits_taken += 1; game.dmg_t = 1.3; game.shake = 1.0;
+                    if !game.demo && !mech { let l = t.lean_at(1.55); game.foe = Some(Foe { who: i, eye: Vec3::new(t.def.x + l.x, 1.55, t.def.z + l.y), pos: p.pos, yaw: p.yaw, lean: p.lean, crouch: p.crouching, seen_for: (game.time - t.contact_t).max(0.0), looking: t.vis }); }
                     sfx.write(Sfx::Hurt);
                     if script { println!("BOT TIRO levado t={:.1} de {} a {:.1} m corpo={} vista={} contato_ha={:.1}s", game.time, t.def.id, d, body, t.vis, game.time - t.contact_t); }
                     game.tracers.push((mz, aim - to * 0.45, 0.1));
@@ -643,7 +644,7 @@ pub fn combat(
                     let why = if mech { "The walker's cannon had you in its sights for a full second. Break its line of sight before the lock completes." } else { why };
                     if !game.demo { game.wounds += if mech { MAX_WOUNDS } else { 1 }; }
                     if game.wounds >= MAX_WOUNDS && !nodeath {
-                        game.down_t = DOWN_SECS; game.down_why = why.to_string(); game.toast = None;
+                        game.down_t = DOWN_SECS; game.down_why = why.to_string(); game.toast = None; game.foe_kill = !mech && game.foe.is_some();
                     } else {
                         let left = MAX_WOUNDS.saturating_sub(game.wounds);
                         let msg = if game.demo || nodeath { format!("Hit (simulated). {}", why) } else { format!("Hit {} of {} (simulated). {} more and the run is over. {}", game.wounds, MAX_WOUNDS, if left == 1 { "One".to_string() } else { left.to_string() }, why) };
@@ -674,7 +675,7 @@ pub fn combat(
                 let to = (Vec3::new(t.ai.last.x, 1.1, t.ai.last.y) - mz).normalize_or_zero();
                 sfx.write(Sfx::EnemyShot(Vec3::new(t.def.x + f.x * 0.25, 1.3, t.def.z + f.y * 0.25)));
                 shots_now.push(tp);
-                puff(&mut commands, &fx, &mut smats, mz, to, 3, Color::srgb(1.0, 0.82, 0.45), 2.4, 0.11);
+                puff(&mut commands, &fx, &mut smats, mz + to * 0.12, to, 1, Color::srgb(0.34, 0.34, 0.33), 1.9, 0.04);
                 enemy_casing(&mut commands, &fx, &mut smats, mz, to, game.time * 2.3 + i as f32);
                 game.burst.push((0.1, mz, to)); game.burst.push((0.2, mz, to));
                 // onde o projétil sai da parede, do lado do operador: lascas e poeira; o traço segue além do ponto visado
@@ -693,7 +694,7 @@ pub fn combat(
                     sfx.write(Sfx::Hurt);
                     let why = "You were hit through the wall. OSB hides you but does not stop rounds: once they have seen you, move off that spot.";
                     game.wounds += 1;
-                    if game.wounds >= MAX_WOUNDS && !nodeath { game.down_t = DOWN_SECS; game.down_why = why.to_string(); game.toast = None; }
+                    if game.wounds >= MAX_WOUNDS && !nodeath { game.down_t = DOWN_SECS; game.down_why = why.to_string(); game.toast = None; game.foe_kill = false; }
                     else { let msg = format!("Hit {} of {} (simulated). {}", game.wounds, MAX_WOUNDS, why); game.toast(&msg, 2, 6.5); }
                 }
             }
