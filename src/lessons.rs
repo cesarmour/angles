@@ -378,7 +378,34 @@ pub fn guide_dist(game: &Game, pos: Vec2) -> Option<f32> {
 }
 
 /// Linha tracejada no chão com o traçado ideal da lição: setas no sentido do percurso e, em cada parada, para onde apontar a arma.
-pub fn guide_system(mut gz: Gizmos, mut game: ResMut<Game>, p: Res<Player>, time: Res<Time>) {
+/// A malha do traçado ideal (uma só, refeita a cada quadro: são poucas centenas de triângulos).
+#[derive(Component)]
+pub struct GuideMesh;
+/// Triângulos coloridos no plano do chão, para montar o traçado.
+struct Tris { pos: Vec<[f32; 3]>, col: Vec<[f32; 4]>, y: f32 }
+impl Tris {
+    fn tri(&mut self, a: Vec2, b: Vec2, c: Vec2, ca: [f32; 4], cb: [f32; 4], cc: [f32; 4]) {
+        for (q, k) in [(a, ca), (b, cb), (c, cc)] { self.pos.push([q.x, self.y, q.y]); self.col.push(k); }
+    }
+    fn quad(&mut self, a: Vec2, b: Vec2, c: Vec2, d: Vec2, k: [f32; 4]) { self.tri(a, b, c, k, k, k); self.tri(a, c, d, k, k, k); }
+    /// Disco (r0 = 0) ou anel, com a borda de fora na cor `k1` e a de dentro na cor `k0`.
+    fn ring(&mut self, c: Vec2, r0: f32, r1: f32, k0: [f32; 4], k1: [f32; 4]) {
+        let n = 28;
+        for s in 0..n {
+            let (a0, a1) = (s as f32 / n as f32 * std::f32::consts::TAU, (s + 1) as f32 / n as f32 * std::f32::consts::TAU);
+            let (u0, u1) = (Vec2::new(a0.cos(), a0.sin()), Vec2::new(a1.cos(), a1.sin()));
+            if r0 <= 0.0 { self.tri(c, c + u0 * r1, c + u1 * r1, k0, k1, k1); }
+            else { self.tri(c + u0 * r0, c + u0 * r1, c + u1 * r1, k0, k1, k1); self.tri(c + u0 * r0, c + u1 * r1, c + u1 * r0, k0, k1, k0); }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn guide_system(mut game: ResMut<Game>, p: Res<Player>, time: Res<Time>, mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>,
+    mut ent: Local<Option<(Entity, Handle<Mesh>)>>, mut vis: Query<&mut Visibility, With<GuideMesh>>) {
+    // por padrão o traçado fica escondido; só aparece no fim desta função, quando há o que desenhar
+    if let Some((e, _)) = ent.as_ref() { if let Ok(mut v) = vis.get_mut(*e) { if *v != Visibility::Hidden { *v = Visibility::Hidden; } } }
+
     if game.mode != Mode::Play || game.free { return; }
     let dt = time.delta_secs().min(0.05);
     let pts = ideal_points(game.lesson);
@@ -395,34 +422,82 @@ pub fn guide_system(mut gz: Gizmos, mut game: ResMut<Game>, p: Res<Player>, time
     if !game.route_visible() || i >= n { return; }
     // no modo dica a linha some aos poucos no último segundo e meio
     let fade = if game.guide == 2 && !game.demo { (game.guide_t / 1.5).clamp(0.0, 1.0) } else { 1.0 };
-    let amber = Color::srgba(1.0, 0.8, 0.25, fade);
-    let cyan = Color::srgba(0.38, 0.84, 0.91, fade);
-    let white = Color::srgba(1.0, 1.0, 1.0, fade);
-    let rot = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
-    for y in [0.045f32, 3.86] {
-        let v3 = |q: Vec2| Vec3::new(q.x, y, q.y);
+    // Traçado desenhado como marcação de piso, e não como linhas de 1 pixel: uma faixa fina e translúcida, chevrons cheios
+    // que correm no sentido da marcha, um anel pulsando no próximo ponto e um leque suave para onde olhar em cada ponto.
+    let lin = |c: Color, a: f32| { let l = c.to_linear(); [l.red, l.green, l.blue, a * fade] };
+    let amber = Color::srgb(1.0, 0.72, 0.2);
+    let cyan = Color::srgb(0.38, 0.84, 0.91);
+    let white = Color::srgb(1.0, 0.97, 0.9);
+    let t = time.elapsed_secs();
+    let mut m = Tris { pos: Vec::new(), col: Vec::new(), y: 0.0 };
+    // duas alturas: rente ao piso (primeira pessoa) e acima das paredes (vista de cima e minimapa)
+    for (y, w) in [(0.03f32, 1.0f32), (3.86, 1.5)] {
+        m.y = y;
+        let mut run = 0.0f32;
         for k in i.saturating_sub(1)..n - 1 {
             let (a, b) = (pts[k].0, pts[k + 1].0);
             let len = a.distance(b);
             if len < 0.05 { continue; }
             let d = (b - a) / len;
-            let mut s = 0.0;
-            while s < len { gz.line(v3(a + d * s), v3(a + d * (s + 0.2).min(len)), amber); s += 0.36; }
-            let (m, nr) = (a + d * (len * 0.5), d.perp());
-            gz.line(v3(m + d * 0.13), v3(m - d * 0.08 + nr * 0.11), amber);
-            gz.line(v3(m + d * 0.13), v3(m - d * 0.08 - nr * 0.11), amber);
+            let nr = d.perp();
+            // faixa de base
+            let hw = 0.035 * w;
+            m.quad(a - nr * hw, a + nr * hw, b + nr * hw, b - nr * hw, lin(amber, 0.3));
+            m.ring(b, 0.0, hw, lin(amber, 0.3), lin(amber, 0.3));
+            // chevrons cheios, espaçados e andando para a frente
+            let gap = 0.42;
+            let mut s = gap - (run + gap - (t * 0.45) % gap) % gap;
+            while s < len - 0.08 {
+                let c = a + d * s;
+                // some perto das pontas do trecho, para não brotar nem sumir de repente
+                let edge = (s / 0.25).min((len - s) / 0.25).clamp(0.0, 1.0);
+                let (tip, th, half) = (c + d * 0.09 * w, d * 0.065 * w, 0.115 * w);
+                for sd in [-1.0f32, 1.0] {
+                    let arm = c - d * 0.055 * w + nr * (sd * half);
+                    m.quad(tip, tip - th, arm - th, arm, lin(amber, 0.95 * edge));
+                }
+                s += gap;
+            }
+            run += len;
         }
         for k in i..n {
             let (q, look) = pts[k];
             let next = k == i;
-            gz.circle(Isometry3d::new(v3(q), rot), if next { 0.2 + 0.04 * (time.elapsed_secs() * 5.0).sin() } else { 0.08 }, if next { white } else { amber });
             if let Some(lk) = look {
+                // para onde olhar: um leque que se apaga na ponta
                 let d = (lk - q).normalize_or_zero();
-                let (tip, nr) = (q + d * 0.6, d.perp());
-                gz.line(v3(q + d * 0.1), v3(tip), cyan);
-                gz.line(v3(tip), v3(tip - d * 0.12 + nr * 0.07), cyan);
-                gz.line(v3(tip), v3(tip - d * 0.12 - nr * 0.07), cyan);
+                let (r, half) = (if next { 0.85 } else { 0.55 } * w, 0.3f32);
+                let (seg, a0) = (10, d.y.atan2(d.x));
+                for sg in 0..seg {
+                    let (u0, u1) = (a0 - half + 2.0 * half * sg as f32 / seg as f32, a0 - half + 2.0 * half * (sg + 1) as f32 / seg as f32);
+                    m.tri(q, q + Vec2::new(u0.cos(), u0.sin()) * r, q + Vec2::new(u1.cos(), u1.sin()) * r, lin(cyan, if next { 0.6 } else { 0.38 }), lin(cyan, 0.0), lin(cyan, 0.0));
+                }
             }
+            if next {
+                // próximo ponto: anel branco que pulsa, com um brilho por dentro
+                let pulse = 0.5 + 0.5 * (t * 4.0).sin();
+                let r = (0.2 + 0.03 * pulse) * w;
+                m.ring(q, 0.0, r, lin(white, 0.02), lin(white, 0.22));
+                m.ring(q, r, r + 0.028 * w, lin(white, 0.95), lin(white, 0.95));
+                m.ring(q, r + 0.028 * w, r + (0.1 + 0.05 * pulse) * w, lin(white, 0.3), lin(white, 0.0));
+            } else {
+                m.ring(q, 0.0, 0.055 * w, lin(amber, 0.95), lin(amber, 0.95));
+                m.ring(q, 0.055 * w, 0.11 * w, lin(amber, 0.3), lin(amber, 0.0));
+            }
+        }
+    }
+    let count = m.pos.len();
+    let mut mesh = Mesh::new(bevy::render::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, m.pos);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 1.0, 0.0]; count]);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, m.col);
+    match ent.as_ref() {
+        Some((e, h)) => { if let Some(slot) = meshes.get_mut(h) { *slot = mesh; } if let Ok(mut v) = vis.get_mut(*e) { *v = Visibility::Visible; } }
+        None => {
+            let h = meshes.add(mesh);
+            let mat = mats.add(StandardMaterial { base_color: Color::WHITE, unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, double_sided: true, ..default() });
+            let e = commands.spawn((Mesh3d(h.clone()), MeshMaterial3d(mat), Transform::IDENTITY, Visibility::Visible, bevy::pbr::NotShadowCaster, bevy::render::view::NoFrustumCulling, GuideMesh)).id();
+            *ent = Some((e, h));
         }
     }
 }

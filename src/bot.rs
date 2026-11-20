@@ -274,6 +274,7 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
             for k in 0..14 { v.push(Wait(60)); v.push(Shot(Box::leak(format!("k{k:02}").into_boxed_str()))); } v.push(Quit); v }
         "n_rewind" => vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Scn(2), Wait(150), Confirm, Wait(480), Snap("antes"), Near(false, 0, 4.0), Wait(900), Shot("rw-down"), Snap("caido"), Confirm, Wait(40), Shot("rw-back"), Snap("voltou"), Wait(200), Snap("depois"), Quit],
         "n_exam" => vec![Wait(300), Exam, Wait(200), Tp(5.0, 11.0, 0.0, 0.0), Wait(120), Shot("ex-door"), Snap("exam"), Quit],
+        "n_route" => vec![Wait(300), Start(false), Wait(30), Lesson(1), Wait(20), Confirm, Wait(90), Shot("route-fp"), Tp(5.0, 12.6, 0.0, -0.42), Wait(30), Shot("route-hall"), ViewTo(View::Bird), Wait(40), Shot("route-top"), Quit],
         "n_menu" => vec![Wait(400), Shot("menu"), Screen(Mode::Scenarios), Wait(30), Shot("course"), Quit],
         "n_first" => vec![Wait(700), Shot("first"), Snap("first"), Quit],
         "t_death" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0), Wait(40)]; for k in 0..80 { v.push(Wait(8)); v.push(Shot(Box::leak(format!("d{k:02}").into_boxed_str()))); } v.push(Quit); v }

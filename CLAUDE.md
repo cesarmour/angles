@@ -5,7 +5,7 @@ Jogo didático de CQB (limpeza de cômodos) em primeira pessoa, para Mac. A idei
 - Nome do jogo: **Angles**. "Kill House" é o nome da versão (o ícone continua KILL/HOUSE).
 - Repositório: `github.com/cesarmour/angles` (público, conta pessoal).
 - Site: https://angles-kz.vercel.app · Painel de uso: https://angles-kz.vercel.app/stats.html
-- Versão publicada na data deste arquivo: 0.16.0 (assinada e notarizada pela Apple).
+- Versão publicada na data deste arquivo: 0.16.1 (assinada e notarizada pela Apple).
 
 ## Como rodar
 
@@ -87,6 +87,7 @@ cargo test --release -- --test-threads=1      # testes sem janela
 - Não trazer de volta: andares e escadas no mapa da casa, pintura no chão durante a partida (na demonstração e no replay o chão pinta de verde e vermelho, e isso fica), gizmos de linha, medidores flutuantes nas portas, painel de métricas, legenda, radar no minimapa, a refém no site.
 - Ensino (0.15): antes de cada lição o jogo mostra de cima o jeito errado e depois o certo; ao ser atingido, a câmera sai do corpo e mostra a queda em câmera lenta por cima do ombro de quem atirou (`DOWN_SECS`, `SLOWMO` em `state.rs`); no fim da partida, "What he saw" repete o tiro levado.
 - 0.16: "What he didn't see" na avaliação (melhor derrubada vista pelos olhos do alvo; `game.good`); "BACK 5 SECONDS" na tela de queda (`lessons::Rewind`, um retrato por segundo; não vale no tutorial, na defesa da casa, no mech nem no treino); a linha do abate diz quem viu quem primeiro (`seen_t` × `contact_t`); fantasma do instrutor no replay; treino de uma porta (`Kind::Drill`, cenário `DRILL`, botão no menu); primeira abertura entra direto na lição 1 (`Progress::first`).
+- O traçado ideal no chão é uma malha (`lessons::guide_system`, `GuideMesh`): faixa, chevrons cheios, anel no próximo ponto e leque de olhar. Não voltar para linhas de gizmo. Roteiro de teste: `n_route`.
 - Corpo dos invasores em movimento colide com folga de 38 cm (`THREAT_R` em `scenario.rs`); parado no posto, 28 cm. Acima de 40 cm eles passam mal pelas portas de 1,10 m.
 - Falas: uma voz de cada vez (`game.talk`) e uma mensagem de cada vez na tela (legenda, depois aviso, depois dica). A frase histórica aparece ao abrir o jogo, quando o operador cai e ao fim de cada partida; a contagem 3-2-1 só no começo da partida.
 - Preferências já decididas: modo tático ligado por padrão; lanterna desligada por padrão; operador com a voz do instrutor, mais grave; site preto, estilo militar, com o sistema de ângulo em destaque.
