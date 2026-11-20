@@ -8,7 +8,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Kind { Shield, Hallway, Threshold, Rear, Locked, Mind, Rescue, Defense, Walker }
+pub enum Kind { Shield, Hallway, Threshold, Rear, Locked, Mind, Rescue, Defense, Walker, /** Treino de uma porta: o mesmo cômodo, montado de novo a cada vez que fica limpo, por 60 segundos. */ Drill }
 
 pub struct Scenario {
     pub name: &'static str, pub kicker: &'static str, pub blurb: &'static str, pub lead: &'static str, pub points: &'static [&'static str],
@@ -16,7 +16,12 @@ pub struct Scenario {
     pub map: usize, pub kind: Kind, pub figs: bool,
 }
 
-pub const SCENARIOS: [Scenario; 9] = [
+/// Treino de uma porta: o cômodo, de onde o operador sai (x, z, direção) e quanto dura.
+pub const DRILL_ZONE: &str = "A";
+pub const DRILL_START: (f32, f32, f32) = (7.5, 5.0, -1.5708);
+pub const DRILL_SECS: f32 = 60.0;
+pub const DRILL: usize = 9;
+pub const SCENARIOS: [Scenario; 10] = [
     Scenario { name: "Hostage shield", kicker: "SCENARIO 1 · PRECISION SHOT", map: 0, kind: Kind::Shield, figs: false,
         blurb: "three threats stand behind a hostage: open the angle before you fire",
         lead: "Three of the threats in this house are holding a hostage in front of them. From the door you see a sliver of the threat and a lot of hostage.",
@@ -71,6 +76,12 @@ pub const SCENARIOS: [Scenario; 9] = [
         points: &["The cannon needs one second on you. A red CANNON LOCK warning counts it: get a shelf between you and the walker before it reaches 100%. One hit ends the run.",
             "Rounds from the front bounce off. It takes twelve from the side or the rear: break its line of sight, move, and empty the magazine while it is still turning.",
             "The escort fires in under a second and hits 95% of its shots. Deal with the men first, from cover, and never with the walker's cannon coming round to you."] },
+    Scenario { name: "One door", kicker: "DRILL · ONE DOOR, SIXTY SECONDS", map: 0, kind: Kind::Drill, figs: false,
+        blurb: "one room, set again every time you clear it: how many can you do in a minute",
+        lead: "One room, one door and sixty seconds. Every time the room is clear it is set again, with the threats somewhere else, and you are back outside.",
+        points: &["Slice from outside, take the shot from the angle, step in only for the corners you could not see.",
+            "Each cleared room is 10 points. A hit taken costs 5 and a hostage hit costs 10.",
+            "There is nothing to memorise: the positions change every round."] },
 ];
 /// Quantos tiros pelos lados ou por trás derrubam o mech, e os dois pontos entre os quais ele patrulha (no galpão).
 pub const MECH_HP: u8 = 12;
@@ -221,6 +232,13 @@ pub fn setup(i: usize, game: &mut Game, p: &mut Player, level: &Level, targets: 
                 else if t.def.kind == TKind::Threat && !t.def.passive && t.def.zone == "W" {}
                 else if !t.def.passive || t.def.kind == TKind::Civil { t.off = true; t.alive = false; t.fall = 1.0; t.landed = true; }
             }
+        }
+        Kind::Drill => {
+            // só o cômodo do treino fica montado; o operador começa do lado de fora da porta dele
+            for t in targets.list.iter_mut() { if t.def.zone != DRILL_ZONE && !t.off { t.off = true; t.alive = false; t.fall = 1.0; t.landed = true; } }
+            let (x, z, yaw) = DRILL_START;
+            p.pos = Vec2::new(x, z); p.yaw = yaw; p.eye = Vec3::new(x, crate::map::EYE_STAND, z); p.zone = zone_at(x, z).unwrap_or(0);
+            game.scn_t = DRILL_SECS;
         }
         Kind::Hallway | Kind::Threshold => {}
     }
@@ -513,6 +531,44 @@ pub fn scenario_system(
                     }
                 }
             }
+        }
+        /* ---------- treino de uma porta: o cômodo é montado de novo a cada vez que fica limpo ---------- */
+        Some(Kind::Drill) if !dying => {
+            game.scn_t -= dt;
+            if game.scn_t <= 0.0 {
+                if !game.debriefed { game.won = true; game.mode = Mode::Debrief; game.debriefed = true; game.ui_dirty = true; sfx.write(Sfx::Good); }
+            } else if !targets.list.iter().any(|t| !t.off && t.hostile()) {
+                game.lesson_end += dt;
+                if game.lesson_end > 0.6 {
+                    game.lesson_end = 0.0; game.scn_a += 1; game.wounds = 0;
+                    let (x, z, yaw) = DRILL_START;
+                    let start = Vec2::new(x, z);
+                    level.reset();
+                    // vagas do cômodo em ordem sorteada; primeiro as que não têm linha de tiro para o ponto de partida
+                    let mut zs: Vec<Slot> = slots().iter().filter(|s| s.0 == DRILL_ZONE).copied().collect();
+                    let mut seed = (game.time * 1000.0) as u32 ^ (game.scn_a * 7919) | 1;
+                    let mut rnd = move || { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; seed };
+                    for i in (1..zs.len()).rev() { let j = (rnd() as usize) % (i + 1); zs.swap(i, j); }
+                    zs.sort_by_key(|s| level.los(s.1, s.2, 1.4, start.x, start.y, 1.5) as u8);
+                    let mut k = 0;
+                    for t in targets.list.iter_mut() {
+                        if t.off { continue; }
+                        for m in t.marks.drain(..) { commands.entity(m).despawn(); }
+                        if !t.def.passive && !zs.is_empty() { let s = zs[k % zs.len()]; k += 1; t.def.x = s.1; t.def.z = s.2; t.def.fx = s.3; t.def.fz = s.4; }
+                        crate::combat::place_target(&level, t);
+                        t.clear_run(); t.off = false;
+                        if let Ok(mut tf) = roots.get_mut(t.root) { tf.translation = Vec3::new(t.def.x, 0.0, t.def.z); tf.rotation = Quat::from_rotation_y((t.def.fx - t.def.x).atan2(t.def.fz - t.def.z)); }
+                    }
+                    let w = p.weapon;
+                    *p = Player::with_weapon(w);
+                    p.pos = start; p.yaw = yaw; p.eye = Vec3::new(x, crate::map::EYE_STAND, z); p.zone = zone_at(x, z).unwrap_or(0);
+                    game.tac_reset = true;
+                    let msg = format!("Room clear · {} done · set again", game.scn_a);
+                    game.toast(&msg, 1, 1.6);
+                    if std::env::var("CQB_SCRIPT").is_ok() { println!("BOT TREINO rodada {} t_resta={:.1}", game.scn_a, game.scn_t); }
+                    sfx.write(Sfx::Good); game.ui_dirty = true;
+                }
+            } else { game.lesson_end = 0.0; }
         }
         /* ---------- resgate contra o relógio ---------- */
         Some(Kind::Rescue) if !dying => {
@@ -1173,6 +1229,7 @@ pub fn grenade_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, l
 pub fn final_score(game: &Game, targets: &Targets) -> i32 {
     if is(game, Kind::Defense) { return ((game.stats.threats_down * 100) as f32 / invaders_total() as f32).round().min(100.0) as i32; }
     let s = &game.stats;
+    if is(game, Kind::Drill) { return (game.scn_a as i32 * 10 - s.hits_taken as i32 * 5 - s.civ_hit as i32 * 10).clamp(0, 100); }
     let left = if is(game, Kind::Rescue) { 0 } else { targets.list.iter().filter(|t| t.def.kind == TKind::Threat && !t.def.passive && !t.off && t.hostile()).count() as i32 };
     (game.base_score().round() as i32 - s.civ_hit as i32 * 20 - s.hits_taken as i32 * 10 - s.failed as i32 * 5 - left * 8 + game.scn_adj).clamp(0, 100)
 }

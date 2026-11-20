@@ -137,7 +137,7 @@ pub fn update_lessons(time: Res<Time>, mut game: ResMut<Game>, mut tac: ResMut<T
     let dt = time.delta_secs().min(0.05);
     if game.free {
         // defesa da casa e resgate terminam pelas regras do próprio cenário
-        if matches!(crate::scenario::kind(&game), Some(crate::scenario::Kind::Defense) | Some(crate::scenario::Kind::Rescue)) { return; }
+        if matches!(crate::scenario::kind(&game), Some(crate::scenario::Kind::Defense) | Some(crate::scenario::Kind::Rescue) | Some(crate::scenario::Kind::Drill)) { return; }
         if !game.debriefed && targets.list.iter().all(|t| t.def.kind != TKind::Threat || !t.alive || t.mind == MIND_YIELDED) {
             game.lesson_end += dt;
             if game.lesson_end > 1.5 { game.mode = Mode::Debrief; game.debriefed = true; game.ui_dirty = true; sfx.write(Sfx::Good); }
@@ -210,6 +210,26 @@ pub fn replay_system(time: Res<Time>, mut game: ResMut<Game>, mut tac: ResMut<Ta
         let r = Vec2::new(-(s.2 - 0.87).sin(), -(s.2 - 0.87).cos());
         gz.line(v3(s.1), v3(s.1 + l * 2.2), Color::srgba(0.38, 0.84, 0.91, 0.5));
         gz.line(v3(s.1), v3(s.1 + r * 2.2), Color::srgba(0.38, 0.84, 0.91, 0.5));
+    }
+    // o fantasma do instrutor: o traçado ideal da lição e um círculo que o percorre no mesmo tempo do replay, para o
+    // aluno comparar onde ele estava com onde devia estar
+    let pts: Vec<Vec2> = ideal_points(game.lesson.min(5)).iter().map(|q| q.0).collect();
+    if pts.len() >= 2 {
+        let ghost = Color::srgb(0.38, 0.84, 0.91);
+        let total: f32 = pts.windows(2).map(|w| w[0].distance(w[1])).sum();
+        let mut left = total * (game.replay_t / REPLAY_SECS).clamp(0.0, 1.0);
+        let (mut at, mut dir) = (pts[0], Vec2::ZERO);
+        for w in pts.windows(2) {
+            let l = w[0].distance(w[1]);
+            // traçado tracejado
+            let n = (l / 0.3).ceil().max(1.0) as usize;
+            for k in (0..n).step_by(2) { gz.line(v3(w[0].lerp(w[1], k as f32 / n as f32)), v3(w[0].lerp(w[1], (k + 1) as f32 / n as f32)), Color::srgba(0.38, 0.84, 0.91, 0.55)); }
+            if left >= 0.0 && l > 1e-4 { if left <= l { at = w[0].lerp(w[1], left / l); dir = (w[1] - w[0]) / l; left = -1.0; } else { left -= l; at = w[1]; dir = (w[1] - w[0]) / l; } }
+        }
+        let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+        gz.circle(Isometry3d::new(v3(at), flat), 0.28, ghost);
+        gz.circle(Isometry3d::new(v3(at), flat), 0.2, ghost);
+        gz.line(v3(at), v3(at + dir * 0.7), ghost);
     }
     if game.replay_t > REPLAY_SECS + 1.5 || (c.confirm && game.replay_t > 0.3) {
         let next = game.replay_next;
@@ -503,8 +523,10 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
     // espaço morto: a Sala C da casa do tutorial; nos outros mapas, a casa inteira vista (há estantes e armários altos em todos)
     if (map_index() == 0 && tac.pct[6] >= 0.95) || (map_index() != 0 && (0..zones().len()).all(|z| tac.pct[z] >= 0.95)) { earn.push(8); }
     if !game.free && game.lesson >= 1 && game.lesson_end > 0.0 && game.lroute_t > 3.0 && game.lroute_sum / game.lroute_t <= 0.25 { earn.push(9); }
+    // o badge espera a linha da derrubada sair da tela (uma mensagem de cada vez)
+    let busy = game.coach.as_ref().map_or(false, |c| c.1 == 4);
     for i in earn {
-        if game.badges & (1 << i) == 0 {
+        if game.badges & (1 << i) == 0 && !busy {
             game.badges |= 1 << i;
             let msg = format!("BADGE EARNED · {} · {}", BADGES[i].0, BADGES[i].1);
             game.toast(&msg, 3, 5.5);
@@ -589,7 +611,7 @@ pub fn coach_system(time: Res<Time>, mut game: ResMut<Game>, p: Res<Player>, tac
 
     if let Some((k, msg)) = warn {
         if game.coach_cd <= 0.0 && st.kind_cd[k] <= 0.0 {
-            game.coach = Some((msg, 2, 5.5)); game.coach_cd = 3.5; st.kind_cd[k] = 9.0; game.warns[k] += 1; game.ui_dirty = true;
+            if !exam() { game.coach = Some((msg, 2, 5.5)); } game.coach_cd = 3.5; st.kind_cd[k] = 9.0; game.warns[k] += 1; game.ui_dirty = true;
             sfx.write(Sfx::Ui);
         }
     }
@@ -607,6 +629,24 @@ pub struct DemoSnap(pub Option<Box<Snap>>);
 /// Ponto de retomada do tutorial: o estado no começo da lição atual. `retry` pede para voltar a ele (botão "TRY AGAIN").
 #[derive(Resource, Default)]
 pub struct Checkpoint { pub snap: Option<Box<Snap>>, pub retry: bool }
+
+/// O que o ponto de retomada do tutorial não guarda e a volta no tempo precisa: onde cada alvo estava e o que ele
+/// estava fazendo (invasores andam pela casa).
+#[derive(Clone)]
+struct TFull { def: TargetDef, fwd: Vec2, ai: Brain, hunter: bool, alert: f32, pend: f32, mind: u8, mind_t: f32, off: bool, rise: f32, leave: f32, via: u8 }
+/// Volta no tempo depois da queda ("BACK 5 SECONDS"): um retrato da partida por segundo, guardados os últimos nove.
+/// Quem cai volta para alguns segundos antes do tiro, na mesma porta, em vez de refazer a etapa inteira.
+#[derive(Resource, Default)]
+pub struct Rewind { ring: VecDeque<(f32, Box<Snap>, Vec<TFull>)>, last: f32, pub req: bool }
+impl Rewind { pub fn ready(&self) -> bool { self.ring.len() >= 2 } }
+/// Quanto a partida volta, e quanto isso custa na nota do cenário.
+pub const REWIND_SECS: f32 = 5.0;
+pub const REWIND_COST: i32 = 10;
+/// Onde a volta no tempo vale: cenários e percurso livre. O tutorial já volta ao começo da lição; a defesa da casa e o
+/// mech guardam estado demais fora do retrato (ondas, patrulha).
+pub fn rewind_ok(game: &Game) -> bool {
+    game.free && !game.demo && !matches!(crate::scenario::kind(game), Some(crate::scenario::Kind::Defense | crate::scenario::Kind::Walker | crate::scenario::Kind::Drill))
+}
 
 fn take_snap(game: &Game, p: &Player, tac: &Tac, level: &Level, targets: &Targets) -> Snap {
     Snap {
@@ -630,7 +670,7 @@ fn put_snap(s: Snap, game: &mut Game, p: &mut Player, tac: &mut Tac, level: &mut
 }
 
 /// Guarda o ponto de retomada quando uma lição começa e volta a ele quando o jogador pede para tentar de novo.
-pub fn checkpoint_system(mut game: ResMut<Game>, mut p: ResMut<Player>, mut tac: ResMut<Tac>, mut level: ResMut<Level>, mut targets: ResMut<Targets>, mut ck: ResMut<Checkpoint>, mut commands: Commands) {
+pub fn checkpoint_system(mut game: ResMut<Game>, mut p: ResMut<Player>, mut tac: ResMut<Tac>, mut level: ResMut<Level>, mut targets: ResMut<Targets>, mut ck: ResMut<Checkpoint>, mut rw: ResMut<Rewind>, mut commands: Commands) {
     // cada lição do tutorial começa do ponto dela: o operador volta para a entrada do trecho, as portas fecham, os alvos
     // desta lição e das seguintes voltam inteiros e os das lições anteriores ficam caídos (ninguém atira pelas costas).
     // Sem isso, quem avançava pela casa durante uma lição encontrava a seguinte já resolvida ou impossível.
@@ -655,6 +695,42 @@ pub fn checkpoint_system(mut game: ResMut<Game>, mut p: ResMut<Player>, mut tac:
     if game.ckpt_req && !game.demo {
         game.ckpt_req = false;
         ck.snap = if game.free { None } else { Some(Box::new(take_snap(&game, &p, &tac, &level, &targets))) };
+    }
+    if game.tac_reset { game.tac_reset = false; tac.reset(); }
+    // volta no tempo: um retrato por segundo enquanto a partida corre
+    if game.mode == Mode::Play && rewind_ok(&game) && game.down_t <= 0.0 {
+        if game.time < rw.last { rw.ring.clear(); }
+        if rw.ring.is_empty() || game.time - rw.last >= 1.0 {
+            rw.last = game.time;
+            let full = targets.list.iter().map(|t| TFull { def: t.def, fwd: t.fwd, ai: t.ai.clone(), hunter: t.hunter, alert: t.alert, pend: t.pend, mind: t.mind, mind_t: t.mind_t, off: t.off, rise: t.rise, leave: t.leave, via: t.via }).collect();
+            let snap = Box::new(take_snap(&game, &p, &tac, &level, &targets));
+            rw.ring.push_back((game.time, snap, full));
+            while rw.ring.len() > 9 { rw.ring.pop_front(); }
+        }
+    } else if matches!(game.mode, Mode::Menu | Mode::Card | Mode::Debrief) && !rw.ring.is_empty() { rw.ring.clear(); rw.last = 0.0; }
+    if rw.req {
+        rw.req = false;
+        let want = game.time - REWIND_SECS;
+        let k = rw.ring.iter().rposition(|s| s.0 <= want).unwrap_or(0);
+        if let Some((_, s, full)) = rw.ring.get(k).cloned() {
+            if full.len() == targets.list.len() {
+                for (t, f) in targets.list.iter_mut().zip(full.iter()) {
+                    t.def = f.def; t.ai = f.ai.clone(); t.hunter = f.hunter; t.pend = f.pend; t.mind = f.mind; t.mind_t = f.mind_t; t.off = f.off; t.rise = f.rise; t.leave = f.leave; t.via = f.via;
+                }
+                put_snap(*s, &mut game, &mut p, &mut tac, &mut level, &mut targets, &mut commands);
+                for (t, f) in targets.list.iter_mut().zip(full.iter()) {
+                    t.fwd = f.fwd;
+                    // quem caça o operador continua caçando; os outros esquecem que o viram
+                    if f.hunter { t.alert = f.alert; }
+                    commands.entity(t.root).insert(Transform::from_xyz(t.def.x, crate::map::ramp_h(t.def.x, t.def.z), t.def.z).with_rotation(Quat::from_rotation_y(f.fwd.x.atan2(f.fwd.y))));
+                }
+                game.wounds = 0; game.foe = None; game.foe_kill = false; game.hit_t = 0.0; game.dmg_t = 0.0;
+                if game.scn.is_some() { game.scn_adj -= REWIND_COST; }
+                game.toast("Back to five seconds before the shot. Same door: do it differently.", 1, 4.5);
+                game.ui_dirty = true;
+            }
+        }
+        rw.ring.clear(); rw.last = game.time;
     }
     if ck.retry {
         ck.retry = false;

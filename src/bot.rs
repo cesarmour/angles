@@ -17,6 +17,8 @@ pub enum Cmd {
     WaitClimb,
     /// Espera um invasor começar a fatiar uma porta (parado ao lado do batente); assusta todos os invasores vivos (motivo 1, 2 ou 3).
     WaitSlice, Scare(u8),
+    /// Abre a prova final (etapa 10): a casa de treino com oposição, sem arco.
+    Exam,
     /// Vai para a frente do n-ésimo refém (true) ou da n-ésima ameaça (false), à distância dada, olhando para ele.
     Near(bool, usize, f32),
 }
@@ -264,6 +266,16 @@ pub fn setup_bot(mut bot: ResMut<Bot>, mut time: ResMut<Time<Virtual>>) {
             Quiz(4), Wait(20), Shot("t-quiz4"), QuizAns(1), Wait(20), Shot("t-quiz4-right"), Quiz(2), Wait(20), Shot("t-quiz2"), Quit],
         "teach_foe" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0)]; for k in 0..34 { v.push(Wait(36)); v.push(Shot(["f00","f01","f02","f03","f04","f05","f06","f07","f08","f09","f10","f11","f12","f13","f14","f15","f16","f17","f18","f19","f20","f21","f22","f23","f24","f25","f26","f27","f28","f29","f30","f31","f32","f33"][k])); } v.push(Quit); v }
         // animações: queda vista dos olhos de quem atirou, queda com a câmera alta e o coice dos invasores de perto
+        // 0.16: treino de uma porta, vantagem em segundos e "what he didn't see", volta de 5 s, prova sem arco, menu e primeira abertura
+        "n_drill" => { let mut v = vec![Wait(300), Scn(crate::scenario::DRILL), Wait(150), Confirm, Wait(40), Shot("dr0")];
+            for k in 0..14 { v.extend([Near(false, 0, -2.5), Wait(15), Fire, Wait(12), Fire, Wait(12), Fire, Wait(30)]); if k == 1 { v.push(Shot("dr1")); } }
+            v.extend([Shot("dr2"), Snap("drill"), Quit]); v }
+        "n_kill" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0), Wait(6), Fire, Wait(10), Fire, Wait(10), Fire, Wait(10), Fire, Wait(40), Shot("k-coach"), Screen(Mode::Debrief), Wait(60)];
+            for k in 0..14 { v.push(Wait(60)); v.push(Shot(Box::leak(format!("k{k:02}").into_boxed_str()))); } v.push(Quit); v }
+        "n_rewind" => vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Scn(2), Wait(150), Confirm, Wait(480), Snap("antes"), Near(false, 0, 4.0), Wait(900), Shot("rw-down"), Snap("caido"), Confirm, Wait(40), Shot("rw-back"), Snap("voltou"), Wait(200), Snap("depois"), Quit],
+        "n_exam" => vec![Wait(300), Exam, Wait(200), Tp(5.0, 11.0, 0.0, 0.0), Wait(120), Shot("ex-door"), Snap("exam"), Quit],
+        "n_menu" => vec![Wait(400), Shot("menu"), Screen(Mode::Scenarios), Wait(30), Shot("course"), Quit],
+        "n_first" => vec![Wait(700), Shot("first"), Snap("first"), Quit],
         "t_death" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0), Wait(40)]; for k in 0..80 { v.push(Wait(8)); v.push(Shot(Box::leak(format!("d{k:02}").into_boxed_str()))); } v.push(Quit); v }
         "t_foe2" => { let mut v = vec![Wait(300), Map(1), Wait(120), Diff(1), Wait(90), Start(true), Wait(150), Near(false, 2, 4.0), Wait(260), Screen(Mode::Debrief), Wait(225)]; for k in 0..24 { v.push(Wait(12)); v.push(Shot(Box::leak(format!("g{k:02}").into_boxed_str()))); } v.push(Quit); v }
         "t_chase" => { let mut v = vec![Wait(300), Start(true), Wait(150), Tp(10.0, 9.0, 1.0, 0.0), Wait(30), Die]; for k in 0..22 { v.push(Wait(6)); v.push(Shot(Box::leak(format!("c{k:02}").into_boxed_str()))); } v.push(Quit); v }
@@ -453,6 +465,7 @@ println!("BOT MOVE {name}: mudaram={:?} andando={:?} limpos={:#b} de {}", target
         Cmd::OpenDoor(i) => { if level.doors[i].open < 0.5 && !level.doors[i].opening { c.interact = true; } done = true; }
         Cmd::DemoOf(l) => { game.lesson = l; game.obj = vec![0; crate::lessons::LESSONS[l].objs.len()]; game.mode = Mode::Card; game.demo_req = true; game.ui_dirty = true; done = true; }
         Cmd::Map(i) => { mapreq.0 = Some(i); done = true; }
+        Cmd::Exam => { set_exam(true); set_difficulty(1); set_force_figs(true); if crate::map::map_index() != 0 || figs_built() != want_figs() { mapreq.0 = Some(0); } reset.write(ResetGame { free: true, mission2: false, scn: None }); done = true; }
         // o mesmo que o botão do cenário na tela SCENARIOS
         Cmd::Scn(i) => {
             let sc = &crate::scenario::SCENARIOS[i];

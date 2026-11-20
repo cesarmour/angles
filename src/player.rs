@@ -374,7 +374,11 @@ pub fn update_cameras(
             if best.1 < 0.85 { let q = s + d * 0.5; return (Vec3::new(q.x, 1.6, q.y), Vec3::new(o.x, 1.05 - 0.55 * drop, o.y)); }
             (Vec3::new(best.0.x, 1.72, best.0.y), Vec3::new(o.x, 1.05 - 0.55 * drop, o.y))
         };
-        if let Some(fo) = &foe {
+        if let (Some(fo), true) = (&foe, game.showing_good()) {
+            // "o que ele não viu": a câmera fica nos olhos dele, com um pouco de aproximação; do operador aparece só a lasca
+            *tf = Transform::from_translation(fo.eye).looking_at(Vec3::new(fo.pos.x, 1.25, fo.pos.y), Vec3::Y);
+            if let Projection::Perspective(pp) = proj.as_mut() { pp.fov = 0.62; }
+        } else if let Some(fo) = &foe {
             let (from, look) = shoulder(Vec2::new(fo.eye.x, fo.eye.z), fo.pos, 0.0);
             *tf = Transform::from_translation(from).looking_at(look, Vec3::Y);
             if let Projection::Perspective(pp) = proj.as_mut() { pp.fov = 0.86; }

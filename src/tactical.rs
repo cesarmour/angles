@@ -264,7 +264,7 @@ pub fn tac_update(
         // quem está inclinado na quina aparece pela cabeça, não pelo pé
         let hp = tp + t.lean_at(1.4);
         t.vis = (wedge.sees(eye, tp, 0.05) && level.los(eye.x, eye.y, eye_h, tp.x, tp.y, 1.3)) || (hp != tp && wedge.sees(eye, hp, 0.05) && level.los(eye.x, eye.y, eye_h, hp.x, hp.y, 1.5));
-        if t.vis { t.seen = true; }
+        if t.vis { if !t.seen { t.seen_t = game.time; } t.seen = true; }
     }
     if let Some(z) = tac.corner_zone {
         for k in level.corners.iter_mut().filter(|k| k.zone == z && !k.seen) { if wedge.sees(eye, Vec2::new(k.x, k.z), 0.05) { k.seen = true; } }

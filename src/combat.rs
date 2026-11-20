@@ -81,7 +81,7 @@ pub fn spawn_targets(commands: &mut Commands, art: &TargetArt, level: &Level) ->
         }
         commands.entity(root).add_child(pivot);
         let mut t = TargetState {
-            def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
+            def: *def, alive: true, fall: 0.0, hits: 0, seen: false, vis: false, react: 0.0, seen_t: 0.0, contact: false, contact_t: 0.0, first_facing: None, fwd,
             fall_dir: -1.0, fall_max: 1.5, pivot, board: bd, mask: i, marks: Vec::new(), fall_v: 0.0, sw: 0.0, swv: 0.0, landed: false, root, off: false,
             goal: None, wait: 0.0, moving: false, stuck: 0.0, moved: 0, move_cd: 0.0, alert: 0.0, notice: 0.0, engaged: false, hunter: false, pend: 0.0, mind: MIND_NONE, mind_t: 0.0, shield: false, captor: false, alt: false, rise: 0.0, leave: 0.0, via: 0, ai: Brain::default(),
         };
@@ -415,7 +415,18 @@ pub fn combat(
                             if t.hunter && t.first_facing != Some(false) && crate::scenario::is(&game, crate::scenario::Kind::Rear) { game.scn_b += 1; }
                             if !t.def.passive && !game.demo {
                                 let k = crate::lessons::kill_metrics(&level, &p, t, game.time, one_shot);
-                                game.coach = Some((format!("Threat down · slice angle {}° · body exposed {} cm · {:.1} s in its line of fire · {} pts", k.angle.round() as i32, k.expo_cm.round() as i32, k.dt, k.pts.round() as i32), 4, 5.0));
+                                // a vantagem que o ângulo deu, em segundos: quem viu quem primeiro
+                                let seen_t = if t.seen { t.seen_t } else { game.time };
+                                let lead = if !t.contact { "He never saw you".to_string() } else {
+                                    let d = t.contact_t - seen_t;
+                                    if d >= 0.05 { format!("You saw him {:.1} s first", d) } else if d <= -0.05 { format!("He saw you {:.1} s first", -d) } else { "You saw each other at the same time".to_string() }
+                                };
+                                game.coach = Some((format!("{} · {} cm of you in his sight · {} pts", lead, k.expo_cm.round() as i32, k.pts.round() as i32), 4, 5.0));
+                                // guarda a melhor derrubada (pouco corpo à mostra) para a tela "o que ele não viu"
+                                if !mech && (k.expo_cm <= 25.0 || std::env::var("CQB_GOOD").is_ok()) && p.pos.distance(Vec2::new(t.def.x, t.def.z)) >= 2.0 && game.good.as_ref().map_or(true, |g| k.pts > g.2) {
+                                    let l = t.lean_at(1.55);
+                                    game.good = Some((Foe { who: ti, eye: Vec3::new(t.def.x + l.x, 1.55, t.def.z + l.y), pos: p.pos, yaw: p.yaw, lean: p.lean, crouch: p.crouching, seen_for: 0.0, looking: t.contact }, k.expo_cm, k.pts));
+                                }
                                 game.kills.push(k); game.ui_dirty = true;
                             }
                             // derrubada antes de o contato ser avaliado: quem atirou viu primeiro

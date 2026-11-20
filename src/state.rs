@@ -84,18 +84,27 @@ pub struct Game {
     pub foe_kill: bool,
     /// Pergunta rápida entre as etapas: (qual pergunta, resposta escolhida).
     pub quiz: Option<(usize, Option<usize>)>,
+    /// "O que ele não viu": retrato da melhor derrubada da partida (olhos do alvo, como o operador estava) e quantos
+    /// centímetros de corpo apareciam; `good_t` é o tempo que resta dessa tela.
+    pub good: Option<(Foe, f32, f32)>, pub good_t: f32,
+    /// Pedido para esquecer o que já foi visto (o treino de uma porta monta o cômodo de novo a cada rodada).
+    pub tac_reset: bool,
 }
 /// Retrato do último tiro levado: olhos de quem atirou, posição e direção do operador, e há quanto tempo ele estava à vista.
 #[derive(Clone, Debug)]
 pub struct Foe { /** Qual alvo atirou (índice na lista). */ pub who: usize, pub eye: Vec3, pub pos: Vec2, pub yaw: f32, pub lean: f32, pub crouch: bool, pub seen_for: f32, pub looking: bool }
 /// O que já foi mostrado ao jogador nesta sessão (não volta ao reiniciar a partida): demonstrações e perguntas.
 #[derive(Resource, Default)]
-pub struct Teach { pub demo_seen: u32, pub quiz_seen: u32, pub quiz_n: usize, pub quiz_req: bool }
+pub struct Teach { pub demo_seen: u32, pub quiz_seen: u32, pub quiz_n: usize, pub quiz_req: bool, /** Perguntas já feitas nesta sessão (um bit por pergunta). */ pub quiz_asked: u32 }
 /// Dificuldade escolhida no menu: 0 = EASY (alvos IPSC de papelão, sem bonecos; o alvo não vira nem anda, o tiro levado é só
 /// simulado e não encerra a partida), 1 = NORMAL, 2 = HARD (ameaças atiram 50% mais rápido e acertam 95% dos disparos).
 static DIFF: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
 pub fn difficulty() -> u8 { DIFF.load(std::sync::atomic::Ordering::Relaxed) }
 pub fn set_difficulty(d: u8) { DIFF.store(d.min(2), std::sync::atomic::Ordering::Relaxed); }
+/// Prova final do curso: a casa de treino sem o arco, sem a rota e sem os avisos do instrutor.
+static EXAM: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn exam() -> bool { EXAM.load(std::sync::atomic::Ordering::Relaxed) }
+pub fn set_exam(on: bool) { EXAM.store(on, std::sync::atomic::Ordering::Relaxed); }
 /// Cenários com alvos que andam ou se rendem pedem bonecos mesmo no nível EASY; `figs_built` diz como os alvos em cena foram montados.
 static FORCE_FIGS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FIGS_BUILT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -128,7 +137,7 @@ impl Default for Game {
             demo: false, demo_req: false, demo_end: false, demo_idle: 0.0, guide_i: 0, guide: 1, guide_t: 0.0, hide_box: false,
             kills: Vec::new(), route_sum: 0.0, route_t: 0.0, lroute_sum: 0.0, lroute_t: 0.0, odds: 100.0, odds_route: 100.0, odds_angle: 100.0, badges: 0, expo_now: 0.0, expo_total: 0.0, coach: None, coach_cd: 0.0, warns: [0; 6], flag_flash: false, cleared: 0, rooms: 0, stamp: String::new(), stamp_t: 0.0, wounds: 0, down_t: 0.0, down_why: String::new(), ckpt_req: false,
             scn: None, scn_t: 0.0, scn_adj: 0, scn_a: 0, scn_b: 0, down_title: String::new(), won: false, passes: 0, outside_kills: 0, locked: [false; MAX_DOORS], breach: None,
-            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None, third: std::env::var("CQB_THIRD").is_ok(), naming: false, talk: 0.0, quote_i: 0, quote_t: 0.0, ready_t: 0.0, demo_phase: 0, foe: None, foe_t: 0.0, foe_kill: false, quiz: None }
+            wave: 0, wave_kills: 0, fade_t: 0.0, portal_cd: 0.0, rank: None, ranked: false, lock: 0.0, nade: None, fell: Vec::new(), nade_req: Vec::new(), sub: None, third: std::env::var("CQB_THIRD").is_ok(), naming: false, talk: 0.0, quote_i: 0, quote_t: 0.0, ready_t: 0.0, demo_phase: 0, foe: None, foe_t: 0.0, foe_kill: false, quiz: None, good: None, good_t: 0.0, tac_reset: false }
     }
 }
 /// Uma ameaça derrubada: ângulo da fatia (graus entre o alvo e a borda mais próxima do que o encobria), largura do corpo
@@ -157,6 +166,8 @@ impl Game {
     pub fn kill_score(&self) -> Option<f32> { if self.kills.is_empty() { None } else { Some(self.kills.iter().map(|k| k.pts).sum::<f32>() / self.kills.len() as f32) } }
     /// Nota-base do percurso, antes das penalidades: 40% traçado, 60% ângulo e exposição nas derrubadas.
     pub fn base_score(&self) -> f32 { match (self.route_score(), self.kill_score()) { (Some(r), Some(k)) => 0.4 * r + 0.6 * k, (None, Some(k)) => k, (Some(r), None) => r, _ => 100.0 } }
+    /// A tela "what he didn't see" está no ar (usa a mesma câmera e o mesmo relógio de "what he saw").
+    pub fn showing_good(&self) -> bool { self.good_t > 0.0 && self.foe_t > 0.0 }
     pub fn toast(&mut self, msg: &str, kind: u8, ttl: f32) { self.toast = Some((msg.to_string(), kind, ttl)); self.ui_dirty = true; }
 }
 
@@ -252,7 +263,7 @@ pub struct Brain {
 
 pub struct TargetState {
     pub def: TargetDef, pub alive: bool, pub fall: f32, pub hits: u8, pub seen: bool, pub vis: bool, pub react: f32,
-    pub contact: bool, pub contact_t: f32, pub first_facing: Option<bool>, pub fwd: Vec2, pub fall_dir: f32, pub fall_max: f32,
+    /** Quando o operador viu este alvo pela primeira vez. */ pub seen_t: f32, pub contact: bool, pub contact_t: f32, pub first_facing: Option<bool>, pub fwd: Vec2, pub fall_dir: f32, pub fall_max: f32,
     pub pivot: Entity, pub board: Entity, pub mask: usize, pub marks: Vec<Entity>, pub fall_v: f32, pub sw: f32, pub swv: f32, pub landed: bool, pub root: Entity, pub off: bool,
     /// Ameaça que troca de posição dentro do cômodo: vaga de destino (índice em `slots()`), espera antes de sair, se está
     /// andando, tempo sem conseguir avançar, quantas vezes já se mudou e intervalo até poder se mudar de novo.
@@ -275,7 +286,7 @@ impl TargetState {
     pub fn hostile(&self) -> bool { self.alive && !self.off && !self.def.passive && self.def.kind == TKind::Threat && self.mind != MIND_YIELDED }
     /// Zera o que é próprio de cada partida.
     pub fn clear_run(&mut self) {
-        self.alive = true; self.fall = 0.0; self.fall_v = 0.0; self.sw = 0.0; self.swv = 0.0; self.landed = false; self.hits = 0; self.seen = false; self.vis = false; self.react = 0.0;
+        self.alive = true; self.fall = 0.0; self.fall_v = 0.0; self.sw = 0.0; self.swv = 0.0; self.landed = false; self.hits = 0; self.seen = false; self.seen_t = 0.0; self.vis = false; self.react = 0.0;
         self.contact = false; self.first_facing = None; self.goal = None; self.wait = 0.0; self.moving = false; self.stuck = 0.0; self.moved = 0; self.move_cd = 0.0;
         self.alert = 0.0; self.notice = 0.0; self.engaged = false; self.hunter = false; self.pend = 0.0; self.mind = MIND_NONE; self.mind_t = 0.0; self.shield = false; self.captor = false; self.alt = false; self.rise = 0.0; self.leave = 0.0; self.via = 0;
         self.ai = Brain::default();

@@ -324,7 +324,7 @@ pub fn body_system(time: Res<Time>, game: Res<Game>, mut commands: Commands, glt
             continue;
         }
         // "o que o adversário viu" depois de uma partida em que o operador levou tiro e seguiu: o tranco do tiro, uma vez
-        if game.foe_t > 0.0 {
+        if game.foe_t > 0.0 && !game.showing_good() {
             if a.mode != 21 { a.mode = 21; a.recoil = 0.0; if let Some(n) = a.hit { tr.play(&mut pl, n, Duration::from_millis(80)); } }
             continue;
         }

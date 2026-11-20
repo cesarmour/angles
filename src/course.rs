@@ -4,7 +4,7 @@
 use crate::state::*;
 use bevy::prelude::*;
 
-pub enum What { Tutorial, Scn(usize) }
+pub enum What { Tutorial, Scn(usize), /** A casa de treino inteira, com oposição, sem o arco nem a rota. */ Exam }
 pub struct Stage {
     /// Fase (0 a 4), título, o que ensina (uma frase), o conteúdo (lições ou um cenário), tipo de alvo
     /// (0 = papelão, 1 = oposição que reage) e arma (0 = pistola, 1 = carabina).
@@ -17,7 +17,7 @@ pub const PHASES: [(&str, &str); 5] = [
     ("OPPOSITION", "the targets become people who think, and some of them must not be shot"),
     ("FINAL EXAM", "everything at once, against a team that slices doorways and learns from its losses"),
 ];
-pub const STAGES: [Stage; 9] = [
+pub const STAGES: [Stage; 10] = [
     Stage { phase: 0, title: "Fundamentals", teaches: "Six lessons against cardboard. Each one names a mistake, shows it from above, then has you do it the right way.", what: What::Tutorial, diff: 0, weapon: 0 },
     Stage { phase: 1, title: "Threshold", teaches: "The mistake: stepping into a small room to look around. Clear it from the door; step in only for the corner you could not see.", what: What::Scn(2), diff: 0, weapon: 0 },
     Stage { phase: 1, title: "Clean shot", teaches: "The mistake: hurrying the trigger with a hostage in the way. Step sideways until the angle gives you only the threat.", what: What::Scn(0), diff: 0, weapon: 0 },
@@ -27,19 +27,26 @@ pub const STAGES: [Stage; 9] = [
     Stage { phase: 3, title: "Second look", teaches: "The mistake: deciding early. Some armed people give up, and some raised hands are waiting. Identify at the moment of the shot.", what: What::Scn(5), diff: 1, weapon: 1 },
     Stage { phase: 3, title: "Hostage rescue", teaches: "The mistake: clearing everything while the clock runs. One hostage, one captor: open only the angles that are on your way.", what: What::Scn(6), diff: 1, weapon: 1 },
     Stage { phase: 4, title: "Home defense", teaches: "The mistake: holding one good spot. Five waves slice your doorways, fire through the OSB and learn the door that hurt them.", what: What::Scn(7), diff: 1, weapon: 1 },
+    Stage { phase: 4, title: "No bar", teaches: "The exam: the whole kill house against people who shoot back, with no bar, no route and no coach. What you learned has to be in your feet by now.", what: What::Exam, diff: 1, weapon: 1 },
 ];
 
 /// Progresso do aluno: quantas etapas já venceu (a seguinte fica destravada) e a etapa em curso.
 #[derive(Resource)]
-pub struct Progress { pub done: usize, pub current: Option<usize>, counted: bool, path: Option<std::path::PathBuf> }
+pub struct Progress { pub done: usize, pub current: Option<usize>, counted: bool, path: Option<std::path::PathBuf>,
+    /// Primeira vez que o jogo abre nesta máquina (ainda não existe arquivo de progresso): entra direto na primeira lição.
+    pub first: bool }
 impl Progress {
     pub fn load() -> Self {
         // nos testes automáticos o progresso do jogador não é tocado e todas as etapas ficam abertas
         let script = std::env::var("CQB_SCRIPT").is_ok();
         let path = if script { None } else { std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Angles/course.txt")) };
         let done = path.as_ref().and_then(|f| std::fs::read_to_string(f).ok()).and_then(|t| t.trim().parse::<usize>().ok()).unwrap_or(if script { STAGES.len() } else { 0 });
-        Progress { done: done.min(STAGES.len()), current: None, counted: false, path }
+        let done = if std::env::var("CQB_FIRST").is_ok() { 0 } else { done };
+        let first = std::env::var("CQB_FIRST").is_ok() || path.as_ref().map_or(false, |f| !f.exists());
+        Progress { done: done.min(STAGES.len()), current: None, counted: false, path, first }
     }
+    /// A primeira abertura já aconteceu: grava o arquivo de progresso para a próxima cair no menu.
+    pub fn opened(&mut self) { self.first = false; self.save(); }
     fn save(&self) {
         if let Some(f) = &self.path {
             if let Some(d) = f.parent() { let _ = std::fs::create_dir_all(d); }
@@ -61,10 +68,52 @@ pub fn course_system(game: Res<Game>, targets: Res<Targets>, mut pr: ResMut<Prog
     pr.counted = true;
     let passed = match st.what {
         What::Tutorial => true,
+        // a prova: chegar à avaliação (a casa limpa, sem cair) sem acertar quem não devia
+        What::Exam => game.stats.civ_hit == 0,
         What::Scn(k) if crate::scenario::SCENARIOS[k].kind == crate::scenario::Kind::Defense => game.won,
         What::Scn(_) => crate::scenario::final_score(&game, &targets) >= 60,
     };
     if passed && i == pr.done { pr.done = (i + 1).min(STAGES.len()); pr.save(); }
+}
+
+/* ---------- o erro que o aluno mais comete ---------- */
+
+/// Os cinco erros das lições, como o jogo os reconhece na partida, e a pergunta que trata de cada um (índice em `QUIZ`).
+pub const MISTAKES: [(&str, usize); 5] = [
+    ("Hugging the corner", 0), ("Stopping in the doorway", 1), ("Shooting before identifying", 6),
+    ("Standing in front of a closed door", 4), ("Walking past an opening you have not sliced", 3),
+];
+/// Quantas vezes cada erro já apareceu, somando todas as partidas (guardado em disco). O mais comum vira a pergunta
+/// feita antes da próxima etapa e uma linha no menu.
+#[derive(Resource)]
+pub struct Mistakes { pub n: [u32; 5], base: [u32; 5], last: f32, counted: bool, path: Option<std::path::PathBuf> }
+impl Mistakes {
+    pub fn load() -> Self {
+        let path = if std::env::var("CQB_SCRIPT").is_ok() { None } else { std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Angles/mistakes.txt")) };
+        let mut n = [0u32; 5];
+        if let Some(t) = path.as_ref().and_then(|f| std::fs::read_to_string(f).ok()) { for (k, v) in t.split_whitespace().take(5).enumerate() { n[k] = v.parse().unwrap_or(0); } }
+        if let Some(v) = std::env::var("CQB_MISTAKE").ok().and_then(|v| v.parse::<usize>().ok()) { n[v.min(4)] = 7; }
+        Mistakes { n, base: [0; 5], last: 0.0, counted: false, path }
+    }
+    /// O erro mais comum, se já apareceu pelo menos três vezes: (qual, quantas vezes).
+    pub fn top(&self) -> Option<(usize, u32)> { (0..5).max_by_key(|k| self.n[*k]).map(|k| (k, self.n[k])).filter(|t| t.1 >= 3) }
+}
+/// Ao fim de cada partida (avaliação ou queda), soma o que o jogo viu de cada erro.
+pub fn mistake_system(game: Res<Game>, mut m: ResMut<Mistakes>) {
+    if game.time + 0.5 < m.last && game.time < 1.0 { m.base = [0; 5]; }
+    m.last = game.time;
+    if !matches!(game.mode, Mode::Debrief | Mode::Down) { m.counted = false; return; }
+    if m.counted { return; }
+    m.counted = true;
+    if game.demo { return; }
+    let front = game.door_side.iter().filter(|d| **d == Some(false)).count() as u32;
+    let cur = [game.warns[0], game.warns[3], game.stats.civ_hit, front, game.warns[4] + game.passes];
+    let mut changed = false;
+    for k in 0..5 { if cur[k] > m.base[k] { m.n[k] += cur[k] - m.base[k]; m.base[k] = cur[k]; changed = true; } }
+    if changed { if let Some(f) = &m.path {
+        if let Some(d) = f.parent() { let _ = std::fs::create_dir_all(d); }
+        let _ = std::fs::write(f, m.n.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" ") + "\n");
+    } }
 }
 
 /* ---------- perguntas rápidas entre as etapas ---------- */
@@ -126,7 +175,7 @@ const SCRIPT: &str = include_str!("../assets/voice/script.tsv");
 fn line(id: &str) -> Option<&'static str> { SCRIPT.lines().find_map(|l| l.split_once('\t').filter(|(k, _)| *k == id).map(|(_, t)| t)) }
 
 #[derive(Default)]
-pub struct VoiceState { foe_wait: bool, card_t: f32, card_key: Option<(usize, usize)>, deb_said: bool, hit_cd: f32, quotes: usize, until: f32, clock: f32, last_mode: Option<Mode>, hits: u32, civ: u32, nade: bool, stall: f32, deg: f32, door: Option<usize>, said_open: Option<usize>, hint_cd: f32, passed: bool, done_seen: usize }
+pub struct VoiceState { foe_wait: bool, good_wait: bool, card_t: f32, card_key: Option<(usize, usize)>, deb_said: bool, hit_cd: f32, quotes: usize, until: f32, clock: f32, last_mode: Option<Mode>, hits: u32, civ: u32, nade: bool, stall: f32, deg: f32, door: Option<usize>, said_open: Option<usize>, hint_cd: f32, passed: bool, done_seen: usize }
 
 /// Fala do instrutor nos momentos que ensinam: a instrução de cada etapa no cartão, para que lado andar quando o aluno
 /// para com a porta pela metade, a porta aberta, tiro levado, refém atingido, granada, e o resultado da etapa.
@@ -155,9 +204,14 @@ pub fn voice_system(time: Res<Time<Real>>, mut game: ResMut<Game>, pr: Res<Progr
     }
     if entered && game.quote_t < QUOTE_SECS { game.quote_t = 0.0; game.ui_dirty = true; }
     // depois da frase, quem levou tiro vê por alguns segundos o que o adversário via na hora
-    if entered { game.foe_t = 0.0; st.foe_wait = over && mode == Mode::Debrief && game.foe.is_some() && teach_on(); }
+    // e quem derrubou alguém mostrando pouco corpo vê o contrário: o que o adversário não via ("what he didn't see")
+    if entered { game.foe_t = 0.0; game.good_t = 0.0; st.foe_wait = over && mode == Mode::Debrief && game.foe.is_some() && teach_on(); st.good_wait = over && mode == Mode::Debrief && game.good.is_some() && teach_on(); }
     if st.foe_wait && game.quote_t <= 0.0 { st.foe_wait = false; game.foe_t = FOE_SECS; game.ui_dirty = true; }
     else if game.foe_t > 0.0 { game.foe_t = (game.foe_t - dt).max(0.0); if game.foe_t <= 0.0 { game.ui_dirty = true; } }
+    else if st.good_wait && game.quote_t <= 0.0 {
+        st.good_wait = false;
+        if let Some(g) = game.good.clone() { game.foe = Some(g.0); game.good_t = 1.0; game.foe_t = FOE_SECS; game.ui_dirty = true; }
+    }
     if game.quote_t > 0.0 { game.quote_t = (game.quote_t - dt).max(0.0); if game.quote_t <= 0.0 { game.ui_dirty = true; } }
     if mode != Mode::Debrief { st.deb_said = false; }
     // contagem antes de começar: um bipe por segundo e a partida abre no zero
@@ -182,7 +236,7 @@ pub fn voice_system(time: Res<Time<Real>>, mut game: ResMut<Game>, pr: Res<Progr
             say = Some(if tutorial && game.lesson >= 1 { format!("lesson{}", game.lesson.min(5)) } else { format!("stage{}", i + 1) });
         }
         // o resultado só é dito depois que a tela da frase sai
-        if mode == Mode::Debrief && game.quote_t <= 0.0 && game.foe_t <= 0.0 && !st.foe_wait && !st.deb_said {
+        if mode == Mode::Debrief && game.quote_t <= 0.0 && game.foe_t <= 0.0 && !st.foe_wait && !st.good_wait && !st.deb_said {
             st.deb_said = true;
             let passed = pr.done > st.done_seen || pr.done > i;
             say = Some(if pr.done >= STAGES.len() && pr.done > st.done_seen { "course_done" } else if passed { "stage_passed" } else { "stage_failed" }.to_string());
